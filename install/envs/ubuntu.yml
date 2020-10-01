@@ -1,6 +1,6 @@
 name: donkey
 dependencies:
-
+- python=3.7
 - h5py
 - pillow
 - opencv
@@ -10,16 +10,17 @@ dependencies:
 - pandas
 - pylint
 - pytest
+- pytest-cov
+- codecov
 - pip
 - imgaug
 - progress
 - moviepy
 - paho-mqtt
 - PrettyTable
-- pyyaml
+- tensorflow==2.2.0
 
 - pip:
-  - tensorflow==2.2.0
   - git+https://github.com/autorope/keras-vis.git
   - simple-pid
   - opencv-python-headless
