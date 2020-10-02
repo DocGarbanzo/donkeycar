@@ -329,6 +329,7 @@ class CvCam(BaseCamera):
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, image_h)
         time.sleep(1)
         assert self.cap.isOpened(), 'Unable to connect to OpenCV camera.'
+        print('CvCam with resolution {:}x{:} created.'.format(image_w, image_h))
 
     def update(self):
         while True:

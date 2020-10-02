@@ -1,11 +1,10 @@
 # vehicle file
-vehicle_hz: 20
 verbose: True
 parts:
   - cvcam:
       parameters:
-        image_w: 320
-        image_h: 240
+        image_w: cfg.image_w
+        image_h: cfg.image_h
       outputs: [cam/img_array]
   - tubwriter:
       parameters:

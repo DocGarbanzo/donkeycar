@@ -435,14 +435,20 @@ class Drive(BaseCommand):
                                          usage='%(prog)s [options]')
         parser.add_argument('--vehicle_file', default='vehicle.yaml',
                             help='vehicle yaml file to use')
+        parser.add_argument('--config', default='./config.py',
+                            help='location of config file, default: '
+                                 './config.py')
         parsed_args = parser.parse_args(args)
         return parsed_args
 
     def run(self, args):
         args = self.parse_args(args)
-        b = Builder(car_file=args.vehicle_file)
-        vehicle, drive_hz, loops, verbose = b.build_vehicle()
-        vehicle.start(rate_hz=drive_hz, max_loop_count=loops, verbose=verbose)
+        cfg = load_config(args.config)
+        b = Builder(cfg=cfg, car_file=args.vehicle_file)
+        vehicle, verbose = b.build_vehicle()
+        vehicle.start(rate_hz=cfg.DRIVE_LOOP_HZ,
+                      max_loop_count=cfg.MAX_LOOPS,
+                      verbose=verbose)
 
 
 def execute_from_command_line():

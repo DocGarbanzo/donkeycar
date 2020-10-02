@@ -6,6 +6,7 @@ from donkeycar.parts.simulation import SquareBoxCamera, MovingSquareTelemetry
 from donkeycar.management.base import CreateCar
 import numpy as np
 
+
 def on_pi():
     if 'arm' in platform.machine():
         return True
