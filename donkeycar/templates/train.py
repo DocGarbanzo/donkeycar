@@ -16,6 +16,7 @@ import os
 import random
 import time
 from pathlib import Path
+from contextlib import AbstractContextManager
 
 import cv2
 import numpy as np
@@ -32,17 +33,25 @@ from donkeycar.utils import get_model_by_type, load_image_arr, \
     train_test_split, linear_bin, normalize_image
 
 
-class TubDataset(object):
+class TubDataset(AbstractContextManager):
     '''
     Loads the dataset, and creates a train/test split.
     '''
 
-    def __init__(self, tub_paths, test_size=0.2, shuffle=True):
+    def __init__(self, tub_paths, test_size=0.2, shuffle=True, delete={}):
         self.tub_paths = tub_paths
         self.test_size = test_size
         self.shuffle = shuffle
-        self.tubs = [Tub(tub_path, read_only=True) for tub_path in
-                     self.tub_paths]
+        self.tubs = []
+        self.del_index = []
+        for tub_path in self.tub_paths:
+            tub = Tub(tub_path, read_only=not bool(delete))
+            self.tubs.append(tub)
+            del_index = []
+            for k, v in delete.items():
+                del_index.append(tub.delete_records_by_value(key=k, val=v))
+            self.del_index.append(del_index)
+
         self.records = list()
 
     def train_test_split(self):
@@ -52,7 +61,18 @@ class TubDataset(object):
                 record['_image_base_path'] = tub.images_base_path
                 self.records.append(record)
 
-        return train_test_split(self.records, shuffle=self.shuffle, test_size=self.test_size)
+        return train_test_split(self.records, shuffle=self.shuffle,
+                                test_size=self.test_size)
+
+    def restore_tubs(self):
+        for t, del_index in zip(self.tubs, self.del_index):
+            t.undelete_records(del_index)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.restore_tubs()
 
 
 class TubSequence(Sequence):
@@ -167,42 +187,40 @@ def train(cfg, tub_paths, output_path, model_type):
 
     batch_size = cfg.BATCH_SIZE
     shuffle = getattr(cfg, 'TRAIN_SHUFFLE', True)
-    dataset = TubDataset(tub_paths,
-                         test_size=(1. - cfg.TRAIN_TEST_SPLIT),
-                         shuffle=shuffle)
-    training_records, validation_records = dataset.train_test_split()
-    print('Records # Training %s' % len(training_records))
-    print('Records # Validation %s' % len(validation_records))
+    del_dict = getattr(cfg, 'TRAIN_SUPPRESS', {})
+    with TubDataset(tub_paths,
+                    test_size=(1. - cfg.TRAIN_TEST_SPLIT),
+                    shuffle=shuffle,
+                    delete=del_dict) as dataset:
+        training_records, validation_records = dataset.train_test_split()
+        print('Records # Training %s' % len(training_records))
+        print('Records # Validation %s' % len(validation_records))
 
-    training = TubSequence(kl, cfg, training_records)
-    validation = TubSequence(kl, cfg, validation_records)
-    assert len(validation) > 0, "Not enough validation data, decrease the " \
-                                "batch size or add more data."
+        training = TubSequence(kl, cfg, training_records)
+        validation = TubSequence(kl, cfg, validation_records)
+        assert len(validation) > 0, "Not enough validation data, decrease the "\
+                                    "batch size or add more data."
 
-    # Setup early stoppage callbacks
-    callbacks = [
-        EarlyStopping(monitor='val_loss', patience=cfg.EARLY_STOP_PATIENCE),
-        ModelCheckpoint(
-            filepath=output_path,
-            monitor='val_loss',
-            save_best_only=True,
-            verbose=1,
+        # Setup early stoppage callbacks
+        callbacks = [
+            EarlyStopping(monitor='val_loss', patience=cfg.EARLY_STOP_PATIENCE),
+            ModelCheckpoint(monitor='val_loss', filepath=output_path,
+                            save_best_only=True, verbose=1)
+        ]
+
+        history = kl.model.fit(
+            x=training,
+            steps_per_epoch=len(training),
+            batch_size=batch_size,
+            callbacks=callbacks,
+            validation_data=validation,
+            validation_steps=len(validation),
+            epochs=cfg.MAX_EPOCHS,
+            verbose=cfg.VERBOSE_TRAIN,
+            workers=1,
+            use_multiprocessing=False
         )
-    ]
-
-    history = kl.model.fit(
-        x=training,
-        steps_per_epoch=len(training),
-        batch_size=batch_size,
-        callbacks=callbacks,
-        validation_data=validation,
-        validation_steps=len(validation),
-        epochs=cfg.MAX_EPOCHS,
-        verbose=cfg.VERBOSE_TRAIN,
-        workers=1,
-        use_multiprocessing=False
-    )
-    return history
+        return history
 
 
 def main():
