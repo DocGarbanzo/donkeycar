@@ -38,24 +38,24 @@ class TubDataset(AbstractContextManager):
     Loads the dataset, and creates a train/test split.
     '''
 
-    def __init__(self, tub_paths, test_size=0.2, shuffle=True, delete={}):
+    def __init__(self, tub_paths, test_size=0.2, shuffle=True, suppress=[]):
         self.tub_paths = tub_paths
         self.test_size = test_size
         self.shuffle = shuffle
         self.tubs = []
         self.del_index = []
         for tub_path in self.tub_paths:
-            tub = Tub(tub_path, read_only=not bool(delete))
+            tub = Tub(tub_path, read_only=not bool(suppress))
             self.tubs.append(tub)
             del_index = []
-            for k, v in delete.items():
-                del_index.append(tub.delete_records_by_value(key=k, val=v))
+            for [k, v] in suppress:
+                del_index += tub.delete_records_by_value(key=k, value=v)
             self.del_index.append(del_index)
 
         self.records = list()
 
     def train_test_split(self):
-        print('Loading tubs from paths %s' % (self.tub_paths))
+        print('Loading tubs from paths %s' % self.tub_paths)
         for tub in self.tubs:
             for record in tub:
                 record['_image_base_path'] = tub.images_base_path
