@@ -187,11 +187,11 @@ def train(cfg, tub_paths, output_path, model_type):
 
     batch_size = cfg.BATCH_SIZE
     shuffle = getattr(cfg, 'TRAIN_SHUFFLE', True)
-    del_dict = getattr(cfg, 'TRAIN_SUPPRESS', {})
+    suppress_list = getattr(cfg, 'TRAIN_SUPPRESS', [])
     with TubDataset(tub_paths,
                     test_size=(1. - cfg.TRAIN_TEST_SPLIT),
                     shuffle=shuffle,
-                    delete=del_dict) as dataset:
+                    suppress=suppress_list) as dataset:
         training_records, validation_records = dataset.train_test_split()
         print('Records # Training %s' % len(training_records))
         print('Records # Validation %s' % len(validation_records))
