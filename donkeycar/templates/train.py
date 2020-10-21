@@ -39,6 +39,8 @@ class TubDataset(AbstractContextManager):
     '''
 
     def __init__(self, tub_paths, test_size=0.2, shuffle=True, suppress=[]):
+        assert type(tub_paths) is list, \
+            "TubDataset expects list in first argument"
         self.tub_paths = tub_paths
         self.test_size = test_size
         self.shuffle = shuffle
