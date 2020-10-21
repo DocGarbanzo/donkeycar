@@ -55,13 +55,13 @@ class TestTub(unittest.TestCase):
             self.assertEqual(o, n, f"Undeleted items don't match original "
                                    f"items for {o} and {n}")
 
-    def test_tub_sequence_with_suppresion(self):
+    def test_tub_sequence_with_suppression(self):
         write_count = 20
         self._prepare_tub(write_count)
         suppress_index = [('key', 'foo')]
-        test_size = 0.5
-        records_1 = self.tub
-        with TubDataset(self._path, test_size=test_size, shuffle=False,
+        test_size = 0.3
+        records_1 = list(self.tub)
+        with TubDataset([self._path], test_size=test_size, shuffle=False,
                         suppress=suppress_index) as ts:
             train, test = ts.train_test_split()
             # we removed all foos, so only have of count * size
@@ -70,7 +70,7 @@ class TestTub(unittest.TestCase):
             assert all([(t.get('key') == 'bar') for t in train + test])
 
         # check that after wit block tub is still intact
-        records_2 = self.tub
+        records_2 = list(self.tub)
         assert all([r1 == r2 for r1, r2 in zip(records_1, records_2)])
 
     def tearDown(self):
