@@ -2,6 +2,7 @@ import shutil
 import tempfile
 import unittest
 
+from donkeycar.templates.train import TubDataset
 from donkeycar.parts.tub_v2 import Tub
 
 
@@ -13,7 +14,7 @@ class TestTub(unittest.TestCase):
         types = ['int', 'str']
         self.tub = Tub(self._path, inputs, types)
 
-    def _prepare_tub(self, write_count, delete_indexes):
+    def _prepare_tub(self, write_count, delete_indexes=[]):
         records = [{'input': i, 'key': 'foo' if i < write_count // 2 else 'bar'}
                    for i in range(write_count)]
         for record in records:
@@ -53,6 +54,24 @@ class TestTub(unittest.TestCase):
         for o, n in zip(orig_items, self.tub):
             self.assertEqual(o, n, f"Undeleted items don't match original "
                                    f"items for {o} and {n}")
+
+    def test_tub_sequence_with_suppresion(self):
+        write_count = 20
+        self._prepare_tub(write_count)
+        suppress_index = [('key', 'foo')]
+        test_size = 0.5
+        records_1 = self.tub
+        with TubDataset(self._path, test_size=test_size, shuffle=False,
+                        suppress=suppress_index) as ts:
+            train, test = ts.train_test_split()
+            # we removed all foos, so only have of count * size
+            assert len(train) == int(write_count * (1 - test_size) / 2)
+            assert len(test) == int(write_count * test_size / 2)
+            assert all([(t.get('key') == 'bar') for t in train + test])
+
+        # check that after wit block tub is still intact
+        records_2 = self.tub
+        assert all([r1 == r2 for r1, r2 in zip(records_1, records_2)])
 
     def tearDown(self):
         shutil.rmtree(self._path)
