@@ -1,8 +1,11 @@
 import json
 import os
 import time
-from collections import namedtuple
 from pathlib import Path
+
+
+NEWLINE = '\n'
+NEWLINE_STRIP = '\r\n'
 
 
 class Seekable(object):
@@ -15,7 +18,7 @@ class Seekable(object):
         self.method = method
         self.line_lengths = list()
         self.cumulative_lengths = list()
-        self.file = open(file, self.method)
+        self.file = open(file, self.method, newline=NEWLINE)
         self.total_length = 0
         if len(line_lengths) <= 0:
             self._read_contents()
@@ -43,12 +46,11 @@ class Seekable(object):
         return self
 
     def writeline(self, contents):
-        seperator_length = len(os.linesep)
-        has_newline = contents[-1 * seperator_length:] == os.linesep
+        has_newline = contents[-1] == NEWLINE
         if has_newline:
             line = contents
         else:
-            line = f'{contents}{os.linesep}'
+            line = f'{contents}{NEWLINE}'
 
         offset = len(line)
         self.total_length += offset
@@ -68,7 +70,8 @@ class Seekable(object):
         return self.cumulative_lengths[end_index] if end_index >= 0 and end_index < len(self.cumulative_lengths) else 0
 
     def readline(self):
-        return self.file.readline().rstrip(os.linesep)
+        contents = self.file.readline()
+        return contents.rstrip(NEWLINE_STRIP)
 
     def seek_line_start(self, line_number):
         self.file.seek(self._line_start_offset(line_number))
@@ -111,7 +114,6 @@ class Seekable(object):
         return self.lines() > 0
 
     def close(self):
-        self.file.flush()
         self.file.close()
 
     def __exit__(self, type, value, traceback):
