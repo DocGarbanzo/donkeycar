@@ -4,7 +4,7 @@ Usage:
     convert_to_tub_v2.py --tub=<path> --output=<path> [--include_name]
 
 Note:
-    This script converts the old datastore format, to the new datastore format.
+    This script converts the old datastore format to the new datastore format.
 '''
 
 import json
@@ -21,6 +21,14 @@ from donkeycar.parts.tub_v2 import Tub
 
 
 def convert_to_tub_v2(paths, output_path, include_tub_name=False):
+    """
+    Convert from old tubs to new one
+
+    :param paths:               legacy tub paths
+    :param output_path:         new tub output path
+    :param include_tub_name:    if we should include legacy tub name into record
+    :return:                    None
+    """
     legacy_tubs = [LegacyTub(path) for path in paths]
     output_tub = None
     print('Total number of tubs: %s' % (len(legacy_tubs)))
@@ -36,7 +44,7 @@ def convert_to_tub_v2(paths, output_path, include_tub_name=False):
                              list(legacy_tub.meta.items()))
 
         record_paths = legacy_tub.gather_records()
-        legacy_path = os.path.normpath(legacy_tub.path)
+        legacy_name = os.path.basename(legacy_tub.path)
         bar = IncrementalBar('Converting', max=len(record_paths))
 
         for record_path in record_paths:
@@ -48,7 +56,7 @@ def convert_to_tub_v2(paths, output_path, include_tub_name=False):
                 image_data = Image.open(image_path)
                 record['cam/image_array'] = image_data
                 if include_tub_name:
-                    record['tub_name'] = legacy_path
+                    record['tub_name'] = legacy_name
                 output_tub.write_record(record)
                 bar.next()
             except Exception as exception:
