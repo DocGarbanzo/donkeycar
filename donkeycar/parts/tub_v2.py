@@ -81,6 +81,8 @@ class Tub(object):
         for i in indexes:
             self.delete_record(i)
 
+        print(f'Deleted {len(indexes)} entries from {self.images_base_path} '
+              f'with {key}:{value}')
         return indexes
 
     def undelete_records(self, indexes):

@@ -46,17 +46,15 @@ class TubDataset(AbstractContextManager):
         self.shuffle = shuffle
         self.tubs = []
         self.del_index = []
-        if suppress:
-            print('Suppressing', suppress, 'from tub dataset.')
         for tub_path in self.tub_paths:
-            print('Adding tub', tub_paths, '...', end='')
+            print('Adding tub', tub_path, 'to dataset')
             tub = Tub(tub_path, read_only=not bool(suppress))
             self.tubs.append(tub)
             del_index = []
             for [k, v] in suppress:
                 del_index += tub.delete_records_by_value(key=k, value=v)
             self.del_index.append(del_index)
-            print('done.')
+
         self.records = list()
 
     def train_test_split(self):
