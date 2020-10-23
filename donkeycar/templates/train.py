@@ -48,12 +48,9 @@ class TubDataset(AbstractContextManager):
         self.del_index = []
         for tub_path in self.tub_paths:
             print('Adding tub', tub_path, 'to dataset')
-            tub = Tub(tub_path, read_only=not bool(suppress))
+            tub = Tub(tub_path)
+            tub.add_skip_if(suppress)
             self.tubs.append(tub)
-            del_index = []
-            for [k, v] in suppress:
-                del_index += tub.delete_records_by_value(key=k, value=v)
-            self.del_index.append(del_index)
 
         self.records = list()
 
@@ -68,8 +65,8 @@ class TubDataset(AbstractContextManager):
                                 test_size=self.test_size)
 
     def restore_tubs(self):
-        for t, del_index in zip(self.tubs, self.del_index):
-            t.undelete_records(del_index)
+        for t in self.tubs:
+            t.clear_skip_if()
 
     def __enter__(self):
         return self

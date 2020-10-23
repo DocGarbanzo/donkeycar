@@ -27,6 +27,7 @@ class Tub(object):
         # Create images folder if necessary
         if not os.path.exists(self.images_base_path):
             os.makedirs(self.images_base_path, exist_ok=True)
+        self.skip_if = set()
 
     def write_record(self, record):
         '''
@@ -97,6 +98,15 @@ class Tub(object):
         for i in indexes:
             self.manifest.undelete_record(i)
 
+    def add_skip_if(self, skip_tuples):
+        assert type(skip_tuples) is list, "add_skip_if requires list of tuples"
+        for kv in skip_tuples:
+            assert type(kv) is tuple, "add_skip_if requires list of tuples"
+            self.skip_if.add(kv)
+
+    def clear_skip_if(self):
+        self.skip_if.clear()
+
     def delete_last_n_records(self, n):
         last_index = self.manifest.current_index
         first_index = last_index - n
@@ -110,7 +120,7 @@ class Tub(object):
         self.manifest.close()
 
     def __iter__(self):
-        return ManifestIterator(self.manifest)
+        return ManifestIterator(self.manifest, self.skip_if)
 
     def __len__(self):
         return self.manifest.__len__()
