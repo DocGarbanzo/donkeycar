@@ -707,11 +707,12 @@ class KerasLatent(KerasPilot):
         self.compile()
 
     def compile(self):
-        loss = {"controller": "mse", "controller_1": "mse"}
-        weights = {"controller": 2.0, "controller_1": 1.0}
         if self.decoder:
-            loss["decoder"] = "mse"
-            weights["decoder"] = 100.0
+            loss = {"controller": "mse", "controller_1": "mse", "decoder": "mse"}
+            weights = {"controller": 50.0, "controller_1": 1.0, "decoder": 50.0}
+        else:
+            loss = {"controller": "mse", "controller_1": "mse"}
+            weights = {"controller": 1.0, "controller_1": 1.0}
 
         self.model.compile(optimizer=self.optimizer,
                            loss=loss, loss_weights=weights)
