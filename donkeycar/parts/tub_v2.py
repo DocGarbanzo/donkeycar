@@ -14,15 +14,14 @@ class Tub(object):
     Accepts str, int, float, image_array, image, and array data types.
     '''
     def __init__(self, base_path, inputs=[], types=[], metadata=[],
-                 max_catalog_len=1000, read_only=False):
+                 max_catalog_len=1000):
         self.base_path = base_path
         self.images_base_path = os.path.join(self.base_path, Tub.images())
         self.inputs = inputs
         self.types = types
         self.metadata = metadata
         self.manifest = Manifest(base_path, inputs=inputs, types=types,
-                                 metadata=metadata, max_len=max_catalog_len,
-                                 read_only=read_only)
+                                 metadata=metadata, max_len=max_catalog_len)
         self.input_types = dict(zip(self.inputs, self.types))
         # Create images folder if necessary
         if not os.path.exists(self.images_base_path):
