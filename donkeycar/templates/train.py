@@ -13,7 +13,7 @@ Options:
 """
 import datetime
 import os
-import random
+from enum import Enum
 import time
 from pathlib import Path
 from contextlib import AbstractContextManager
@@ -26,11 +26,38 @@ from tensorflow.python.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.python.keras.utils.data_utils import Sequence
 
 import donkeycar
-from donkeycar.parts.keras import KerasInferred, KerasCategorical, KerasLatent
+from donkeycar.parts.keras import KerasLinear, KerasInferred, \
+    KerasCategorical, KerasLatent
 from donkeycar.parts.tflite import keras_model_to_tflite
 from donkeycar.parts.tub_v2 import Tub
 from donkeycar.utils import get_model_by_type, load_image_arr, \
     train_test_split, linear_bin, normalize_image
+
+
+class TrainState(Enum):
+    """ Helper class to disentangle different data manipulations required in
+        training """
+    LINEAR = 0
+    CATEGORICAL = 1
+    INFERRED = 2
+    LATENT_DECODER = 3
+    LATENT_CONTROLLER = 4
+
+    @staticmethod
+    def create(model):
+        if type(model) is KerasLinear:
+            return TrainState.LINEAR
+        elif type(model) is KerasCategorical:
+            return TrainState.CATEGORICAL
+        elif type(model) is KerasInferred:
+            return TrainState.INFERRED
+        elif type(model) is KerasLatent:
+            if model.decoder:
+                return TrainState.LATENT_DECODER
+            else:
+                return TrainState.LATENT_CONTROLLER
+        else:
+            raise ValueError(f'Non-trainable model chosen: {type(model)}')
 
 
 class TubDataset(AbstractContextManager):
@@ -81,6 +108,7 @@ class TubSequence(Sequence):
         self.config = config
         self.records = records
         self.batch_size = self.config.BATCH_SIZE
+        self.train_state = TrainState.create(keras_model)
 
     def __len__(self):
         return len(self.records) // self.batch_size
@@ -89,11 +117,9 @@ class TubSequence(Sequence):
         count = 0
         records = []
         images = []
+        latent_vectors = []
         angles = []
         throttles = []
-
-        is_inferred = type(self.keras_model) is KerasInferred
-        is_latent = type(self.keras_model) is KerasLatent
 
         while count < self.batch_size:
             i = (index * self.batch_size) + count
@@ -113,20 +139,23 @@ class TubSequence(Sequence):
             images.append(image)
             angles.append(angle)
             throttles.append(throttle)
+            if self.train_state == TrainState.LATENT_CONTROLLER:
+                latent_vector = record['img/latent']
+                latent_vectors.append(latent_vector)
 
-        X = np.array(images)
+        X = np.array(latent_vectors) if self.train_state == \
+            TrainState.LATENT_CONTROLLER else np.array(images)
 
-        if is_inferred:
+        if self.train_state == TrainState.INFERRED:
             Y = np.array(angles)
         else:
             Y = [np.array(angles), np.array(throttles)]
-            if is_latent and self.keras_model.decoder:
+            if self.train_state == TrainState.LATENT_DECODER:
                 Y.append(X)
 
         return X, Y
 
     def _transform_record(self, record):
-        is_categorical = type(self.keras_model) is KerasCategorical
 
         for key, value in record.items():
             if key == 'cam/image_array' and isinstance(value, str):
@@ -135,8 +164,8 @@ class TubSequence(Sequence):
                 record[key] = normalize_image(image)
 
             # for categorical convert to one-hot vector
-            if key in ['user/angle', 'user/throttle'] and is_categorical \
-                and isinstance(value, float):
+            if key in ['user/angle', 'user/throttle'] and self.train_state == \
+                    TrainState.CATEGORICAL and isinstance(value, float):
 
                 if key == 'user/angle':
                     angle = linear_bin(value, N=15, offset=1, R=2.0)
@@ -145,6 +174,13 @@ class TubSequence(Sequence):
                     R = self.config.MODEL_CATEGORICAL_MAX_THROTTLE_RANGE
                     throttle = linear_bin(value, N=20, offset=0.0, R=R)
                     record[key] = throttle
+
+        # when training only the controller, pre-compute latent vectors
+        if self.train_state == TrainState.LATENT_CONTROLLER and \
+                'img/latent' not in record:
+            img_arr = record['cam/image_array']
+            img_arr = img_arr.reshape((1, ) + img_arr.shape)
+            record['img/latent'] = self.keras_model.encoder.predict(img_arr)[0]
 
         return record
 
@@ -174,13 +210,8 @@ def train(cfg, tub_paths, output_path, model_type):
     if type(tub_paths) is str:
         tub_paths = [tub_paths]
 
-    if 'linear' in model_type:
-        train_type = 'linear'
-    else:
-        train_type = model_type
-
+    train_type = 'linear' if 'linear' in model_type else model_type
     kl = get_model_by_type(train_type, cfg)
-    kl.compile()
 
     if cfg.PRINT_MODEL_SUMMARY:
         print(kl.model.summary())
@@ -207,8 +238,12 @@ def train(cfg, tub_paths, output_path, model_type):
             ModelCheckpoint(monitor='val_loss', filepath=output_path,
                             save_best_only=True, verbose=1)
         ]
+        # Change model to controller for latent model if decoder is given
+        model = kl.controller if TrainState.create(kl) == \
+            TrainState.LATENT_CONTROLLER else kl.model
+        kl.compile()
 
-        history = kl.model.fit(
+        history = model.fit(
             x=training,
             steps_per_epoch=len(training),
             batch_size=batch_size,

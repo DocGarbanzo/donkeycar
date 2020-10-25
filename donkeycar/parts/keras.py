@@ -710,12 +710,13 @@ class KerasLatent(KerasPilot):
         if self.decoder:
             loss = {"controller": "mse", "controller_1": "mse", "decoder": "mse"}
             weights = {"controller": 50.0, "controller_1": 1.0, "decoder": 50.0}
+            self.model.compile(optimizer=self.optimizer,
+                               loss=loss, loss_weights=weights)
         else:
-            loss = {"controller": "mse", "controller_1": "mse"}
-            weights = {"controller": 1.0, "controller_1": 1.0}
-
-        self.model.compile(optimizer=self.optimizer,
-                           loss=loss, loss_weights=weights)
+            loss = {"angle": "mse", "throttle": "mse"}
+            weights = {"angle": 1.0, "throttle": 1.0}
+            self.controller.compile(optimizer=self.optimizer,
+                                    loss=loss, loss_weights=weights)
 
     def inference(self, img_arr, other_arr):
         img_arr = img_arr.reshape((1,) + img_arr.shape)
