@@ -21,6 +21,7 @@ from tensorflow.keras.layers import TimeDistributed as TD
 from tensorflow.keras.layers import Conv3D, MaxPooling3D, Conv2DTranspose
 from tensorflow.keras.backend import concatenate
 from tensorflow.keras.models import Model, Sequential
+from tensorflow.python.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.python.keras.layers import Reshape
 
 import donkeycar as dk
@@ -90,43 +91,40 @@ class KerasPilot(ABC):
         """
         pass
 
-    def train(self, train_gen, val_gen, 
-              saved_model_path, epochs=100, steps=100, train_split=0.8,
-              verbose=1, min_delta=.0005, patience=5, use_early_stop=True):
-        
+    def train(self, model_path, train_data, train_steps, batch_size,
+              validation_data, validation_steps, epochs, verbose=1,
+              min_delta=.0005, patience=5):
         """
-        train_gen: generator that yields an array of images an array of 
-        
+        trains the model
         """
+        model = self._get_train_model()
+        self.compile()
 
-        # checkpoint to save model after each epoch
-        save_best = keras.callbacks.ModelCheckpoint(saved_model_path, 
-                                                    monitor='val_loss', 
-                                                    verbose=verbose, 
-                                                    save_best_only=True, 
-                                                    mode='min')
-        
-        # stop training if the validation error stops improving.
-        early_stop = keras.callbacks.EarlyStopping(monitor='val_loss', 
-                                                   min_delta=min_delta, 
-                                                   patience=patience, 
-                                                   verbose=verbose, 
-                                                   mode='auto')
-        
-        callbacks_list = [save_best]
+        callbacks = [
+            EarlyStopping(monitor='val_loss',
+                          patience=patience,
+                          min_delta=min_delta),
+            ModelCheckpoint(monitor='val_loss',
+                            filepath=model_path,
+                            save_best_only=True,
+                            verbose=verbose)]
 
-        if use_early_stop:
-            callbacks_list.append(early_stop)
-        
-        hist = self.model.fit_generator(
-                        train_gen, 
-                        steps_per_epoch=steps, 
-                        epochs=epochs, 
-                        verbose=1, 
-                        validation_data=val_gen,
-                        callbacks=callbacks_list, 
-                        validation_steps=steps*(1.0 - train_split))
-        return hist
+        history = model.fit(
+            x=train_data,
+            steps_per_epoch=train_steps,
+            batch_size=batch_size,
+            callbacks=callbacks,
+            validation_data=validation_data,
+            validation_steps=validation_steps,
+            epochs=epochs,
+            verbose=verbose,
+            workers=1,
+            use_multiprocessing=False
+        )
+        return history
+
+    def _get_train_model(self):
+        return self.model
 
 
 class KerasCategorical(KerasPilot):
@@ -708,11 +706,13 @@ class KerasLatent(KerasPilot):
 
     def compile(self):
         if self.decoder:
+            print('Compiling autoencoder')
             loss = {"controller": "mse", "controller_1": "mse", "decoder": "mse"}
             weights = {"controller": 50.0, "controller_1": 1.0, "decoder": 50.0}
             self.model.compile(optimizer=self.optimizer,
                                loss=loss, loss_weights=weights)
         else:
+            print('Compiling controller')
             loss = {"angle": "mse", "throttle": "mse"}
             weights = {"angle": 1.0, "throttle": 1.0}
             self.controller.compile(optimizer=self.optimizer,
@@ -765,4 +765,28 @@ class KerasLatent(KerasPilot):
 
         model = Model(inputs=[img_in], outputs=outputs, name='latent')
         return model
+
+    def train(self, model_path, train_data, train_steps, batch_size,
+              validation_data, validation_steps, epochs, verbose=1,
+              min_delta=.0005, patience=5):
+        """
+        trains the model
+        """
+        # call training from the base class
+        history = super().train(model_path, train_data, train_steps, batch_size,
+                                validation_data, validation_steps, epochs,
+                                verbose, min_delta, patience)
+        # If have only trained the controller, then we only saved the
+        # controller under the model_path. Overwrite this with the full model.
+        self.model.save(model_path)
+        return history
+
+    def _get_train_model(self):
+        # if we train the autoencoder we train the whole model
+        if self.decoder:
+            return self.model
+        # otherwise we have an encoder and only train the controller
+        else:
+            print('Returning controller')
+            return self.controller
 

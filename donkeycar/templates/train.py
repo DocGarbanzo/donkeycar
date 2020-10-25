@@ -232,29 +232,17 @@ def train(cfg, tub_paths, output_path, model_type):
         assert len(validation) > 0, "Not enough validation data, decrease the "\
                                     "batch size or add more data."
 
-        # Setup early stoppage callbacks
-        callbacks = [
-            EarlyStopping(monitor='val_loss', patience=cfg.EARLY_STOP_PATIENCE),
-            ModelCheckpoint(monitor='val_loss', filepath=output_path,
-                            save_best_only=True, verbose=1)
-        ]
-        # Change model to controller for latent model if decoder is given
-        model = kl.controller if TrainState.create(kl) == \
-            TrainState.LATENT_CONTROLLER else kl.model
-        kl.compile()
+        history = kl.train(model_path=output_path,
+                           train_data=training,
+                           train_steps=len(training),
+                           batch_size=batch_size,
+                           validation_data=validation,
+                           validation_steps=len(validation),
+                           epochs=cfg.MAX_EPOCHS,
+                           verbose=cfg.VERBOSE_TRAIN,
+                           min_delta=cfg.MIN_DELTA,
+                           patience=cfg.EARLY_STOP_PATIENCE)
 
-        history = model.fit(
-            x=training,
-            steps_per_epoch=len(training),
-            batch_size=batch_size,
-            callbacks=callbacks,
-            validation_data=validation,
-            validation_steps=len(validation),
-            epochs=cfg.MAX_EPOCHS,
-            verbose=cfg.VERBOSE_TRAIN,
-            workers=1,
-            use_multiprocessing=False
-        )
         return history
 
 
