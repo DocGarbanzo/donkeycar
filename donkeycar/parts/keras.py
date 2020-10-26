@@ -38,6 +38,7 @@ class KerasPilot(ABC):
     def __init__(self):
         self.model = None
         self.optimizer = "adam"
+        print(f'Created {self}')
  
     def load(self, model_path):
         self.model = keras.models.load_model(model_path, compile=False)
@@ -125,6 +126,9 @@ class KerasPilot(ABC):
 
     def _get_train_model(self):
         return self.model
+
+    def __str__(self):
+        return type(self).__name__
 
 
 class KerasCategorical(KerasPilot):
@@ -687,7 +691,6 @@ class KerasLatent(KerasPilot):
                                 created, only the controller which then can
                                 be trained.
         """
-        super().__init__()
         self.input_shape = input_shape
         self.latent_dim = latent_dim
         self.drop = 0.2
@@ -701,18 +704,16 @@ class KerasLatent(KerasPilot):
             self.encoder = self.make_encoder()
             self.decoder = self.make_decoder()
         self.controller = self.make_controller()
+        super().__init__()
         self.model = self.make_model()
-        self.compile()
 
     def compile(self):
         if self.decoder:
-            print('Compiling autoencoder')
             loss = {"controller": "mse", "controller_1": "mse", "decoder": "mse"}
             weights = {"controller": 50.0, "controller_1": 1.0, "decoder": 50.0}
             self.model.compile(optimizer=self.optimizer,
                                loss=loss, loss_weights=weights)
         else:
-            print('Compiling controller')
             loss = {"angle": "mse", "throttle": "mse"}
             weights = {"angle": 1.0, "throttle": 1.0}
             self.controller.compile(optimizer=self.optimizer,
@@ -787,6 +788,9 @@ class KerasLatent(KerasPilot):
             return self.model
         # otherwise we have an encoder and only train the controller
         else:
-            print('Returning controller')
             return self.controller
 
+    def __str__(self):
+        s = f' Autoencoder' if self.decoder else f' Controller'
+        s += f' latent dim {self.latent_dim}'
+        return super().__str__() + s
