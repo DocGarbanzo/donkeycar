@@ -70,7 +70,7 @@ class Augumentations(object):
         return augmentation
 
     @classmethod
-    def brightness(cls, rand_lower=None, rand_upper=None, absolute=0.8):
+    def brightness(cls, rand_lower=None, rand_upper=None, absolute=0.3125):
         """
         Returns a brightness adjusted image, either applying a random factor
         to the brightness or adjusting the brightness to a given fixed level.
@@ -84,18 +84,27 @@ class Augumentations(object):
         """
 
         if rand_lower:
+            assert rand_upper and rand_upper > rand_lower, \
+                'Need to provide rand_upper > rand_lower'
             aug = iaa.Multiply((rand_lower, rand_upper))
 
         else:
+            assert 0 < absolute < 1.0, "requires image brightness in (0,1)"
+
             def img_func(images, random_state, parents, hooks):
+                transformed = []
                 for img in images:
                     img_size = 1
                     for i in img.shape:
                         img_size *= i
-                    img_brightness = np.sum(img) / 255.0
+                    img_brightness = np.sum(img) / img_size
+                    img_transformed = img
                     if img_brightness > 0:
-                        img *= absolute / img_brightness
-                return images
+                        img_transformed = img * absolute / img_brightness
+                        np.clip(img_transformed, 0, 1, out=img_transformed)
+                    transformed.append(img_transformed)
+
+                return transformed
 
             def keypoint_func(keypoints, random_state, parents, hooks):
                 # no op

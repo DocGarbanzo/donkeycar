@@ -30,6 +30,7 @@ from donkeycar.parts.keras import KerasLinear, KerasInferred, \
     KerasCategorical, KerasLatent
 from donkeycar.parts.tflite import keras_model_to_tflite
 from donkeycar.parts.tub_v2 import Tub
+from donkeycar.parts.augumentations import Augumentations
 from donkeycar.utils import get_model_by_type, load_image_arr, \
     train_test_split, linear_bin, normalize_image
 
@@ -109,6 +110,10 @@ class TubSequence(Sequence):
         self.records = records
         self.batch_size = self.config.BATCH_SIZE
         self.train_state = TrainState.create(keras_model)
+        self.aug_in = Augumentations.brightness(rand_lower=0.4, rand_upper=2.5)\
+            if getattr(self.config, 'IMG_AUG', False) else None
+        self.aug_out = Augumentations.brightness() \
+            if getattr(self.config, 'IMG_BRIGHTNESS_NORM', False) else None
 
     def __len__(self):
         return len(self.records) // self.batch_size
@@ -143,15 +148,24 @@ class TubSequence(Sequence):
                 latent_vector = record['img/latent']
                 latent_vectors.append(latent_vector)
 
+        # use brightness augmentation on input
+        images_out = images
+        images_in = self.aug_in(images=images) if self.aug_in else images
+
         X = np.array(latent_vectors) if self.train_state == \
-            TrainState.LATENT_CONTROLLER else np.array(images)
+            TrainState.LATENT_CONTROLLER else np.array(images_in)
 
         if self.train_state == TrainState.INFERRED:
             Y = np.array(angles)
         else:
             Y = [np.array(angles), np.array(throttles)]
             if self.train_state == TrainState.LATENT_DECODER:
-                Y.append(X)
+                # use brightness normalisation on the output
+                if self.aug_out:
+                    images_out = self.aug_out(images=images_out)
+                    Y.append(np.array(images_out))
+                else:
+                    Y.append(X)
 
         return X, Y
 
