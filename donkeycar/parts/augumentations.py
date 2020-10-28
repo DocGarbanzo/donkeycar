@@ -100,8 +100,9 @@ class Augumentations(object):
                     img_brightness = np.sum(img) / img_size
                     img_transformed = img
                     if img_brightness > 0:
-                        img_transformed = img * absolute / img_brightness
-                        np.clip(img_transformed, 0, 1, out=img_transformed)
+                        img_transformed = img * absolute * 255 / img_brightness
+                        np.clip(img_transformed, 0, 255, out=img_transformed)
+                        img_transformed = img_transformed.astype(np.uint8)
                     transformed.append(img_transformed)
 
                 return transformed
