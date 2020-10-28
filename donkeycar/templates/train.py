@@ -53,10 +53,11 @@ class TrainState(Enum):
         elif type(model) is KerasInferred:
             return TrainState.INFERRED
         elif type(model) is KerasLatent:
-            if model.decoder:
-                return TrainState.LATENT_DECODER
-            else:
+            if model.train_mode == 'controller':
                 return TrainState.LATENT_CONTROLLER
+            else:
+                return TrainState.LATENT_DECODER
+
         else:
             raise ValueError(f'Non-trainable model chosen: {type(model)}')
 
@@ -110,10 +111,17 @@ class TubSequence(Sequence):
         self.records = records
         self.batch_size = self.config.BATCH_SIZE
         self.train_state = TrainState.create(keras_model)
-        self.aug_in = Augumentations.brightness(rand_lower=0.4, rand_upper=2.5)\
-            if getattr(self.config, 'IMG_AUG', False) else None
-        self.aug_out = Augumentations.brightness() \
-            if getattr(self.config, 'IMG_BRIGHTNESS_NORM', False) else None
+        print('Building TubSequence', end='')
+        self.aug_in = None
+        if getattr(self.config, 'IMG_AUG', False):
+            self.aug_in = Augumentations.brightness(rand_lower=0.4,
+                                                    rand_upper=2.5)
+            print(' with input augmentation', end='')
+        self.aug_out = None
+        if getattr(self.config, 'IMG_BRIGHTNESS_NORM', False):
+            self.aug_out = Augumentations.brightness()
+            print(' with output normalisation', end='')
+        print()
 
     def __len__(self):
         return len(self.records) // self.batch_size

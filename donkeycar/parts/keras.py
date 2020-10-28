@@ -680,7 +680,7 @@ class KerasLatent(KerasPilot):
            from an already trained model. In this form the model will only
            add the controller and make this trainable.
     """
-    def __init__(self, input_shape=(120, 160, 3), latent_dim=128, encoder=None):
+    def __init__(self, input_shape=(120, 160, 3), latent_dim=128):
         """
         Build the full autoencoder from scratch or only build the controller
         if the encoder is given.
@@ -696,19 +696,15 @@ class KerasLatent(KerasPilot):
         self.drop = 0.2
         # this will be filled by make_encoder
         self.cnn_output_shape = None
-        if encoder:
-            self.encoder = encoder
-            self.encoder.trainable = False
-            self.decoder = None
-        else:
-            self.encoder = self.make_encoder()
-            self.decoder = self.make_decoder()
+        self.encoder = self.make_encoder()
+        self.decoder = self.make_decoder()
         self.controller = self.make_controller()
         super().__init__()
         self.model = self.make_model()
+        self.train_mode = 'autoencoder'
 
     def compile(self):
-        if self.decoder:
+        if self.train_mode in ['autoencoder', 'encoder']:
             loss = {"controller": "mse", "controller_1": "mse", "decoder": "mse"}
             weights = {"controller": 50.0, "controller_1": 1.0, "decoder": 50.0}
             self.model.compile(optimizer=self.optimizer,
@@ -718,6 +714,28 @@ class KerasLatent(KerasPilot):
             weights = {"angle": 1.0, "throttle": 1.0}
             self.controller.compile(optimizer=self.optimizer,
                                     loss=loss, loss_weights=weights)
+
+    def load(self, model_path):
+        self.model = keras.models.load_model(model_path, compile=False)
+        self.encoder = self.model.get_layer('encoder')
+        self.controller = self.model.get_layer('controller')
+        self.decoder = self.model.get_layer('decoder')
+
+    def set_train_mode(self, mode):
+        if mode == 'controller':
+            self.decoder.trainable = False
+            self.encoder.trainable = False
+        elif mode == 'encoder':
+            self.encoder.trainable = True
+            self.decoder.trainable = False
+        elif mode == 'autoencoder':
+            self.encoder.trainable = True
+            self.decoder.trainable = True
+        else:
+            raise ValueError('Only controller, encoder or autoencoder '
+                             'supported but not' + str(mode))
+        print(f'KerasLatent setting training mode to: {mode}')
+        self.train_mode = mode
 
     def inference(self, img_arr, other_arr):
         img_arr = img_arr.reshape((1,) + img_arr.shape)
@@ -783,8 +801,8 @@ class KerasLatent(KerasPilot):
         return history
 
     def _get_train_model(self):
-        # if we train the autoencoder we train the whole model
-        if self.decoder:
+        # if we train the autoencoder or encoder we train the whole model
+        if self.train_mode in ['autoencoder', 'encoder']:
             return self.model
         # otherwise we have an encoder and only train the controller
         else:

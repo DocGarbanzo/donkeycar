@@ -407,13 +407,17 @@ def get_model_by_type(model_type, cfg):
         kl = KerasCategorical(input_shape=input_shape,
                               throttle_range=cfg.MODEL_CATEGORICAL_MAX_THROTTLE_RANGE)
     elif model_type == "latent":
-        encoder = None
-        if hasattr(cfg, 'LATENT_TRAINED'):
-            encoder = load_model(cfg.LATENT_TRAINED).get_layer('encoder')
         latent_dim = getattr(cfg, 'LATENT_DIM', 128)
-        kl = KerasLatent(input_shape=input_shape,
-                         encoder=encoder,
-                         latent_dim=latent_dim)
+        kl = KerasLatent(input_shape=input_shape, latent_dim=latent_dim)
+        if hasattr(cfg, 'LATENT_TRAINED'):
+            kl.load(cfg.LATENT_TRAINED)
+            if getattr(cfg, 'IMG_AUG', False):
+                kl.set_train_mode('encoder')
+            else:
+                kl.set_train_mode('controller')
+        else:
+            kl.set_train_mode('autoencoder')
+
     elif model_type == "tflite_linear":
         kl = TFLitePilot()
     elif model_type == "tensorrt_linear":
