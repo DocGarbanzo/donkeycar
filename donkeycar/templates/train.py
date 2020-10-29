@@ -147,12 +147,12 @@ class TubSequence(Sequence):
             count += 1
 
         for record in records:
-            image = record['cam/image_array']
+            if 'cam/image_array' in record:
+                image = record['cam/image_array']
+                images.append(image)
             angle = record['user/angle']
-            throttle = record['user/throttle']
-
-            images.append(image)
             angles.append(angle)
+            throttle = record['user/throttle']
             throttles.append(throttle)
             if self.train_state == TrainState.LATENT_CONTROLLER:
                 latent_vector = record['img/latent']
@@ -217,7 +217,10 @@ class TubSequence(Sequence):
             record['img/aug_out'] = normalize_image(img_aug_out)
         # delete original image from record to reduce mem footprint
         if img_aug_in is not None and img_aug_out is not None:
-            del(record['cam/image_array'])
+            if 'cam/image_array' in record:
+                del(record['cam/image_array'])
+            else:
+                pass
 
         # when training only the controller, pre-compute latent vectors
         if self.train_state == TrainState.LATENT_CONTROLLER and \
