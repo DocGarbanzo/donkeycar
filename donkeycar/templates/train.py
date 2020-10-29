@@ -135,8 +135,8 @@ class TubSequence(Sequence):
         count = 0
         records = []
         images = []
-        images_aug_in = []
-        images_aug_out = []
+        images_aug_in = None
+        images_aug_out = None
         latent_vectors = []
         angles = []
         throttles = []
@@ -152,9 +152,8 @@ class TubSequence(Sequence):
             count += 1
 
         for record in records:
-            if 'cam/image_array' in record:
-                image = record['cam/image_array']
-                images.append(normalize_image(image))
+            image = record['cam/image_array']
+            images.append(image)
             angle = record['user/angle']
             angles.append(angle)
             throttle = record['user/throttle']
@@ -162,20 +161,20 @@ class TubSequence(Sequence):
             if self.train_state == TrainState.LATENT_CONTROLLER:
                 latent_vector = record['img/latent']
                 latent_vectors.append(latent_vector)
-            if self.aug_in:
-                img_aug_in = record['img/aug_in']
-                images_aug_in.append(normalize_image(img_aug_in))
-            if self.aug_out:
-                img_aug_out = record['img/aug_out']
-                images_aug_out.append(normalize_image(img_aug_out))
+
+        if self.aug_in:
+            images_aug_in = np.array(self.aug_in(images=images))
+
+        if self.aug_out:
+            images_aug_out = np.array(self.aug_out(images=images))
 
         # fill X
         if self.train_state == TrainState.LATENT_CONTROLLER:
             X = np.array(latent_vectors)
         elif self.aug_in:
-            X = np.array(images_aug_in)
+            X = normalize_image(images_aug_in)
         else:
-            X = np.array(images)
+            X = normalize_image(np.array(images))
 
         # fill Y
         if self.train_state == TrainState.INFERRED:
@@ -185,23 +184,18 @@ class TubSequence(Sequence):
             if self.train_state == TrainState.LATENT_DECODER:
                 # use brightness normalisation on the output
                 if self.aug_out:
-                    Y.append(np.array(images_aug_out))
+                    Y.append(normalize_image(images_aug_out))
                 else:
-                    Y.append(np.array(images))
+                    Y.append(normalize_image(np.array(images)))
 
         return X, Y
 
     def _transform_record(self, record):
-        img_aug_in = img_aug_out = None
 
         for key, value in record.items():
             if key == 'cam/image_array' and isinstance(value, str):
                 image_path = os.path.join(record['_image_base_path'], value)
                 image = load_image_arr(image_path, self.config)
-                if self.aug_in:
-                    img_aug_in = self.aug_in(images=[image])[0]
-                if self.aug_out:
-                    img_aug_out = self.aug_out(images=[image])[0]
                 record[key] = image
 
             # for categorical convert to one-hot vector
@@ -214,18 +208,6 @@ class TubSequence(Sequence):
                     R = self.config.MODEL_CATEGORICAL_MAX_THROTTLE_RANGE
                     throttle = linear_bin(value, N=20, offset=0.0, R=R)
                     record[key] = throttle
-
-        # fill in augmented images if present
-        if img_aug_in is not None:
-            record['img/aug_in'] = img_aug_in
-        if img_aug_out is not None:
-            record['img/aug_out'] = img_aug_out
-        # delete original image from record to reduce mem footprint
-        if img_aug_in is not None and img_aug_out is not None:
-            if 'cam/image_array' in record:
-                del(record['cam/image_array'])
-            else:
-                pass
 
         # when training only the controller, pre-compute latent vectors
         if self.train_state == TrainState.LATENT_CONTROLLER and \
