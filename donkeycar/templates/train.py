@@ -167,7 +167,7 @@ class TubSequence(Sequence):
         # fill X
         if self.train_state == TrainState.LATENT_CONTROLLER:
             X = np.array(latent_vectors)
-        elif self.train_state == TrainState.LATENT_DECODER and self.aug_in:
+        elif self.aug_in:
             X = np.array(images_aug_in)
         else:
             X = np.array(images)
