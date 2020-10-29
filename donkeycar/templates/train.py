@@ -215,6 +215,9 @@ class TubSequence(Sequence):
             record['img/aug_in'] = normalize_image(img_aug_in)
         if img_aug_out is not None:
             record['img/aug_out'] = normalize_image(img_aug_out)
+        # delete original image from record to reduce mem footprint
+        if img_aug_in is not None and img_aug_out is not None:
+            del(record['cam/image_array'])
 
         # when training only the controller, pre-compute latent vectors
         if self.train_state == TrainState.LATENT_CONTROLLER and \
