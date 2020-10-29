@@ -122,6 +122,11 @@ class TubSequence(Sequence):
             self.aug_out = Augumentations.brightness()
             print(' with output normalisation', end='')
         print()
+        if self.train_state == TrainState.LATENT_CONTROLLER and self.aug_in \
+                is not None and self.aug_out is not None:
+            raise ValueError('Training controller cannot have output and '
+                             'input augmentation as this erases original '
+                             'images.')
 
     def __len__(self):
         return len(self.records) // self.batch_size
@@ -149,7 +154,7 @@ class TubSequence(Sequence):
         for record in records:
             if 'cam/image_array' in record:
                 image = record['cam/image_array']
-                images.append(image)
+                images.append(normalize_image(image))
             angle = record['user/angle']
             angles.append(angle)
             throttle = record['user/throttle']
@@ -159,10 +164,10 @@ class TubSequence(Sequence):
                 latent_vectors.append(latent_vector)
             if self.aug_in:
                 img_aug_in = record['img/aug_in']
-                images_aug_in.append(img_aug_in)
+                images_aug_in.append(normalize_image(img_aug_in))
             if self.aug_out:
                 img_aug_out = record['img/aug_out']
-                images_aug_out.append(img_aug_out)
+                images_aug_out.append(normalize_image(img_aug_out))
 
         # fill X
         if self.train_state == TrainState.LATENT_CONTROLLER:
@@ -197,7 +202,7 @@ class TubSequence(Sequence):
                     img_aug_in = self.aug_in(images=[image])[0]
                 if self.aug_out:
                     img_aug_out = self.aug_out(images=[image])[0]
-                record[key] = normalize_image(image)
+                record[key] = image
 
             # for categorical convert to one-hot vector
             if key in ['user/angle', 'user/throttle'] and self.train_state == \
@@ -212,9 +217,9 @@ class TubSequence(Sequence):
 
         # fill in augmented images if present
         if img_aug_in is not None:
-            record['img/aug_in'] = normalize_image(img_aug_in)
+            record['img/aug_in'] = img_aug_in
         if img_aug_out is not None:
-            record['img/aug_out'] = normalize_image(img_aug_out)
+            record['img/aug_out'] = img_aug_out
         # delete original image from record to reduce mem footprint
         if img_aug_in is not None and img_aug_out is not None:
             if 'cam/image_array' in record:
@@ -225,7 +230,7 @@ class TubSequence(Sequence):
         # when training only the controller, pre-compute latent vectors
         if self.train_state == TrainState.LATENT_CONTROLLER and \
                 'img/latent' not in record:
-            img_arr = record['cam/image_array']
+            img_arr = normalize_image(record['cam/image_array'])
             img_arr = img_arr.reshape((1, ) + img_arr.shape)
             record['img/latent'] = self.keras_model.encoder.predict(img_arr)[0]
 
