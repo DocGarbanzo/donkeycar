@@ -330,13 +330,14 @@ class ManifestIterator(object):
 
     Returns catalog entries lazily when a consumer calls __next__().
     '''
-    def __init__(self, manifest, skip_if=set()):
+    def __init__(self, manifest, skip_if=set(), include_only=set()):
         self.manifest = manifest
         self.has_catalogs = len(self.manifest.catalog_paths) > 0
         self.current_index = 0
         self.current_catalog_index = 0
         self.current_catalog = None
         self.skip_if = skip_if
+        self.include_only = include_only
 
     def __next__(self):
         if not self.has_catalogs:
@@ -353,7 +354,8 @@ class ManifestIterator(object):
         contents = self.current_catalog.seekable.readline()
 
         if contents is not None and len(contents) > 0:
-            # Check for current_index when we are ready to advance the underlying iterator.
+            # Check for current_index when we are ready to advance the
+            # underlying iterator.
             current_index = self.current_index
             self.current_index += 1
             if current_index in self.manifest.deleted_indexes:
@@ -362,12 +364,15 @@ class ManifestIterator(object):
             else:
                 try:
                     record = json.loads(contents)
+                    for k, v in self.include_only:
+                        if k in record and record[k] != v:
+                            return self.__next__()
                     for k, v in self.skip_if:
                         if k in record and record[k] == v:
                             return self.__next__()
                     return record
                 except Exception:
-                    print('Ignoring record at index %s' % (current_index))
+                    print('Ignoring record at index %s' % current_index)
                     return self.__next__() 
         else:
             self.current_catalog = None

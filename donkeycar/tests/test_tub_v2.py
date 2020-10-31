@@ -62,7 +62,7 @@ class TestTub(unittest.TestCase):
         test_size = 0.3
         records_1 = list(self.tub)
         with TubDataset([self._path], test_size=test_size, shuffle=False,
-                        suppress=suppress_index) as ts:
+                        skip=suppress_index) as ts:
             train, test = ts.train_test_split()
             # we removed all foos, so only have of count * size
             assert len(train) == int(write_count * (1 - test_size) / 2)

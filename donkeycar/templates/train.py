@@ -62,12 +62,13 @@ class TrainState(Enum):
             raise ValueError(f'Non-trainable model chosen: {type(model)}')
 
 
-class TubDataset(AbstractContextManager):
+class TubDataset(object):
     '''
     Loads the dataset, and creates a train/test split.
     '''
 
-    def __init__(self, tub_paths, test_size=0.2, shuffle=True, suppress=[]):
+    def __init__(self, tub_paths, test_size=0.2, shuffle=True, skip=[],
+                 include_only=[]):
         assert type(tub_paths) is list, \
             "TubDataset expects list in first argument"
         self.tub_paths = tub_paths
@@ -78,7 +79,8 @@ class TubDataset(AbstractContextManager):
         for tub_path in self.tub_paths:
             print('Adding tub', tub_path, 'to dataset')
             tub = Tub(tub_path)
-            tub.add_skip_if(suppress)
+            tub.skip_or_include(skip, True)
+            tub.skip_or_include(include_only, False)
             self.tubs.append(tub)
 
         self.records = list()
@@ -95,13 +97,8 @@ class TubDataset(AbstractContextManager):
 
     def restore_tubs(self):
         for t in self.tubs:
-            t.clear_skip_if()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.restore_tubs()
+            t.clear_skip_or_include(True)
+            t.clear_skip_or_include(False)
 
 
 class TubSequence(Sequence):
@@ -253,31 +250,31 @@ def train(cfg, tub_paths, output_path, model_type):
     batch_size = cfg.BATCH_SIZE
     shuffle = getattr(cfg, 'TRAIN_SHUFFLE', True)
     suppress_list = getattr(cfg, 'TRAIN_SUPPRESS', [])
-    with TubDataset(tub_paths,
-                    test_size=(1. - cfg.TRAIN_TEST_SPLIT),
-                    shuffle=shuffle,
-                    suppress=suppress_list) as dataset:
-        training_records, validation_records = dataset.train_test_split()
-        print('Records # Training %s' % len(training_records))
-        print('Records # Validation %s' % len(validation_records))
+    include_list = getattr(cfg, 'TRAIN_ONLY', [])
+    dataset = TubDataset(tub_paths, test_size=(1. - cfg.TRAIN_TEST_SPLIT),
+                         shuffle=shuffle, skip=suppress_list,
+                         include_only=include_list)
+    training_records, validation_records = dataset.train_test_split()
+    print('Records # Training %s' % len(training_records))
+    print('Records # Validation %s' % len(validation_records))
 
-        training = TubSequence(kl, cfg, training_records)
-        validation = TubSequence(kl, cfg, validation_records)
-        assert len(validation) > 0, "Not enough validation data, decrease the "\
-                                    "batch size or add more data."
+    training = TubSequence(kl, cfg, training_records)
+    validation = TubSequence(kl, cfg, validation_records)
+    assert len(validation) > 0, "Not enough validation data, decrease the "\
+                                "batch size or add more data."
 
-        history = kl.train(model_path=output_path,
-                           train_data=training,
-                           train_steps=len(training),
-                           batch_size=batch_size,
-                           validation_data=validation,
-                           validation_steps=len(validation),
-                           epochs=cfg.MAX_EPOCHS,
-                           verbose=cfg.VERBOSE_TRAIN,
-                           min_delta=cfg.MIN_DELTA,
-                           patience=cfg.EARLY_STOP_PATIENCE)
+    history = kl.train(model_path=output_path,
+                       train_data=training,
+                       train_steps=len(training),
+                       batch_size=batch_size,
+                       validation_data=validation,
+                       validation_steps=len(validation),
+                       epochs=cfg.MAX_EPOCHS,
+                       verbose=cfg.VERBOSE_TRAIN,
+                       min_delta=cfg.MIN_DELTA,
+                       patience=cfg.EARLY_STOP_PATIENCE)
 
-        return history
+    return history
 
 
 def main():

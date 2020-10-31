@@ -27,6 +27,7 @@ class Tub(object):
         if not os.path.exists(self.images_base_path):
             os.makedirs(self.images_base_path, exist_ok=True)
         self.skip_if = set()
+        self.include_only = set()
 
     def write_record(self, record):
         '''
@@ -97,14 +98,22 @@ class Tub(object):
         for i in indexes:
             self.manifest.undelete_record(i)
 
-    def add_skip_if(self, skip_tuples):
-        assert type(skip_tuples) is list, "add_skip_if requires list of tuples"
-        for kv in skip_tuples:
-            assert type(kv) is tuple, "add_skip_if requires list of tuples"
-            self.skip_if.add(kv)
+    def skip_or_include(self, tuples, skip):
+        assert type(tuples) is list, "skip_or_include requires list of tuples"
+        for kv in tuples:
+            assert type(kv) is tuple, "skip_or_include requires list of tuples"
+            if skip:
+                self.skip_if.add(kv)
+            else:
+                self.include_only.add(kv)
+        print(f"{'Skip' if skip else 'Include only'} {tuples} in tub "
+              f"{self.base_path}")
 
-    def clear_skip_if(self):
-        self.skip_if.clear()
+    def clear_skip_or_include(self, skip):
+        if skip:
+            self.skip_if.clear()
+        else:
+            self.include_only.clear()
 
     def delete_last_n_records(self, n):
         last_index = self.manifest.current_index
@@ -119,7 +128,7 @@ class Tub(object):
         self.manifest.close()
 
     def __iter__(self):
-        return ManifestIterator(self.manifest, self.skip_if)
+        return ManifestIterator(self.manifest, self.skip_if, self.include_only)
 
     def __len__(self):
         return self.manifest.__len__()
@@ -143,6 +152,7 @@ class TubWriter(object):
     def __init__(self, base_path, inputs=[], types=[], metadata=[],
                  max_catalog_len=1000):
         self.tub = Tub(base_path, inputs, types, metadata, max_catalog_len)
+
         def shutdown_hook():
             self.close()
 

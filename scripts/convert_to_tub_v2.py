@@ -43,7 +43,7 @@ def convert_to_tub_v2(paths, output_path, include_tub_name=False):
             output_tub = Tub(output_path, inputs, types,
                              list(legacy_tub.meta.items()))
 
-        record_paths = legacy_tub.gather_records()
+            record_paths = legacy_tub.gather_records()
         legacy_name = os.path.basename(legacy_tub.path)
         bar = IncrementalBar('Converting', max=len(record_paths))
 
