@@ -368,14 +368,19 @@ class ManifestIterator(object):
                     continue
                 else:
                     try:
+                        skip = False
                         record = json.loads(contents)
                         for k, v in self.include_only:
                             if k in record and record[k] != v:
-                                continue
-                        for k, v in self.skip_if:
-                            if k in record and record[k] == v:
-                                continue
-                        return record
+                                skip = True
+                                break
+                        if not skip:
+                            for k, v in self.skip_if:
+                                if k in record and record[k] == v:
+                                    skip = True
+                                    break
+                        if not skip:
+                            return record
                     except Exception:
                         print('Ignoring record at index %s' % current_index)
                         continue
