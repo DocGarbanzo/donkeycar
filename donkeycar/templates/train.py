@@ -86,12 +86,13 @@ class TubDataset(object):
         self.records = list()
 
     def train_test_split(self):
-        print('Loading tubs from paths %s' % self.tub_paths)
+        count = 0
         for tub in self.tubs:
             for record in tub:
                 record['_image_base_path'] = tub.images_base_path
                 self.records.append(record)
-
+                count += 1
+        print(f'Loading tubs from paths {self.tub_paths} with {count} records')
         return train_test_split(self.records, shuffle=self.shuffle,
                                 test_size=self.test_size)
 
