@@ -343,41 +343,45 @@ class ManifestIterator(object):
         if not self.has_catalogs:
             raise StopIteration('No catalogs')
 
-        if self.current_catalog_index >= len(self.manifest.catalog_paths):
-            raise StopIteration('No more catalogs')
+        count = 0
+        # just a safety number so we don't get caught in an infinite loop here
+        while count < 200000:
+            if self.current_catalog_index >= len(self.manifest.catalog_paths):
+                raise StopIteration('No more catalogs')
 
-        if self.current_catalog is None:
-            current_catalog_path = os.path.join(self.manifest.base_path, self.manifest.catalog_paths[self.current_catalog_index])
-            self.current_catalog = Catalog(current_catalog_path)
-            self.current_catalog.seekable.seek_line_start(1)
+            if self.current_catalog is None:
+                current_catalog_path \
+                    = os.path.join(self.manifest.base_path,
+                                   self.manifest.catalog_paths[self.current_catalog_index])
+                self.current_catalog = Catalog(current_catalog_path)
+                self.current_catalog.seekable.seek_line_start(1)
 
-        contents = self.current_catalog.seekable.readline()
+            contents = self.current_catalog.seekable.readline()
 
-        if contents is not None and len(contents) > 0:
-            # Check for current_index when we are ready to advance the
-            # underlying iterator.
-            current_index = self.current_index
-            self.current_index += 1
-            if current_index in self.manifest.deleted_indexes:
-                # Skip over index, because it has been marked deleted
-                return self.__next__()
+            if contents is not None and len(contents) > 0:
+                # Check for current_index when we are ready to advance the
+                # underlying iterator.
+                current_index = self.current_index
+                self.current_index += 1
+                if current_index in self.manifest.deleted_indexes:
+                    # Skip over index, because it has been marked deleted
+                    continue
+                else:
+                    try:
+                        record = json.loads(contents)
+                        for k, v in self.include_only:
+                            if k in record and record[k] != v:
+                                continue
+                        for k, v in self.skip_if:
+                            if k in record and record[k] == v:
+                                continue
+                        return record
+                    except Exception:
+                        print('Ignoring record at index %s' % current_index)
+                        continue
             else:
-                try:
-                    record = json.loads(contents)
-                    for k, v in self.include_only:
-                        if k in record and record[k] != v:
-                            return self.__next__()
-                    for k, v in self.skip_if:
-                        if k in record and record[k] == v:
-                            return self.__next__()
-                    return record
-                except Exception:
-                    print('Ignoring record at index %s' % current_index)
-                    return self.__next__() 
-        else:
-            self.current_catalog = None
-            self.current_catalog_index += 1
-            return self.__next__()
+                self.current_catalog = None
+                self.current_catalog_index += 1
 
     next = __next__
 
