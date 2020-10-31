@@ -365,6 +365,7 @@ class ShowPredictionPlots(BaseCommand):
 
         base_path = Path(os.path.expanduser(tub_paths)).absolute().as_posix()
         tub = Tub(base_path)
+        tub.skip_or_include(getattr(cfg, 'TRAIN_ONLY', []), False)
         records = list(tub)
         records = records[start:limit]
         bar = IncrementalBar('Inferencing', max=len(records))

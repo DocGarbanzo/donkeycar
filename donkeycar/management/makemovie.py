@@ -54,6 +54,7 @@ class MakeMovie(object):
                 return
 
         self.tub = Tub(args.tub)
+        self.tub.skip_or_include(getattr(self.cfg, 'TRAIN_ONLY', []), False)
 
         start = args.start
         self.end_index = args.end if args.end != -1 else len(self.tub)
