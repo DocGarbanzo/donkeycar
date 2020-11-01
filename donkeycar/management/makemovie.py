@@ -58,7 +58,6 @@ class MakeMovie(object):
 
         start = args.start
         self.end_index = args.end if args.end != -1 else len(self.tub)
-        num_frames = self.end_index - start
 
         # Move to the correct offset
         self.current = 0
@@ -66,6 +65,8 @@ class MakeMovie(object):
         while self.current < start:
             self.iterator.next()
             self.current += 1
+
+        num_frames = len([f for f in self.tub])
 
         self.scale = args.scale
         self.keras_part = None
@@ -241,7 +242,7 @@ class MakeMovie(object):
         if self.current >= self.end_index:
             return None
 
-        rec = self.iterator.next()
+        rec = next(self.iterator)
         img_path = os.path.join(self.tub.images_base_path, rec['cam/image_array'])
         image = img_to_arr(Image.open(img_path))
 
