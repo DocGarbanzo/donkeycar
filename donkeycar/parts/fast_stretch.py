@@ -4,14 +4,14 @@ from pathlib import Path
 import time
 
 Mx = 128  # Natural mean
-C = 0.007  # Base line fraction
-Ts = 0.02  # Tunable amplitude
-Tr = 0.7  # Threshold
-T = -0.3  # Gamma boost
-Epsilon = 1e-07  # Epsilon
+C = 0.25  # Base line fraction
+Ts = 0.15  # Tunable amplitude
+Tr = 0.8  # Threshold
+T = -0.50  # Gamma boost
+Epsilon = 1  # Epsilon
 
 
-def fast_stretch(image, debug=False):
+def fast_stretch(image, C, Ts, Tr, T, debug=False):
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     (h, s, v) = cv2.split(hsv)
     input = v
@@ -19,19 +19,12 @@ def fast_stretch(image, debug=False):
     rows = shape[0]
     cols = shape[1]
     size = rows * cols
-    output = np.empty_like(input)
     if debug:
         start = time.time()
     mean = np.mean(input)
-    t = (mean - Mx) / Mx
-    Sl = 0.
-    Sh = 0.
-    if t <= 0:
-        Sl = C
-        Sh = C - (Ts * t)
-    else:
-        Sl = C + (Ts * t)
-        Sh = C
+    t = mean / 255
+    Sl = t * (1 - Ts) + C
+    Sh = t * (1 + Ts) + C
 
     gamma = 1.
     if t <= T:
@@ -49,13 +42,13 @@ def fast_stretch(image, debug=False):
     targetFl = Sl * size
     targetFh = Sh * size
 
-    count = histogram[Xl]
-    while count < targetFl:
+    count = 0
+    while count < targetFl and Xl < 256:
         count += histogram[Xl]
         Xl += 1
 
-    count = histogram[Xh]
-    while count < targetFh:
+    count = 0
+    while count < size - targetFh and Xh > -1:
         count += histogram[Xh]
         Xh -= 1
 
@@ -67,8 +60,11 @@ def fast_stretch(image, debug=False):
     # Vectorized ops
     output = np.where(input <= Xl, 0, input)
     output = np.where(output >= Xh, 255, output)
-    output = np.where(np.logical_and(output > Xl, output < Xh), np.multiply(
-        255, np.power(np.divide(np.subtract(output, Xl), np.max([np.subtract(Xh, Xl), Epsilon])), gamma)), output)
+    output = np.where(np.logical_and(output > Xl, output < Xh),
+                      # 255 * np.power((output - Xl) / max((Xh - Xl),
+                      # Epsilon), gamma),
+                      255 * (output - Xl) / max((Xh - Xl), Epsilon),
+                      output)
     # max to 255
     output = np.where(output > 255., 255., output)
     output = np.asarray(output, dtype='uint8')
@@ -78,7 +74,8 @@ def fast_stretch(image, debug=False):
     if debug:
         time_taken = (time.time() - start) * 1000
         print('Vector Ops %s' % time_taken)
-        start = time.time()
+
+        print('t', t, 'Sl', Sl, 'Sh', Sh, 'Xl', Xl, 'Xh', Xh)
 
     return output
 
