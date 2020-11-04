@@ -12,7 +12,7 @@ Epsilon = 1  # Epsilon
 
 
 def fast_stretch(image, C, Ts, Tr, T, debug=False):
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
     (h, s, v) = cv2.split(hsv)
     input = v
     shape = input.shape
@@ -74,7 +74,6 @@ def fast_stretch(image, C, Ts, Tr, T, debug=False):
     if debug:
         time_taken = (time.time() - start) * 1000
         print('Vector Ops %s' % time_taken)
-
         print('t', t, 'Sl', Sl, 'Sh', Sh, 'Xl', Xl, 'Xh', Xh)
 
     return output
