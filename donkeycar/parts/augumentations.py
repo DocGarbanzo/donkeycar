@@ -2,6 +2,8 @@ import cv2
 import numpy as np
 import imgaug.augmenters as iaa
 
+from donkeycar.parts.fast_stretch import fast_stretch
+
 
 class Augumentations(object):
     """
@@ -115,3 +117,17 @@ class Augumentations(object):
 
         return aug
 
+    @classmethod
+    def stretch_contrast(cls, offset=0.25, amplitude=0.15):
+
+        def img_func(images, random_state, parents, hooks):
+            out_img = [fast_stretch(img, C=offset, Ts=amplitude, Tr=0, T=0) for
+                       img in images]
+            return out_img
+
+        def keypoint_func(keypoints, random_state, parents, hooks):
+            # no op
+            return keypoints
+
+        aug = iaa.Lambda(img_func, keypoint_func)
+        return aug
