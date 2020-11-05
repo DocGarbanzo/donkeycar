@@ -121,9 +121,9 @@ class Augumentations(object):
     def stretch_contrast(cls, offset=0.25, amplitude=0.15):
 
         def img_func(images, random_state, parents, hooks):
-            out_img = [fast_stretch(img, C=offset, Ts=amplitude, Tr=0, T=0) for
+            imgs_out = [fast_stretch(img, C=offset, Ts=amplitude, Tr=0, T=0) for
                        img in images]
-            return out_img
+            return imgs_out
 
         def keypoint_func(keypoints, random_state, parents, hooks):
             # no op

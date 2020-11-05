@@ -119,6 +119,9 @@ class TubSequence(Sequence):
         if getattr(self.config, 'IMG_BRIGHTNESS_NORM', False):
             self.aug_out = Augumentations.brightness()
             print(' with output normalisation', end='')
+        elif getattr(self.config, 'IMG_CONTRAST_STRETCH', False):
+            self.aug_out = Augumentations.stretch_contrast()
+            print(' with output contrast stretching', end='')
         print()
         if self.train_state == TrainState.LATENT_CONTROLLER and self.aug_in \
                 is not None and self.aug_out is not None:
