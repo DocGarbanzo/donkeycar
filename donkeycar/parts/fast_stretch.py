@@ -58,13 +58,16 @@ def fast_stretch(images, C, Ts):
     Xl_arr = np.array(Xls)
     Xh_arr = np.array(Xhs)
     # Vectorized ops
-    output = np.where(inputs_arr <= Xl_arr, 0, inputs_arr)
-    output = np.where(output >= Xh_arr, 255, output)
-    output = np.where(np.logical_and(output > Xl_arr, output < Xh_arr),
-                      255 * (output - Xl_arr) / max((Xh_arr - Xl_arr), Epsilon),
-                      output)
+
+    output = np.where((inputs_arr.T <= Xl_arr).T, 0, inputs_arr)
+    output = np.where((output.T >= Xh_arr).T, 255, output)
+    condition = np.logical_and(output.T > Xl_arr, output.T < Xh_arr).T
+    denom = np.maximum((Xh_arr - Xl_arr).T, Epsilon)
+    numerator = 255 * (output.T - Xl_arr)
+    frac = numerator / denom
+    output = np.where(condition, frac.T, output)
     # max to 255 and integer casting
-    output = np.where(output > 255., 255., output)
+    output = np.where((output.T > 255.).T, 255., output)
     output = np.asarray(output, dtype='uint8')
     for hue, sat, out_single in zip(hues, saturations, output):
         out_img = cv2.merge((hue, sat, out_single))
