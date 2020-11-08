@@ -137,7 +137,7 @@ class TubSequence(Sequence):
         records = []
         images = []
         images_aug_in = None
-        images_aug_out = None
+        images_aug_out = []
         latent_vectors = []
         angles = []
         throttles = []
@@ -162,12 +162,11 @@ class TubSequence(Sequence):
             if self.train_state == TrainState.LATENT_CONTROLLER:
                 latent_vector = record['img/latent']
                 latent_vectors.append(latent_vector)
+            if self.train_state == TrainState.LATENT_DECODER and self.aug_out:
+                images_aug_out.append(record['img/augmented'])
 
         if self.aug_in:
             images_aug_in = np.array(self.aug_in(images=images))
-
-        if self.aug_out:
-            images_aug_out = np.array(self.aug_out(images=images))
 
         # fill X
         if self.train_state == TrainState.LATENT_CONTROLLER:
@@ -183,9 +182,9 @@ class TubSequence(Sequence):
         else:
             Y = [np.array(angles), np.array(throttles)]
             if self.train_state == TrainState.LATENT_DECODER:
-                # use brightness normalisation on the output
+                # use augmentation on output images
                 if self.aug_out:
-                    Y.append(normalize_image(images_aug_out))
+                    Y.append(normalize_image(np.array(images_aug_out)))
                 else:
                     Y.append(normalize_image(np.array(images)))
 
@@ -216,6 +215,12 @@ class TubSequence(Sequence):
             img_arr = normalize_image(record['cam/image_array'])
             img_arr = img_arr.reshape((1, ) + img_arr.shape)
             record['img/latent'] = self.keras_model.encoder.predict(img_arr)[0]
+
+        # when training decoder or autoencoder, pre-compute augmented images
+        if self.train_state == TrainState.LATENT_DECODER and self.aug_out and \
+                'img/augmented' not in record:
+            img_aug = self.aug_out(images=[record['cam/image_array']])[0]
+            record['img/augmented'] = img_aug
 
         return record
 
