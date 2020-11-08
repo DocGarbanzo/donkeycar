@@ -6,84 +6,78 @@ import time
 Mx = 128  # Natural mean
 C = 0.25  # Base line fraction
 Ts = 0.15  # Tunable amplitude
-Tr = 0.8  # Threshold
-T = -0.50  # Gamma boost
-Epsilon = 1  # Epsilon
 
 
-def fast_stretch(images, C, Ts):
-    hues = []
-    saturations = []
-    Xls = []
-    Xhs = []
-    inputs = []
-    outputs = []
-    for img in images:
-        hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-        (h, s, v) = cv2.split(hsv)
-        inputs.append(v)
-        hues.append(h)
-        saturations.append(s)
-        shape = v.shape
-        rows = shape[0]
-        cols = shape[1]
-        size = rows * cols
+def fast_stretch(image, C, Ts, debug=False):
+    hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+    (h, s, v) = cv2.split(hsv)
+    input = v
+    shape = input.shape
+    rows = shape[0]
+    cols = shape[1]
+    size = rows * cols
+    if debug:
+        start = time.time()
+    mean = np.mean(input)
+    t = mean / 255
+    Sl = t * (1 - Ts) + C
+    Sh = t * (1 + Ts) + C
 
-        mean = np.mean(v)
-        t = mean / 255
-        Sl = t * (1 - Ts) + C
-        Sh = t * (1 + Ts) + C
+    if debug:
+        time_taken = (time.time() - start) * 1000
+        print('Preprocessing time %s' % time_taken)
+        start = time.time()
 
-        histogram = np.bincount(v.reshape(size, ), minlength=256)
-        # Walk histogram
-        Xl = 0
-        Xh = 255
-        targetFl = Sl * size
-        targetFh = Sh * size
+    histogram = np.bincount(v.reshape(size, ), minlength=256)
+    # Walk histogram
+    Xl = 0
+    Xh = 255
+    targetFl = Sl * size
+    targetFh = Sh * size
 
-        count = 0
-        while count < targetFl and Xl < 256:
-            count += histogram[Xl]
-            Xl += 1
+    count = 0
+    while count < targetFl and Xl < 256:
+        count += histogram[Xl]
+        Xl += 1
 
-        count = 0
-        while count < size - targetFh and Xh > -1:
-            count += histogram[Xh]
-            Xh -= 1
+    count = 0
+    while count < size - targetFh and Xh > -1:
+        count += histogram[Xh]
+        Xh -= 1
 
-        Xls.append(Xl)
-        Xhs.append(Xh)
+    if debug:
+        time_taken = (time.time() - start) * 1000
+        print('Histogram Binning %s' % time_taken)
+        start = time.time()
 
-    inputs_arr = np.array(inputs)
-    Xl_arr = np.array(Xls)
-    Xh_arr = np.array(Xhs)
     # Vectorized ops
-
-    output = np.where((inputs_arr.T <= Xl_arr).T, 0, inputs_arr)
-    output = np.where((output.T >= Xh_arr).T, 255, output)
-    condition = np.logical_and(output.T > Xl_arr, output.T < Xh_arr).T
-    denom = np.maximum((Xh_arr - Xl_arr).T, Epsilon)
-    numerator = 255 * (output.T - Xl_arr)
-    frac = numerator / denom
-    output = np.where(condition, frac.T, output)
-    # max to 255 and integer casting
-    output = np.where((output.T > 255.).T, 255., output)
+    output = np.where(input <= Xl, 0, input)
+    output = np.where(output >= Xh, 255, output)
+    # flooring denominator by 1, so image stays in [0, 255] if Xl == Xh
+    output = np.where(np.logical_and(output > Xl, output < Xh),
+                      255 * (output - Xl) / max((Xh - Xl), 1),
+                      output)
+    # convert to uint8
     output = np.asarray(output, dtype='uint8')
-    for hue, sat, out_single in zip(hues, saturations, output):
-        out_img = cv2.merge((hue, sat, out_single))
-        out_img = cv2.cvtColor(out_img, cv2.COLOR_HSV2RGB)
-        outputs.append(out_img)
-    return outputs
+    output = cv2.merge((h, s, output))
+    output = cv2.cvtColor(output, cv2.COLOR_HSV2RGB)
+
+    if debug:
+        time_taken = (time.time() - start) * 1000
+        print('Vector Ops %s' % time_taken)
+        print('t', t, 'Sl', Sl, 'Sh', Sh, 'Xl', Xl, 'Xh', Xh)
+
+    return output
 
 
 if __name__ == "__main__":
     path = Path('images/Lenna.jpg')
     image = cv2.imread(path.as_posix())
-    # Ensure BGR
-    bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-    image_data = np.asarray(bgr, dtype=np.uint8)
-
-    stretched = fast_stretch(image_data)
+    # Ensure RGB
+    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    image_data = np.asarray(rgb, dtype=np.uint8)
+    stretched = fast_stretch(image_data, debug=True)
+    stretched_bgr = cv2.cvtColor(stretched, cv2.COLOR_RGB2BGR)
     cv2.imshow('Original', image)
     cv2.imshow('Contrast Stretched', stretched)
     cv2.waitKey(0)
