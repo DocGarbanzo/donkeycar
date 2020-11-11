@@ -50,15 +50,15 @@ def fast_stretch(image, C, Ts, debug=False):
         print('Histogram Binning %s' % time_taken)
         start = time.time()
 
-    # Vectorized ops
-    output = np.where(input <= Xl, 0, input)
+    # Vectorized ops, convert to uint8
+    output = input.astype(np.uint8)
+    output = np.where(input <= Xl, 0, output)
     output = np.where(output >= Xh, 255, output)
     # flooring denominator by 1, so image stays in [0, 255] if Xl == Xh
-    output = np.where(np.logical_and(output > Xl, output < Xh),
-                      255 * (output - Xl) / max((Xh - Xl), 1),
-                      output)
-    # convert to uint8
-    output = np.asarray(output, dtype='uint8')
+    inter = (255 * (output - Xl) / max((Xh - Xl), 1)).astype(np.uint8)
+    mask = np.logical_and(output > Xl, output < Xh)
+    output = np.where(mask, inter, output)
+    # convert back to rgb
     output = cv2.merge((h, s, output))
     output = cv2.cvtColor(output, cv2.COLOR_HSV2RGB)
 
