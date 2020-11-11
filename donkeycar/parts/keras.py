@@ -374,9 +374,9 @@ def core_deconv_layers(latent_in, cnn_output_shape):
                         name="deconv_3")(x)
     x = Conv2DTranspose(filters=32, kernel_size=5, strides=2,
                         name="deconv_2")(x)
-    x = Conv2DTranspose(filters=24, kernel_size=5, strides=2, output_padding=1,
+    x = Conv2DTranspose(filters=24, kernel_size=6, strides=2,
                         name="deconv_1")(x)
-    x = Conv2DTranspose(filters=3, kernel_size=5, strides=2, output_padding=1,
+    x = Conv2DTranspose(filters=3, kernel_size=6, strides=2,
                         name="img_out")(x)
     return x
 
@@ -706,7 +706,7 @@ class KerasLatent(KerasPilot):
     def compile(self):
         if self.train_mode in ['autoencoder', 'encoder']:
             loss = {"controller": "mse", "controller_1": "mse", "decoder": "mse"}
-            weights = {"controller": 50.0, "controller_1": 1.0, "decoder": 50.0}
+            weights = {"controller": 10.0, "controller_1": 1.0, "decoder": 10.0}
             self.model.compile(optimizer=self.optimizer,
                                loss=loss, loss_weights=weights)
         else:
