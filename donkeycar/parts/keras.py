@@ -377,10 +377,12 @@ def core_deconv_layers(latent_in, cnn_output_shape):
                         name="deconv_4")(x)
     x = Conv2DTranspose(filters=32, kernel_size=5, strides=2,
                         name="deconv_3")(x)
-    x = Conv2DTranspose(filters=24, kernel_size=7, strides=2, output_padding=-1,
+    x = Conv2DTranspose(filters=24, kernel_size=7, strides=2, output_padding=0,
                         name="deconv_2")(x)
-    x = Conv2DTranspose(filters=3, kernel_size=7, strides=2, output_padding=-1,
+    x = tf.image.resize_with_crop_or_pad(x, 58, 78)
+    x = Conv2DTranspose(filters=3, kernel_size=7, strides=2, output_padding=0,
                         name="deconv_1")(x)
+    x = tf.image.resize_with_crop_or_pad(x, 120, 160)
     return x
 
 
