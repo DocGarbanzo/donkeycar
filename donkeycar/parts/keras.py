@@ -309,7 +309,8 @@ class KerasLocalizer(KerasPilot):
         return angle, throttle, loc
 
 
-def conv2d(filters, kernel, strides, layer_num, activation='relu'):
+def conv2d(filters, kernel, strides, layer_num, activation='relu',
+           padding='valid'):
     """
     Helper function to create a standard valid-padded convolutional layer
     with square kernel and strides and unified naming convention
@@ -319,10 +320,12 @@ def conv2d(filters, kernel, strides, layer_num, activation='relu'):
     :param strides:     creates (strides, strides) stride
     :param layer_num:   used in labelling the layer
     :param activation:  activation, defaults to relu
+    :param padding:     padding applied (same) or not (valid)
     :return:            tf.keras Convolution2D layer
     """
     return Convolution2D(filters=filters,
                          kernel_size=(kernel, kernel),
+                         padding=padding,
                          strides=(strides, strides),
                          activation=activation,
                          name='conv_' + str(layer_num))
@@ -367,17 +370,17 @@ def core_deconv_layers(latent_in, cnn_output_shape):
     """
     dim = np.prod(cnn_output_shape)
     x = Dense(dim, activation="relu", name='dense_decode')(latent_in)
-    x = Reshape(cnn_output_shape, name='deconv_5')(x)
+    x = Reshape(cnn_output_shape, name='conv_5_out')(x)
+    x = Conv2DTranspose(filters=64, kernel_size=3, strides=1,
+                        name="deconv_5")(x)
     x = Conv2DTranspose(filters=64, kernel_size=3, strides=1,
                         name="deconv_4")(x)
-    x = Conv2DTranspose(filters=64, kernel_size=3, strides=1,
-                        name="deconv_3")(x)
     x = Conv2DTranspose(filters=32, kernel_size=5, strides=2,
+                        name="deconv_3")(x)
+    x = Conv2DTranspose(filters=24, kernel_size=7, strides=2, output_padding=-1,
                         name="deconv_2")(x)
-    x = Conv2DTranspose(filters=24, kernel_size=6, strides=2,
+    x = Conv2DTranspose(filters=3, kernel_size=7, strides=2, output_padding=-1,
                         name="deconv_1")(x)
-    x = Conv2DTranspose(filters=3, kernel_size=6, strides=2,
-                        name="img_out")(x)
     return x
 
 
@@ -746,7 +749,8 @@ class KerasLatent(KerasPilot):
 
     def make_encoder(self):
         img_in = Input(shape=self.input_shape, name='img_in')
-        x, out_shape = core_cnn_layers(img_in, self.drop, return_shape=True)
+        x, out_shape = core_cnn_layers(img_in, self.drop, l4_stride=1,
+                                       return_shape=True)
         self.cnn_output_shape = tuple(out_shape[1:])
         # latent vector is [0,1]^latent_dim
         latent_out = Dense(self.latent_dim, 'sigmoid', name='latent_out')(x)
