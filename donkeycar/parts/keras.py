@@ -379,6 +379,14 @@ class CropLayer(tf.keras.layers.Layer):
     def call(self, inputs, **kwargs):
         return tf.image.resize_with_crop_or_pad(inputs, *self.out_size)
 
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({
+            'crop': self.crop,
+            'output_size': self.out_size,
+        })
+        return config
+
 
 def core_deconv_layers(latent_in, cnn_output_shape):
     """
@@ -729,21 +737,21 @@ class KerasLatent(KerasPilot):
 
     def compile(self):
         if self.train_mode in ['autoencoder', 'encoder']:
-            loss = {"controller": "mse", "controller_1": "mse", "decoder": "mse"}
-            weights = {"controller": 10.0, "controller_1": 1.0, "decoder": 10.0}
+            loss = {"cont": "mse", "cont_1": "mse", "dec": "mse"}
+            weights = {"cont": 0.02, "cont_1": 0.01, "dec": 0.97}
             self.model.compile(optimizer=self.optimizer,
                                loss=loss, loss_weights=weights)
         else:
             loss = {"angle": "mse", "throttle": "mse"}
-            weights = {"angle": 1.0, "throttle": 1.0}
+            weights = {"angle": 0.5, "throttle": 0.5}
             self.controller.compile(optimizer=self.optimizer,
                                     loss=loss, loss_weights=weights)
 
     def load(self, model_path):
         self.model = keras.models.load_model(model_path, compile=False)
-        self.encoder = self.model.get_layer('encoder')
-        self.controller = self.model.get_layer('controller')
-        self.decoder = self.model.get_layer('decoder')
+        self.encoder = self.model.get_layer('enc')
+        self.controller = self.model.get_layer('cont')
+        self.decoder = self.model.get_layer('dec')
 
     def set_train_mode(self, mode):
         if mode == 'controller':
@@ -775,14 +783,14 @@ class KerasLatent(KerasPilot):
         self.cnn_output_shape = tuple(out_shape[1:])
         # latent vector is [0,1]^latent_dim
         latent_out = Dense(self.latent_dim, 'sigmoid', name='latent_out')(x)
-        encoder = Model(inputs=[img_in], outputs=[latent_out], name='encoder')
+        encoder = Model(inputs=[img_in], outputs=[latent_out], name='enc')
         return encoder
 
     def make_decoder(self):
         latent = Input(shape=(self.latent_dim, ), name='latent_in')
         img_out = core_deconv_layers(latent_in=latent,
                                      cnn_output_shape=self.cnn_output_shape)
-        decoder = Model(inputs=[latent], outputs=[img_out], name='decoder')
+        decoder = Model(inputs=[latent], outputs=[img_out], name='dec')
         return decoder
 
     def make_controller(self):
@@ -795,7 +803,7 @@ class KerasLatent(KerasPilot):
         angle = Dense(1, activation='linear', name='angle')(x)
         throttle = Dense(1, activation='linear', name='throttle')(x)
         outputs = [angle, throttle]
-        model = Model(inputs=[latent_in], outputs=outputs, name='controller')
+        model = Model(inputs=[latent_in], outputs=outputs, name='cont')
         return model
 
     def make_model(self):
