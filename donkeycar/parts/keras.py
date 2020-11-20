@@ -360,34 +360,6 @@ def core_cnn_layers(img_in, drop, l4_stride=1, return_shape=False):
     else:
         return x
 
-
-class CropLayer(tf.keras.layers.Layer):
-    """ This layer allows cropping off the edges, so too large deconv layers
-        can be resized. This works better with using odd-sized kernels and
-        cropping then with even sized kernels or odd-sized kernels and
-        positive output_padding. """
-
-    def __init__(self, crop=1, name=None):
-        super().__init__(name=name)
-        self.crop = crop
-        self.out_size = None
-
-    def build(self, input_shape):
-        # input_shape is (batch, height, width, channels)
-        self.out_size = input_shape[1] - self.crop, input_shape[2] - self.crop
-
-    def call(self, inputs, **kwargs):
-        return tf.image.resize_with_crop_or_pad(inputs, *self.out_size)
-
-    def get_config(self):
-        config = super().get_config().copy()
-        config.update({
-            'crop': self.crop,
-            'output_size': self.out_size,
-        })
-        return config
-
-
 def core_deconv_layers(latent_in, cnn_output_shape):
     """
     Returns the inverse of the core CNN layers that are shared among the
@@ -404,12 +376,10 @@ def core_deconv_layers(latent_in, cnn_output_shape):
                         name="deconv_4")(x)
     x = Conv2DTranspose(filters=32, kernel_size=5, strides=2,
                         name="deconv_3")(x)
-    x = Conv2DTranspose(filters=24, kernel_size=7, strides=2, output_padding=0,
+    x = Conv2DTranspose(filters=24, kernel_size=6, strides=2, output_padding=0,
                         name="deconv_2")(x)
-    x = CropLayer(crop=1, name='crop_2')(x)
-    x = Conv2DTranspose(filters=3, kernel_size=7, strides=2, output_padding=0,
+    x = Conv2DTranspose(filters=3, kernel_size=6, strides=2, output_padding=0,
                         name="deconv_1")(x)
-    x = CropLayer(crop=1, name='crop_1')(x)
     return x
 
 
