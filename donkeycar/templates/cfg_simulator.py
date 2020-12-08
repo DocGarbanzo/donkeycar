@@ -25,7 +25,7 @@ DRIVE_LOOP_HZ = 20      # the vehicle loop will pause if faster than this speed.
 MAX_LOOPS = None        # the vehicle loop can abort after this many iterations, when given a positive integer.
 
 #CAMERA
-CAMERA_TYPE = "PICAM"   # (PICAM|WEBCAM|CVCAM|CSIC|V4L|D435|MOCK|IMAGE_LIST)
+CAMERA_TYPE = "MOCK"   # (PICAM|WEBCAM|CVCAM|CSIC|V4L|D435|MOCK|IMAGE_LIST)
 IMAGE_W = 160
 IMAGE_H = 120
 IMAGE_DEPTH = 3         # default RGB=3, make 1 for mono
@@ -52,7 +52,7 @@ SSD1306_128_32_I2C_BUSNUM = 1 # I2C bus number
 #DC_TWO_WHEEL uses HBridge pwm to control two drive motors, one on the left, and one on the right.
 #SERVO_HBRIDGE_PWM use ServoBlaster to output pwm control from the PiZero directly to control steering, and HBridge for a drive motor.
 #PIGPIO_PWM uses Raspberrys internal PWM
-DRIVE_TRAIN_TYPE = "SERVO_ESC" # SERVO_ESC|DC_STEER_THROTTLE|DC_TWO_WHEEL|SERVO_HBRIDGE_PWM|PIGPIO_PWM|MM1|MOCK
+DRIVE_TRAIN_TYPE = "MOCK" # SERVO_ESC|DC_STEER_THROTTLE|DC_TWO_WHEEL|SERVO_HBRIDGE_PWM|PIGPIO_PWM|MM1|MOCK
 
 #STEERING
 STEERING_CHANNEL = 1            #channel on the 9685 pwm board 0-15
@@ -116,13 +116,6 @@ PRUNE_PERCENT_PER_ITERATION = 20 # Percenge of pruning that is perform per itera
 PRUNE_VAL_LOSS_DEGRADATION_LIMIT = 0.2 # The max amout of validation loss that is permitted during pruning.
 PRUNE_EVAL_PERCENT_OF_DATASET = .05  # percent of dataset used to perform evaluation of model.
 
-# Region of interst cropping
-# only supported in Categorical and Linear models.
-# If these crops values are too large, they will cause the stride values to become negative and the model with not be valid.
-ROI_CROP_TOP = 0                    #the number of rows of pixels to ignore on the top of the image
-ROI_CROP_BOTTOM = 0                 #the number of rows of pixels to ignore on the bottom of the image
-
-
 #Model transfer options
 #When copying weights during a model transfer operation, should we freeze a certain number of layers
 #to the incoming weights and not allow them to change during training?
@@ -130,11 +123,11 @@ FREEZE_LAYERS = False               #default False will allow all layers to be m
 NUM_LAST_LAYERS_TO_TRAIN = 7        #when freezing layers, how many layers from the last should be allowed to train?
 
 #WEB CONTROL
-WEB_CONTROL_PORT = int(os.getenv("WEB_CONTROL_PORT", 8887))  # which port to listen on when making a web controller
+WEB_CONTROL_PORT = 8887             # which port to listen on when making a web controller
 WEB_INIT_MODE = "user"              # which control mode to start in. one of user|local_angle|local. Setting local will start in ai mode.
 
 #JOYSTICK
-USE_JOYSTICK_AS_DEFAULT = True      #when starting the manage.py, when True, will not require a --js option to use the joystick
+USE_JOYSTICK_AS_DEFAULT = False      #when starting the manage.py, when True, will not require a --js option to use the joystick
 JOYSTICK_MAX_THROTTLE = 0.5         #this scalar is multiplied with the -1 to 1 throttle value to limit the maximum throttle. This can help if you drop the controller or just don't need the full speed available.
 JOYSTICK_STEERING_SCALE = 1.0       #some people want a steering that is less sensitve. This scalar is multiplied with the steering -1 to 1. It can be negative to reverse dir.
 AUTO_RECORD_ON_THROTTLE = True      #if true, we will record whenever throttle is not zero. if false, you must manually toggle recording with some other trigger. Usually circle button on joystick.
@@ -239,9 +232,9 @@ BUTTON_PRESS_NEW_TUB = False #when enabled, makes it easier to divide our data i
 #This enables that, and sets the path to the simualator and the environment.
 #You will want to download the simulator binary from: https://github.com/tawnkramer/donkey_gym/releases/download/v18.9/DonkeySimLinux.zip
 #then extract that and modify DONKEY_SIM_PATH.
-DONKEY_GYM = False
+DONKEY_GYM = True
 DONKEY_SIM_PATH = "path to sim" #"/home/tkramer/projects/sdsandbox/sdsim/build/DonkeySimLinux/donkey_sim.x86_64" when racing on virtual-race-league use "remote", or user "remote" when you want to start the sim manually first.
-DONKEY_GYM_ENV_NAME = "donkey-mountain-track-v0" # ("donkey-generated-track-v0"|"donkey-generated-roads-v0"|"donkey-warehouse-v0"|"donkey-avc-sparkfun-v0")
+DONKEY_GYM_ENV_NAME = "donkey-generated-track-v0" # ("donkey-generated-track-v0"|"donkey-generated-roads-v0"|"donkey-warehouse-v0"|"donkey-avc-sparkfun-v0")
 GYM_CONF = { "body_style" : "donkey", "body_rgb" : (128, 128, 128), "car_name" : "car", "font_size" : 100} # body style(donkey|bare|car01) body rgb 0-255
 GYM_CONF["racer_name"] = "Your Name"
 GYM_CONF["country"] = "Place"

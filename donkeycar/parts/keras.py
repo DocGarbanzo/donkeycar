@@ -10,20 +10,22 @@ include one or more models to help direct the vehicles motion.
 
 from abc import ABC, abstractmethod
 import numpy as np
+from typing import Dict, Any, Tuple, Optional, Union
+import donkeycar as dk
+from donkeycar.utils import normalize_image, linear_bin
 
-import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras.layers import Input, Dense
-from tensorflow.keras.layers import Convolution2D, MaxPooling2D, BatchNormalization
+from tensorflow.keras.layers import Convolution2D, MaxPooling2D, \
+    BatchNormalization
 from tensorflow.keras.layers import Activation, Dropout, Flatten
 from tensorflow.keras.layers import LSTM
 from tensorflow.keras.layers import TimeDistributed as TD
 from tensorflow.keras.layers import Conv3D, MaxPooling3D, Conv2DTranspose
 from tensorflow.keras.backend import concatenate
 from tensorflow.keras.models import Model, Sequential
-
-import donkeycar as dk
-from donkeycar.utils import normalize_image
+from tensorflow.python.keras.callbacks import EarlyStopping, ModelCheckpoint
+from tensorflow.keras.optimizers import Optimizer
 
 ONE_BYTE_SCALE = 1.0 / 255.0
 
@@ -33,23 +35,25 @@ class KerasPilot(ABC):
     Base class for Keras models that will provide steering and throttle to
     guide a car.
     """
-    def __init__(self):
-        self.model = None
+    def __init__(self) -> None:
+        self.model: Optional[Model] = None
         self.optimizer = "adam"
- 
-    def load(self, model_path):
+        print(f'Created {self}')
+
+    def load(self, model_path: str) -> None:
         self.model = keras.models.load_model(model_path, compile=False)
 
-    def load_weights(self, model_path, by_name=True):
+    def load_weights(self, model_path: str, by_name: bool = True) -> None:
         self.model.load_weights(model_path, by_name=by_name)
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         pass
 
-    def compile(self):
+    def compile(self) -> None:
         pass
 
-    def set_optimizer(self, optimizer_type, rate, decay):
+    def set_optimizer(self, optimizer_type: str,
+                      rate: float, decay: float) -> None:
         if optimizer_type == "adam":
             self.model.optimizer = keras.optimizers.Adam(lr=rate, decay=decay)
         elif optimizer_type == "sgd":
@@ -59,11 +63,11 @@ class KerasPilot(ABC):
         else:
             raise Exception("unknown optimizer type: %s" % optimizer_type)
 
-    def get_input_shape(self):
+    def get_input_shape(self) -> Tuple[int, ...]:
         assert self.model is not None, "Need to load model first"
         return self.model.inputs[0].shape
 
-    def run(self, img_arr, other_arr=None):
+    def run(self, img_arr: np.ndarray, other_arr: np.ndarray = None) -> Any:
         """
         Donkeycar parts interface to run the part in the loop.
 
@@ -77,7 +81,7 @@ class KerasPilot(ABC):
         return self.inference(norm_arr, other_arr)
 
     @abstractmethod
-    def inference(self, img_arr, other_arr):
+    def inference(self, img_arr: np.ndarray, other_arr: np.ndarray) -> Any:
         """
         Virtual method to be implemented by child classes for inferencing
 
@@ -89,43 +93,77 @@ class KerasPilot(ABC):
         """
         pass
 
-    def train(self, train_gen, val_gen, 
-              saved_model_path, epochs=100, steps=100, train_split=0.8,
-              verbose=1, min_delta=.0005, patience=5, use_early_stop=True):
-        
+    def train(self,
+              model_path: str,
+              train_data: 'BatchSequence',
+              train_steps: int,
+              batch_size: int,
+              validation_data: 'BatchSequence',
+              validation_steps: int,
+              epochs: int,
+              verbose: int = 1,
+              min_delta: float = .0005,
+              patience: int = 5) -> Dict[str, Any]:
         """
-        train_gen: generator that yields an array of images an array of 
-        
+        trains the model
         """
+        model = self._get_train_model()
+        self.compile()
 
-        # checkpoint to save model after each epoch
-        save_best = keras.callbacks.ModelCheckpoint(saved_model_path, 
-                                                    monitor='val_loss', 
-                                                    verbose=verbose, 
-                                                    save_best_only=True, 
-                                                    mode='min')
-        
-        # stop training if the validation error stops improving.
-        early_stop = keras.callbacks.EarlyStopping(monitor='val_loss', 
-                                                   min_delta=min_delta, 
-                                                   patience=patience, 
-                                                   verbose=verbose, 
-                                                   mode='auto')
-        
-        callbacks_list = [save_best]
+        callbacks = [
+            EarlyStopping(monitor='val_loss',
+                          patience=patience,
+                          min_delta=min_delta),
+            ModelCheckpoint(monitor='val_loss',
+                            filepath=model_path,
+                            save_best_only=True,
+                            verbose=verbose)]
 
-        if use_early_stop:
-            callbacks_list.append(early_stop)
-        
-        hist = self.model.fit_generator(
-                        train_gen, 
-                        steps_per_epoch=steps, 
-                        epochs=epochs, 
-                        verbose=1, 
-                        validation_data=val_gen,
-                        callbacks=callbacks_list, 
-                        validation_steps=steps*(1.0 - train_split))
-        return hist
+        history: Dict[str, Any] = model.fit(
+            x=train_data,
+            steps_per_epoch=train_steps,
+            batch_size=batch_size,
+            callbacks=callbacks,
+            validation_data=validation_data,
+            validation_steps=validation_steps,
+            epochs=epochs,
+            verbose=verbose,
+            workers=1,
+            use_multiprocessing=False
+        )
+        return history
+
+    def _get_train_model(self) -> Model:
+        """ Model used for training, could be just a sub part of the model"""
+        return self.model
+
+    def lazy_record_transform_x(self, record: 'LazyRecord') -> Any:
+        """
+        Return X for a single record required in training where X is the
+        array of input variables
+
+        :param record:  LazyRecord with that data
+        :return:        array containing model inputs, typically called X,
+                        for the standard models is is just the image
+        """
+        x = record.get_entry('cam/image_array')
+        return x
+
+    def lazy_record_transform_y(self, record: 'LazyRecord') -> Any:
+        """
+        Return Y for a single record required in training where Y is the
+        array of output variables
+
+        :param record:  LazyRecord with that data
+        :return:        array containing model outputs for the
+                        standard models this is [angle, throttle]
+        """
+        y = record.get_entry('user/angle'), record.get_entry('user/throttle')
+        return y
+
+    def __str__(self) -> str:
+        """ For printing model initialisation """
+        return type(self).__name__
 
 
 class KerasCategorical(KerasPilot):
@@ -167,6 +205,13 @@ class KerasCategorical(KerasPilot):
         angle = dk.utils.linear_unbin(angle_binned)
         return angle, throttle
 
+    def lazy_record_transform_y(self, record):
+        y = super().lazy_record_transform_y(record)
+        R = self.throttle_range
+        angle = linear_bin(y[0], N=15, offset=1, R=2.0)
+        throttle = linear_bin(y[1], N=20, offset=0.0, R=R)
+        return angle, throttle
+
 
 class KerasLinear(KerasPilot):
     """
@@ -204,6 +249,10 @@ class KerasInferred(KerasPilot):
         outputs = self.model.predict(img_arr)
         steering = outputs[0]
         return steering[0], dk.utils.throttle(steering[0])
+
+    def lazy_record_transform_y(self, record):
+        y = record.get_entry('user/angle')
+        return y
 
 
 class KerasIMU(KerasPilot):
@@ -245,7 +294,6 @@ class KerasIMU(KerasPilot):
         self.model.compile(optimizer=self.optimizer, loss='mse')
         
     def inference(self, img_arr, other_arr):
-        # TODO: would be nice to take a vector input array.
         img_arr = img_arr.reshape((1,) + img_arr.shape)
         imu_arr = np.array(other_arr).reshape(1, self.num_imu_inputs)
         outputs = self.model.predict([img_arr, imu_arr])
