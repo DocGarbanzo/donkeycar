@@ -4,9 +4,17 @@
 	}
 }
 
+body {
+    background-color: rgb(48, 49, 51)
+}
+
+h2 {
+    color: grey
+}
+
 .train-img {
-    width: 320px;
-	height: 240px;
+    width: 480px;
+	height: 360px;
 }
 
 #cur-frame {
@@ -26,6 +34,7 @@ tr.active td:last-child  {
 tbody#clips td {
     vertical-align: middle;
 }
+
 .affix {
   top: 0;
   width: 100%;
@@ -42,35 +51,43 @@ tbody#clips td {
 
 .preview {
 	width: 100%;
+	background-color: rgb(48, 49, 51);
 }
 
 .preview-centered {
-  width: 460px;
-  margin: 0 auto;
-  padding-bottom: 12px;
+  width: 500px;
+  margin: 0 100px;
+  padding-bottom: 6px;
 }
 
 .preview-wrapper {
     display: flex;
 }
 
+.preview-imu {
+    flex: 0 0 40%;
+    color: grey;
+}
+
 .preview-img {
-    flex: 0 0 65%;
+    flex: 0 0 30%;
+    color: grey;
 }
 
 .preview-toolbar {
-    flex: 1;
-    background-color: white;
+    flex: 0;
+    color: grey;
+    background-color: rgb(48, 49, 51);
 }
 
 .preview-toolbar button {
     margin: 5px;
-    width: 140px;
+    width: 160px;
 }
 
 .preview-toolbar select {
     margin: 5px;
-    width: 140px;
+    width: 160px;
 }
 
 tbody#clips .progress {
@@ -87,9 +104,9 @@ tbody#clips .progress {
 }
 
 .steering-bar .progress {
-    width: 48%;
+    width: 50%;
     margin-bottom: 0px;
-    border-radius: 0px;
+    border-radius: 2px;
     float: left;
 }
 
@@ -100,6 +117,44 @@ tbody#clips .progress {
 }
 
 .steering-bar .progress.positive {
+    border-left-style: solid;
+    border-left-width: thin;
+    border-left-color: red;
+}
+
+.accel-x-bar .progress {
+    width: 50%;
+    margin-bottom: 0px;
+    border-radius: 2px;
+    float: left;
+}
+
+.accel-x-bar .progress.negative {
+    border-right-style: solid;
+    border-right-width: thin;
+    border-right-color: red;
+}
+
+.accel-x-bar .progress.positive {
+    border-left-style: solid;
+    border-left-width: thin;
+    border-left-color: red;
+}
+
+.accel-y-bar .progress {
+    width: 50%;
+    margin-bottom: 0px;
+    border-radius: 2px;
+    float: left;
+}
+
+.accel-y-bar .progress.negative {
+    border-right-style: solid;
+    border-right-width: thin;
+    border-right-color: red;
+}
+
+.accel-y-bar .progress.positive {
     border-left-style: solid;
     border-left-width: thin;
     border-left-color: red;

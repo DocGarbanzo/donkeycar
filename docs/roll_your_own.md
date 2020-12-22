@@ -201,3 +201,28 @@ a way that makes sense to you; the PWM signals output by the PCA9685 board are t
 RC control kind, NOT the motor control kind! Also, most affordable two-wheel-drive
 robot chassis are not actually big enough, strong enough, and mechanically
 consistent enough to make for good Donkey Car candidates.
+
+## Turnigy 1/16th 4WD Brushless Buggy
+
+The Turnigy 1/16th 4WD Brushless Buggy is a well made RC car which comes at a 
+reasonable price. The car can be bought from [HobbyKing](https://hobbyking.com/en_us/turnigy-1-16-brushless-4wd-racing-buggy-w-25a-power-system-and-2-4ghz-radio-rtr.html?gclid=CjwKCAjwqqrmBRAAEiwAdpDXtFS4SQOmtAFHIMZ9HrEiBeGwMeOg9UfNnKB6_Nr-yxoUUoyarf6FORoC7NgQAvD_BwE&gclsrc=aw.ds&___store=en_us). 
+
+![4WD_Buggy](./assets/4WD_buggy.jpg)
+
+I have bought this car and made following modifications and improvements:
+* replaced the brushless motor and esc with brushed counterparts as the car
+was too fast to be controllable
+* enabled the included remote control by building a small voltage divider and
+writing an rc receiver part in the donkeycar library
+
+### The RC Receiver
+Using the RC receiver that comes with the car allows driving without the need 
+of a wireless connection (except for starting up the car). Here is a picture using
+a small prototype PCB with 3 voltage dividers for 3 channels of the RC control.
+
+![Voltage_Divider](./assets/voltage_div.jpeg)
+
+The divider uses $5.1k\Omega$ between RC receiver and Raspi input pin and $10k\Omega$
+between Raspi input and ground. This scales down the 5V comming from the receiver to 3.3V 
+that can be processed as by the Pi.
+

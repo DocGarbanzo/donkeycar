@@ -2,39 +2,45 @@ import os
 import time
 import numpy as np
 from PIL import Image
+import io
+import base64
+from socket import socket, gaierror, AF_INET, SOCK_DGRAM
 import glob
 from donkeycar.utils import rgb2gray
+from donkeycar.utils import arr_to_binary
 
 class BaseCamera:
 
     def run_threaded(self):
         return self.frame
 
+
 class PiCamera(BaseCamera):
     def __init__(self, image_w=160, image_h=120, image_d=3, framerate=20, vflip=False, hflip=False):
         from picamera.array import PiRGBArray
         from picamera import PiCamera
-        
+
         resolution = (image_w, image_h)
         # initialize the camera and stream
-        self.camera = PiCamera() #PiCamera gets resolution (height, width)
+        self.camera = PiCamera()  # PiCamera gets resolution (height, width)
         self.camera.resolution = resolution
         self.camera.framerate = framerate
         self.camera.vflip = vflip
         self.camera.hflip = hflip
         self.rawCapture = PiRGBArray(self.camera, size=resolution)
         self.stream = self.camera.capture_continuous(self.rawCapture,
-            format="rgb", use_video_port=True)
+                                                     format="rgb",
+                                                     use_video_port=True)
 
-        # initialize the frame and the variable used to indicate
-        # if the thread should be stopped
-        self.frame = None
+        # initialize the frame to right size and zeros (meaning black)
+        self.frame = np.zeros((image_h, image_w, image_d))
+        # variable used to indicate if the thread should be stopped
         self.on = True
         self.image_d = image_d
 
-        print('PiCamera loaded.. .warming camera')
-        time.sleep(2)
-
+        print('PiCamera loaded with frame size {} and frame rate {}...'
+              ' warming camera'.format(resolution, framerate))
+        time.sleep(1)
 
     def run(self):
         f = next(self.stream)
@@ -67,6 +73,7 @@ class PiCamera(BaseCamera):
         self.stream.close()
         self.rawCapture.close()
         self.camera.close()
+
 
 class Webcam(BaseCamera):
     def __init__(self, image_w=160, image_h=120, image_d=3, framerate = 20, iCam = 0):
@@ -132,10 +139,10 @@ class CSICamera(BaseCamera):
     Credit: https://github.com/feicccccccc/donkeycar/blob/dev/donkeycar/parts/camera.py
     gstreamer init string from https://github.com/NVIDIA-AI-IOT/jetbot/blob/master/jetbot/camera.py
     '''
-    def gstreamer_pipeline(self, capture_width=3280, capture_height=2464, output_width=224, output_height=224, framerate=21, flip_method=0) :   
+    def gstreamer_pipeline(self, capture_width=3280, capture_height=2464, output_width=224, output_height=224, framerate=21, flip_method=0) :
         return 'nvarguscamerasrc ! video/x-raw(memory:NVMM), width=%d, height=%d, format=(string)NV12, framerate=(fraction)%d/1 ! nvvidconv flip-method=%d ! nvvidconv ! video/x-raw, width=(int)%d, height=(int)%d, format=(string)BGRx ! videoconvert ! appsink' % (
                 capture_width, capture_height, framerate, flip_method, output_width, output_height)
-    
+
     def __init__(self, image_w=160, image_h=120, image_d=3, capture_width=3280, capture_height=2464, framerate=60, gstreamer_flip=0):
         '''
         gstreamer_flip = 0 - no flip
@@ -169,7 +176,7 @@ class CSICamera(BaseCamera):
         self.poll_camera()
         print('CSICamera loaded.. .warming camera')
         time.sleep(2)
-        
+
     def update(self):
         self.init_camera()
         while self.running:
@@ -186,22 +193,25 @@ class CSICamera(BaseCamera):
 
     def run_threaded(self):
         return self.frame
-    
+
     def shutdown(self):
         self.running = False
         print('stoping CSICamera')
         time.sleep(.5)
-        del(self.camera)
+        del self.camera
+
 
 class V4LCamera(BaseCamera):
     '''
-    uses the v4l2capture library from this fork for python3 support: https://github.com/atareao/python3-v4l2capture
+    uses the v4l2capture library from this fork for python3 support:
+    https://github.com/atareao/python3-v4l2capture
     sudo apt-get install libv4l-dev
     cd python3-v4l2capture
     python setup.py build
     pip install -e .
     '''
-    def __init__(self, image_w=160, image_h=120, image_d=3, framerate=20, dev_fn="/dev/video0", fourcc='MJPG'):
+    def __init__(self, image_w=160, image_h=120, image_d=3, framerate=20,
+                 dev_fn="/dev/video0", fourcc='MJPG'):
 
         self.running = True
         self.frame = None
@@ -233,7 +243,6 @@ class V4LCamera(BaseCamera):
         # Start the device. This lights the LED if it's a camera that has one.
         self.video.start()
 
-
     def update(self):
         import select
         from donkeycar.parts.image import JpgToImgArr
@@ -247,11 +256,9 @@ class V4LCamera(BaseCamera):
             image_data = self.video.read_and_queue()
             self.frame = jpg_conv.run(image_data)
 
-
     def shutdown(self):
         self.running = False
         time.sleep(0.5)
-
 
 
 class MockCamera(BaseCamera):
@@ -270,13 +277,14 @@ class MockCamera(BaseCamera):
     def shutdown(self):
         pass
 
+
 class ImageListCamera(BaseCamera):
     '''
     Use the images from a tub as a fake camera output
     '''
     def __init__(self, path_mask='~/mycar/data/**/*.jpg'):
         self.image_filenames = glob.glob(os.path.expanduser(path_mask), recursive=True)
-    
+
         def get_image_index(fnm):
             sl = os.path.basename(fnm).split('_')
             return int(sl[0])
@@ -299,12 +307,59 @@ class ImageListCamera(BaseCamera):
     def update(self):
         pass
 
-    def run_threaded(self):        
+    def run_threaded(self):
         if self.num_images > 0:
             self.i_frame = (self.i_frame + 1) % self.num_images
-            self.frame = Image.open(self.image_filenames[self.i_frame]) 
+            self.frame = Image.open(self.image_filenames[self.i_frame])
 
         return np.asarray(self.frame)
 
     def shutdown(self):
         pass
+
+
+class FrameStreamer:
+    def __init__(self, host, port=13000):
+        self.address = (host, port)
+        self.socket = None
+        print('Created FrameStreamer to host {}, port {}. Trying to '
+              'connect...'.format(host, port), end='')
+        for i in range(10):
+            try:
+                self.socket = socket(AF_INET, SOCK_DGRAM)
+                break
+            except gaierror:
+                print('.', end='')
+                time.sleep(1)
+        print('failed!' if self.socket is None else 'done.')
+        self.bytes = bytes(0)
+        self.running = True
+        self.img_arr = np.zeros((1,1,3))
+
+    def loop(self):
+        self.bytes = arr_to_binary(self.img_arr)
+        try:
+            self.socket.sendto(self.bytes, self.address)
+        except gaierror:
+            pass
+        except OSError:
+            pass
+
+    def update(self):
+        # stream frames continuously to udp socket
+        while self.running:
+            self.loop()
+
+    def run_threaded(self, image_array):
+        self.img_arr = image_array
+
+    def run(self, image_array):
+        self.run_threaded(image_array)
+        self.loop()
+
+    def shutdown(self):
+        self.running = False
+        if self.socket is not None:
+            self.socket.close()
+        print('FrameStreamer max run-time: {}ms'.format(self.max_time))
+

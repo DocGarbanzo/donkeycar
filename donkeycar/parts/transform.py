@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
-
 import time
+from simple_pid import PID
+
+from donkeycar.utils import normalize_and_crop
+
 
 class Lambda:
     """
@@ -11,12 +14,13 @@ class Lambda:
         Accepts the function to use.
         """
         self.f = f
-        
+
     def run(self, *args, **kwargs):
         return self.f(*args, **kwargs)
-    
+
     def shutdown(self):
         return
+
 
 class TriggeredCallback:
     def __init__(self, args, func_cb):
@@ -29,6 +33,7 @@ class TriggeredCallback:
 
     def shutdown(self):
         return
+
 
 class DelayedTrigger:
     def __init__(self, delay):
@@ -47,7 +52,7 @@ class DelayedTrigger:
         return False
 
     def shutdown(self):
-        return
+        pass
 
 
 class PIDController:
@@ -64,119 +69,77 @@ class PIDController:
         self.Ki = i
         self.Kd = d
 
-        # The value the controller is trying to get the system to achieve.
-        self.target = 0
-
         # initialize delta t variables
         self.prev_tm = time.time()
         self.prev_err = 0
-        self.error = None
         self.totalError = 0
-
-        # initialize the output
-        self.alpha = 0
 
         # debug flag (set to True for console output)
         self.debug = debug
+        self.last_alpha = 0.0
 
-    def run(self, err):
+    def run(self, setpoint, feedback):
+        # Error and time calculation
+        err = feedback - setpoint
         curr_tm = time.time()
-
-        self.difError = err - self.prev_err
-
         # Calculate time differential.
         dt = curr_tm - self.prev_tm
+        # error differential
+        dif_error = err - self.prev_err
+        # integral error
+        self.totalError += err
 
         # Initialize output variable.
-        curr_alpha = 0
-
+        curr_alpha = 0.0
         # Add proportional component.
         curr_alpha += -self.Kp * err
-
         # Add integral component.
-        curr_alpha += -self.Ki * (self.totalError * dt)
+        curr_alpha += -self.Ki * self.totalError * dt
 
         # Add differential component (avoiding divide-by-zero).
         if dt > 0:
-            curr_alpha += -self.Kd * ((self.difError) / float(dt))
+            curr_alpha += self.Kd * dif_error / float(dt)
 
         # Maintain memory for next loop.
         self.prev_tm = curr_tm
         self.prev_err = err
-        self.totalError += err
 
-        # Update the output
-        self.alpha = curr_alpha
+        if self.debug:
+            print('PID error={0:4.3f} total_error={1:4.3f} dif_error={2:4.3f} '
+                  'output={3:4.3f}'
+                  .format(err, self.totalError, self.difError, curr_alpha))
 
-        if (self.debug):
-            print('PID err value:', round(err, 4))
-            print('PID output:', round(curr_alpha, 4))
-
+        self.last_alpha = curr_alpha
         return curr_alpha
 
+    def shutdown(self):
+        pass
 
-def twiddle(evaluator, tol=0.001, params=3, error_cmp=None, initial_guess=None):
+
+class SimplePidController:
     """
-    A coordinate descent parameter tuning algorithm.
-    https://github.com/chrisspen/pid_controller/blob/master/pid_controller/pid.py
-    
-    https://en.wikipedia.org/wiki/Coordinate_descent
-    
-    Params:
-    
-        evaluator := callable that will be passed a series of number parameters, which will return
-            an error measure
-            
-        tol := tolerance threshold, the smaller the value, the greater the tuning
-        
-        params := the number of parameters to tune
-        
-        error_cmp := a callable that takes two error measures (the current and last best)
-            and returns true if the first is less than the second
-            
-        initial_guess := parameters to begin tuning with
+    Donkey part wrap of SimplePid https://github.com/m-lundberg/simple-pid
     """
+    def __init__(self, p, i, d, debug=False):
+        self.pid = PID(Kp=p, Ki=i, Kd=d)
+        self.pid.output_limits = (0, None)
+        self.debug = debug
 
-    def _error_cmp(a, b):
-        # Returns true if a is closer to zero than b.
-        return abs(a) < abs(b)
-        
-    if error_cmp is None:
-        error_cmp = _error_cmp
+    def run(self, set_point, feedback):
+        self.pid.setpoint = set_point
+        if self.debug:
+            print('setpoint {0:4.2f} feedback {1:4.2f}'
+                  .format(set_point, feedback))
+        return self.pid(feedback)
 
-    if initial_guess is None:
-        p = [0]*params
-    else:
-        p = list(initial_guess)
-    dp = [1]*params
-    best_err = evaluator(*p)
-    steps = 0
-    while sum(dp) > tol:
-        steps += 1
-        print('steps:', steps, 'tol:', tol, 'best error:', best_err)
-        for i, _ in enumerate(p):
-            
-            # first try to increase param
-            p[i] += dp[i]
-            err = evaluator(*p)
-            
-            if error_cmp(err, best_err):
-                # Increasing param reduced error, so record and continue to increase dp range.
-                best_err = err
-                dp[i] *= 1.1
-            else:
-                # Otherwise, increased error, so undo and try decreasing dp
-                p[i] -= 2.*dp[i]
-                err = evaluator(*p)
-                
-                if error_cmp(err, best_err):
-                    # Decreasing param reduced error, so record and continue to increase dp range.
-                    best_err = err
-                    dp[i] *= 1.1
-                    
-                else:
-                    # Otherwise, reset param and reduce dp range.
-                    p[i] += dp[i]
-                    dp[i] *= 0.9
-                
-    return p
+
+class ImgPrecondition:
+    """
+    Donkey part wrapping around normalisation and cropping
+    """
+    def __init__(self, cfg):
+        self.cfg = cfg
+
+    def run(self, img_arr):
+        return normalize_and_crop(img_arr, self.cfg)
+

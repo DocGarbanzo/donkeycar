@@ -56,7 +56,6 @@ $(document).ready(function(){
             var angle = data["user/angle"];
             var steeringPercent = Math.round(Math.abs(angle) * 100) + '%';
             var steeringRounded = angle.toFixed(2)
-
             $('.steering-bar .progress-bar').css('width', '0%').html('');
             if(angle < 0) {
                 $('#angle-bar-backward').css('width', steeringPercent).html(steeringRounded)
@@ -64,6 +63,36 @@ $(document).ready(function(){
             if (angle > 0) {
                 $('#angle-bar-forward').css('width', steeringPercent).html(steeringRounded)
             }
+
+            var throttle = data["user/throttle"];
+            var throttlePercent = Math.round(Math.abs(throttle) * 100) + '%';
+            var throttleRounded = throttle.toFixed(2)
+            $('.throttle-bar .progress-bar').css('width', '0%').html('');
+            $('#throttle-bar-forward').css('width', throttlePercent).html(throttleRounded)
+
+            var accel = data["car/accel"];
+            var accel_x = -accel[0]/10
+            var accel_x_pct = Math.round(Math.abs(accel_x) * 100) + '%';
+            var accel_x_rounded = accel_x.toFixed(2)
+            $('.accel-x-bar .progress-bar').css('width', '0%').html('');
+            if(accel_x < 0) {
+                $('#accel-x-bar-backward').css('width', accel_x_pct).html(accel_x_rounded)
+            }
+            if (accel_x > 0) {
+                $('#accel-x-bar-forward').css('width', accel_x_pct).html(accel_x_rounded)
+            }
+            var accel_y = -accel[1]/10
+            var accel_y_pct = Math.round(Math.abs(accel_y) * 100) + '%';
+            var accel_y_rounded = accel_y.toFixed(2)
+            $('.accel-y-bar .progress-bar').css('width', '0%').html('');
+            if(accel_y < 0) {
+                $('#accel-y-bar-backward').css('width', accel_y_pct).html(accel_y_rounded)
+            }
+            if (accel_y > 0) {
+                $('#accel-y-bar-forward').css('width', accel_y_pct).html(accel_y_rounded)
+            }
+
+
         });
     };
 

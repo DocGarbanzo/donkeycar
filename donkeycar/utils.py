@@ -246,9 +246,9 @@ def map_range(x, X_min, X_max, Y_min, Y_max):
     '''
     X_range = X_max - X_min
     Y_range = Y_max - Y_min
-    XY_ratio = X_range/Y_range
+    YX_ratio = Y_range / X_range
 
-    y = ((x-X_min) / XY_ratio + Y_min) // 1
+    y = ((x-X_min) * YX_ratio + Y_min)
 
     return int(y)
 
@@ -327,7 +327,6 @@ def merge_two_dicts(x, y):
     z = x.copy()
     z.update(y)
     return z
-
 
 
 def param_gen(params):
@@ -424,6 +423,7 @@ def gather_tubs(cfg, tub_names):
 Training helpers
 """
 
+
 def get_image_index(fnm):
     sl = os.path.basename(fnm).split('_')
     return int(sl[0])
@@ -435,14 +435,14 @@ def get_record_index(fnm):
 
 
 def gather_records(cfg, tub_names, opts=None, verbose=False):
-
     tubs = gather_tubs(cfg, tub_names)
-
     records = []
 
     for tub in tubs:
         if verbose:
             print(tub.path)
+        if hasattr(cfg, 'EXCLUDE_SLOW_LAPS'):
+            tub.exclude_slow_laps(cfg.EXCLUDE_SLOW_LAPS)
         record_paths = tub.gather_records()
         records += record_paths
 
@@ -455,8 +455,8 @@ def get_model_by_type(model_type, cfg):
     create a Keras model and return it.
     '''
     from donkeycar.parts.keras import KerasRNN_LSTM, KerasBehavioral, \
-        KerasCategorical, KerasIMU, KerasLinear, Keras3D_CNN, \
-        KerasLocalizer, KerasLatent
+        KerasCategorical, KerasIMU, KerasLinear, KerasSquarePlus, \
+        KerasSquarePlusImu, Keras3D_CNN, KerasLocalizer, KerasLatent
     from donkeycar.parts.tflite import TFLitePilot
 
     if model_type is None:
@@ -476,6 +476,15 @@ def get_model_by_type(model_type, cfg):
         kl = KerasIMU(num_outputs=2, num_imu_inputs=6, input_shape=input_shape, roi_crop=roi_crop)
     elif model_type == "linear":
         kl = KerasLinear(input_shape=input_shape, roi_crop=roi_crop)
+    elif model_type == "square_plus":
+        nn_size = cfg.NN_SIZE if hasattr(cfg, 'NN_SIZE') else 'S'
+        kl = KerasSquarePlus(input_shape=input_shape, roi_crop=roi_crop,
+                             size=nn_size)
+    elif model_type == "square_plus_imu":
+        imu_dim = cfg.IMU_DIM if hasattr(cfg, 'IMU_DIM') else 6
+        nn_size = cfg.NN_SIZE if hasattr(cfg, 'NN_SIZE') else 'S'
+        kl = KerasSquarePlusImu(input_shape=input_shape, roi_crop=roi_crop,
+                                imu_dim=imu_dim, size=nn_size)
     elif model_type == "tensorrt_linear":
         # Aggressively lazy load this. This module imports pycuda.autoinit which causes a lot of unexpected things
         # to happen when using TF-GPU for training.
@@ -528,9 +537,7 @@ def train_test_split(data_list, shuffle=True, test_size=0.2):
     '''
     assert shuffle
     train_data = []
-
     target_train_size = len(data_list) * (1. - test_size)
-
     i_sample = 0
 
     while i_sample < target_train_size and len(data_list) > 1:

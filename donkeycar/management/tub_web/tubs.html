@@ -1,17 +1,17 @@
-
 {% extends "base.html" %}
 {% block content %}
 
-	<body>
-		<div class="container">
-     <ul>
-       {% for tub in tubs %}
-         <li><a href={{ "/tubs/" + escape(tub) }}>{{ escape(tub) }}</a></li>
-       {% end %}
-     </ul>
+<body>
+<div>
+    <h2 style="color:rgb(226, 110, 57)">Available tubs</h2>
+</div>
+<div class="container">
+    <ul style="color:rgb(226, 110, 57)">
+        {% for tub in tubs %}
+        <li><a href={{"/tubs/" + escape(tub) }}>{{ escape(tub) }}</a></li>
+        {% end %}
+    </ul>
 
-		</div>
-
-
-	</body>
+</div>
+</body>
 {% end %}

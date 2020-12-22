@@ -1,17 +1,16 @@
 """
 actuators.py
-Classes to control the motors and servos. These classes 
+Classes to control the motors and servos. These classes
 are wrapped in a mixer class before being used in the drive loop.
 """
 
 import time
-
 import donkeycar as dk
 
-        
+
 class PCA9685:
-    ''' 
-    PWM motor controler using PCA9685 boards. 
+    '''
+    PWM motor controler using PCA9685 boards.
     This is used for most RC Cars
     '''
     def __init__(self, channel, address=0x40, frequency=60, busnum=None, init_delay=0.1):
@@ -24,6 +23,7 @@ class PCA9685:
         if busnum is not None:
             from Adafruit_GPIO import I2C
             # replace the get_bus function with our own
+
             def get_bus():
                 return busnum
             I2C.get_default_bus = get_bus
@@ -35,8 +35,8 @@ class PCA9685:
     def set_pulse(self, pulse):
         try:
             self.pwm.set_pwm(self.channel, 0, int(pulse * self.pwm_scale))
-        except:
-            self.pwm.set_pwm(self.channel, 0, int(pulse * self.pwm_scale))
+        except OSError as e:
+            print(e)
 
     def run(self, pulse):
         self.set_pulse(pulse)
@@ -79,8 +79,8 @@ class PiGPIO_PWM():
 
 
 class JHat:
-    ''' 
-    PWM motor controler using Teensy emulating PCA9685. 
+    '''
+    PWM motor controler using Teensy emulating PCA9685.
     '''
     def __init__(self, channel, address=0x40, frequency=60, busnum=None):
         print("Firing up the Hat")
@@ -100,36 +100,37 @@ class JHat:
 
         # we install our own write that is more efficient use of interrupts
         self.pwm.set_pwm = self.set_pwm
-        
+
     def set_pulse(self, pulse):
-        self.set_pwm(self.channel, 0, pulse) 
+        self.set_pwm(self.channel, 0, pulse)
 
     def set_pwm(self, channel, on, off):
         # sets a single PWM channel
         self.pwm._device.writeList(self.register, [off & 0xFF, off >> 8])
-        
+
     def run(self, pulse):
         self.set_pulse(pulse)
 
+
 class JHatReader:
-    ''' 
-    Read RC controls from teensy 
+    '''
+    Read RC controls from teensy
     '''
     def __init__(self, channel, address=0x40, frequency=60, busnum=None):
         import Adafruit_PCA9685
         self.pwm = Adafruit_PCA9685.PCA9685(address=address)
         self.pwm.set_pwm_freq(frequency)
-        self.register = 0 #i2c read doesn't take an address
+        self.register = 0  # i2c read doesn't take an address
         self.steering = 0
         self.throttle = 0
         self.running = True
-        #send a reset
+        # send a reset
         self.pwm._device.writeRaw8(0x06)
 
     def read_pwm(self):
         '''
         send read requests via i2c bus to Teensy to get
-        pwm control values from last RC input  
+        pwm control values from last RC input
         '''
         h1 = self.pwm._device.readU8(self.register)
         # first byte of header must be 100, otherwize we might be reading
@@ -137,27 +138,27 @@ class JHatReader:
         while h1 != 100:
             print("skipping to start of header")
             h1 = self.pwm._device.readU8(self.register)
-        
-        h2 = self.pwm._device.readU8(self.register)
+
         # h2 ignored now
+        h2 = self.pwm._device.readU8(self.register)
 
         val_a = self.pwm._device.readU8(self.register)
         val_b = self.pwm._device.readU8(self.register)
         self.steering = (val_b << 8) + val_a
-        
+
         val_c = self.pwm._device.readU8(self.register)
         val_d = self.pwm._device.readU8(self.register)
         self.throttle = (val_d << 8) + val_c
 
         # scale the values from -1 to 1
-        self.steering = (((float)(self.steering)) - 1500.0) / 500.0  + 0.158
-        self.throttle = (((float)(self.throttle)) - 1500.0) / 500.0  + 0.136
+        self.steering = (((float)(self.steering)) - 1500.0) / 500.0 + 0.158
+        self.throttle = (((float)(self.throttle)) - 1500.0) / 500.0 + 0.136
 
     def update(self):
         while(self.running):
             self.read_pwm()
             time.sleep(0.015)
-        
+
     def run_threaded(self):
         return self.steering, self.throttle
 
@@ -229,10 +230,6 @@ class PWMThrottle:
 
         # send zero pulse to calibrate ESC
         print("Init ESC")
-        self.controller.set_pulse(self.max_pulse)
-        time.sleep(0.01)
-        self.controller.set_pulse(self.min_pulse)
-        time.sleep(0.01)
         self.controller.set_pulse(self.zero_pulse)
         time.sleep(1)
         self.running = True
@@ -261,26 +258,25 @@ class PWMThrottle:
 
 
 class Adafruit_DCMotor_Hat:
-    ''' 
-    Adafruit DC Motor Controller 
+    '''
+    Adafruit DC Motor Controller
     Used for each motor on a differential drive car.
     '''
     def __init__(self, motor_num):
         from Adafruit_MotorHAT import Adafruit_MotorHAT, Adafruit_DCMotor
         import atexit
-        
+
         self.FORWARD = Adafruit_MotorHAT.FORWARD
         self.BACKWARD = Adafruit_MotorHAT.BACKWARD
-        self.mh = Adafruit_MotorHAT(addr=0x60) 
-        
+        self.mh = Adafruit_MotorHAT(addr=0x60)
+
         self.motor = self.mh.getMotor(motor_num)
         self.motor_num = motor_num
-        
+
         atexit.register(self.turn_off_motors)
         self.speed = 0
         self.throttle = 0
-    
-        
+
     def run(self, speed):
         '''
         Update the speed of the motor where 1 is full forward and
@@ -288,17 +284,16 @@ class Adafruit_DCMotor_Hat:
         '''
         if speed > 1 or speed < -1:
             raise ValueError( "Speed must be between 1(forward) and -1(reverse)")
-        
+
         self.speed = speed
         self.throttle = int(dk.utils.map_range(abs(speed), -1, 1, -255, 255))
-        
-        if speed > 0:            
+
+        if speed > 0:
             self.motor.run(self.FORWARD)
         else:
             self.motor.run(self.BACKWARD)
-            
+
         self.motor.setSpeed(self.throttle)
-        
 
     def shutdown(self):
         self.mh.getMotor(self.motor_num).run(Adafruit_MotorHAT.RELEASE)
@@ -316,10 +311,10 @@ class Maestro:
     maestro_lock = threading.Lock()
     astar_lock = threading.Lock()
 
-    def __init__(self, channel, frequency = 60):
+    def __init__(self, channel, frequency=60):
         import serial
 
-        if Maestro.maestro_device == None:
+        if Maestro.maestro_device is None:
             Maestro.maestro_device = serial.Serial('/dev/ttyACM0', 115200)
 
         self.channel = channel
@@ -401,8 +396,8 @@ class Teensy:
     def __init__(self, channel, frequency = 60):
         import serial
 
-        if Teensy.teensy_device == None:
-            Teensy.teensy_device = serial.Serial('/dev/teensy', 115200, timeout = 0.01)
+        if Teensy.teensy_device is None:
+            Teensy.teensy_device = serial.Serial('/dev/teensy', 115200, timeout=0.01)
 
         self.channel = channel
         self.frequency = frequency
@@ -412,7 +407,7 @@ class Teensy:
         self.brakelights = False
 
         if Teensy.astar_device == None:
-            Teensy.astar_device = serial.Serial('/dev/astar', 115200, timeout = 0.01)
+            Teensy.astar_device = serial.Serial('/dev/astar', 115200, timeout=0.01)
 
     def set_pulse(self, pulse):
         # Recalculate pulse width from the Adafruit values
@@ -458,7 +453,7 @@ class Teensy:
             if Teensy.teensy_device.inWaiting() > 8:
                 ret = Teensy.teensy_device.readline()
 
-        if ret != None:
+        if ret is not None:
             ret = ret.rstrip()
 
         return ret
@@ -471,10 +466,11 @@ class Teensy:
             if Teensy.astar_device.inWaiting() > 8:
                 ret = Teensy.astar_device.readline()
 
-        if ret != None:
+        if ret is not None:
             ret = ret.rstrip()
 
         return ret
+
 
 class MockController(object):
     def __init__(self):
@@ -501,7 +497,7 @@ class L298N_HBridge_DC_Motor(object):
         GPIO.setup(self.pin_forward, GPIO.OUT)
         GPIO.setup(self.pin_backward, GPIO.OUT)
         GPIO.setup(self.pwm_pin, GPIO.OUT)
-        
+
         self.pwm = GPIO.PWM(self.pwm_pin, freq)
         self.pwm.start(0)
 
@@ -513,11 +509,11 @@ class L298N_HBridge_DC_Motor(object):
         '''
         if speed > 1 or speed < -1:
             raise ValueError( "Speed must be between 1(forward) and -1(reverse)")
-        
+
         self.speed = speed
         max_duty = 90 #I've read 90 is a good max
         self.throttle = int(dk.utils.map_range(speed, -1, 1, -max_duty, max_duty))
-        
+
         if self.throttle > 0:
             self.pwm.ChangeDutyCycle(self.throttle)
             GPIO.output(self.pin_forward, GPIO.HIGH)
@@ -531,7 +527,6 @@ class L298N_HBridge_DC_Motor(object):
             GPIO.output(self.pin_forward, GPIO.LOW)
             GPIO.output(self.pin_backward, GPIO.LOW)
 
-
     def shutdown(self):
         import RPi.GPIO as GPIO
         self.pwm.stop()
@@ -543,19 +538,137 @@ class TwoWheelSteeringThrottle(object):
     def run(self, throttle, steering):
         if throttle > 1 or throttle < -1:
             raise ValueError( "throttle must be between 1(forward) and -1(reverse)")
- 
+
         if steering > 1 or steering < -1:
             raise ValueError( "steering must be between 1(right) and -1(left)")
 
         left_motor_speed = throttle
         right_motor_speed = throttle
- 
+
         if steering < 0:
-            left_motor_speed *= (1.0 - (-steering))
+            left_motor_speed *= (1.0 + steering)
         elif steering > 0:
             right_motor_speed *= (1.0 - steering)
 
         return left_motor_speed, right_motor_speed
+
+
+class RCReceiver:
+    """
+    Class to read PWM from an RC control and convert into a float output number.
+    Uses pigpio library. The code is essentially a copy of
+    http://abyz.me.uk/rpi/pigpio/code/read_PWM_py.zip. You will need a voltage
+    divider from a 5V RC receiver to a 3.3V Pi input pin if the receiver runs
+    on 5V. If your receiver accepts 3.3V input, then it can be connected
+    directly to the Pi.
+    """
+    MIN_OUT = -1
+    MAX_OUT = 1
+
+    def __init__(self, gpio, invert=False, jitter=0.025, no_action=None):
+        """
+        :param gpio: gpio pin connected to RC channel
+        :param invert: invert value of run() within [MIN_OUT,MAX_OUT]
+        :param jitter: threshold below which no signal is reported
+        :param no_action: value within [MIN_OUT,MAX_OUT] if no RC signal is
+                          sent. This is usually zero for throttle and steering
+                          being the center values when the controls are not
+                          pressed.
+        """
+        import pigpio
+        self.pi = pigpio.pi()
+        self.gpio = gpio
+        self.high_tick = None
+        self.period = None
+        self.high = None
+        self.min_pwm = 1000
+        self.max_pwm = 2000
+        self.invert = invert
+        self.jitter = jitter
+        if no_action is not None:
+            self.no_action = no_action
+        else:
+            self.no_action = (self.MAX_OUT - self.MIN_OUT) / 2.0
+
+        self.factor = (self.MAX_OUT - self.MIN_OUT) / (self.max_pwm - self.min_pwm)
+        self.pi.set_mode(self.gpio, pigpio.INPUT)
+        self.cb = self.pi.callback(self.gpio, pigpio.EITHER_EDGE, self._cbf)
+        print('RCReceiver gpio ' + str(gpio) + ' created')
+
+    def _update_param(self, tick):
+        """ Helper function for callback function _cbf.
+        :param tick: current tick in mu s
+        :return: difference in ticks
+        """
+        import pigpio
+        if self.high_tick is not None:
+            t = pigpio.tickDiff(self.high_tick, tick)
+            return t
+
+    def _cbf(self, gpio, level, tick):
+        """ Callback function for pigpio interrupt gpio. Signature is determined
+            by pigpiod library. This function is called every time the gpio
+            changes state as we specified EITHER_EDGE.
+        :param gpio: gpio to listen for state changes
+        :param level: rising/falling edge
+        :param tick: # of mu s since boot, 32 bit int
+        """
+        if level == 1:
+            self.period = self._update_param(tick)
+            self.high_tick = tick
+        elif level == 0:
+            self.high = self._update_param(tick)
+
+    def pulse_width(self):
+        """
+        :return: the PWM pulse width in microseconds.
+        """
+        if self.high is not None:
+            return self.high
+        else:
+            return 0.0
+
+    def run(self):
+        """
+        Donkey parts interface, returns pulse mapped into [MIN_OUT,MAX_OUT] or
+        [MAX_OUT,MIN_OUT]
+        """
+        # signal is a value in [0, (MAX_OUT-MIN_OUT)]
+        signal = (self.pulse_width() - self.min_pwm) * self.factor
+        # Assuming non-activity if the pulse is at no_action point
+        is_action = abs(signal - self.no_action) > self.jitter
+        # if deemed noise assume no signal
+        if not is_action:
+            signal = self.no_action
+        # convert into min max interval
+        if self.invert:
+            signal = -signal + self.MAX_OUT
+        else:
+            signal += self.MIN_OUT
+        return signal, is_action
+
+    def shutdown(self):
+        """
+        Donkey parts interface
+        """
+        import pigpio
+        self.cb.cancel()
+
+
+class MockRCReceiver:
+    """
+    Mock of the above to run on host for debugging
+    """
+    def __init__(self):
+        self.is_run_ = False
+
+    def run(self):
+        if self.is_run_ is True:
+            self.is_run_ = False
+            return 0.5, True
+        else:
+            self.is_run_ = True
+            return 0.0, False
 
     def shutdown(self):
         pass
@@ -577,11 +690,11 @@ class Mini_HBridge_DC_Motor_PWM(object):
         self.pin_forward = pin_forward
         self.pin_backward = pin_backward
         self.max_duty = max_duty
-        
+
         GPIO.setmode(GPIO.BOARD)
         GPIO.setup(self.pin_forward, GPIO.OUT)
         GPIO.setup(self.pin_backward, GPIO.OUT)
-        
+
         self.pwm_f = GPIO.PWM(self.pin_forward, freq)
         self.pwm_f.start(0)
         self.pwm_b = GPIO.PWM(self.pin_backward, freq)
@@ -595,13 +708,13 @@ class Mini_HBridge_DC_Motor_PWM(object):
         '''
         if speed is None:
             return
-        
+
         if speed > 1 or speed < -1:
             raise ValueError( "Speed must be between 1(forward) and -1(reverse)")
-        
+
         self.speed = speed
         self.throttle = int(dk.utils.map_range(speed, -1, 1, -self.max_duty, self.max_duty))
-        
+
         if self.throttle > 0:
             self.pwm_f.ChangeDutyCycle(self.throttle)
             self.pwm_b.ChangeDutyCycle(0)
@@ -612,7 +725,6 @@ class Mini_HBridge_DC_Motor_PWM(object):
             self.pwm_f.ChangeDutyCycle(0)
             self.pwm_b.ChangeDutyCycle(0)
 
-
     def shutdown(self):
         import RPi.GPIO as GPIO
         self.pwm_f.ChangeDutyCycle(0)
@@ -621,7 +733,18 @@ class Mini_HBridge_DC_Motor_PWM(object):
         self.pwm_b.stop()
         GPIO.cleanup()
 
-    
+
+def map_frange(x, x_min, x_max, y_min, y_max):
+    '''
+    Linear mapping between two ranges of values, helper function for below
+    '''
+    x_range = x_max - x_min
+    y_range = y_max - y_min
+    xy_ratio = y_range / x_range
+    y = ((x - x_min) * xy_ratio + y_min)
+    return y
+
+
 class RPi_GPIO_Servo(object):
     '''
     Servo controlled from the gpio pins on Rpi
@@ -631,7 +754,7 @@ class RPi_GPIO_Servo(object):
         self.pin = pin
         GPIO.setmode(GPIO.BOARD)
         GPIO.setup(self.pin, GPIO.OUT)
-        
+
         self.pwm = GPIO.PWM(self.pin, freq)
         self.pwm.start(0)
         self.min = min
@@ -644,7 +767,7 @@ class RPi_GPIO_Servo(object):
         -1 is full backwards.
         '''
         #I've read 90 is a good max
-        self.throttle = dk.map_frange(pulse, -1.0, 1.0, self.min, self.max)
+        self.throttle = map_frange(pulse, -1.0, 1.0, self.min, self.max)
         #print(pulse, self.throttle)
         self.pwm.ChangeDutyCycle(self.throttle)
 
@@ -694,6 +817,50 @@ class ServoBlaster(object):
         self.servoblaster.close()
 
 
+class ModeSwitch:
+    """
+    Donkey part which allows to cycle through a number of states, every time an
+    input signal is received. This is useful if for example we want to cycle
+    through different behaviours in the drive mode when we only have an RC or
+    similar controller but no web controller. When pressing that button we can
+    cycle through different states, like drive w/ auto pilot or w/o, etc.
+    As run gets called in the vehicle loop the mode switch runs only once for
+    each continuous activation. A new mode switch requires to release of the
+    input trigger.
+    """
+    def __init__(self, num_modes=1):
+        """
+        :param num_modes: number of modes
+        """
+        assert num_modes >= 1, "Need >=1 modes in ModeSwitch part"
+        self._num_modes = num_modes
+        self._current_mode = 0
+        self._active_loop = False
+
+    def run(self, is_active):
+        """
+        Method in the vehicle loop. Cycle to next mode
+        :param is_active: if deletion has been triggered by the caller
+        :return: active mode
+        """
+        # only run if input is true and debounced
+        if is_active:
+            if not self._active_loop:
+                # action command
+                self._current_mode += 1
+                # if we run over the end set back to mode 0
+                if self._current_mode == self._num_modes:
+                    self._current_mode = 0
+                # activate the loop tracker
+                self._active_loop = True
+                print("Switched to mode", self._current_mode)
+        else:
+            # trigger released, reset active loop
+            self._active_loop = False
+
+        return self._current_mode
+
+
 class ArduinoFirmata:
     '''
     PWM controller using Arduino board.
@@ -722,7 +889,6 @@ class ArduinoFirmata:
 
     def set_esc_pulse(self, angle):
         self.set_pulse(self.esc_pin, int(angle))
-
 
 
 class ArdPWMSteering:

@@ -12,7 +12,7 @@ Donkeycar has components to install on a host PC. This can be a laptop, or deskt
 
 Donkeycar software components need to be installed on the robot platform of your choice. Raspberry Pi and Jetson Nano have setup docs. But it has been known to work on Jetson TX2, Friendly Arm SBC, or almost any Debian based SBC ( single board computer ).
 
-After install, you will create the Donkeycar application from a template. This contains code that is designed for you to customize for your particular case. Don't worry, we will get you started with some useful defaults. 
+After install, you will create the Donkeycar application from a template. This contains code that is designed for you to customize for your particular case. Don't worry, we will get you started with some useful defaults.
 
 Next we will train the Donkeycar to drive on it's own based on your driving style! This uses a supervised learning technique often referred to as behavioral cloning.
 
