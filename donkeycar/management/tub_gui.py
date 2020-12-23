@@ -15,26 +15,22 @@ class TubUI:
         self.window = window
         self.window.title("Tub GUI")
         #self.window.configure(background='grey45')
-        self.i = 0
         self.run = False
         self.config = load_config("/Users/dirk/mycar/config.py")
-        self.base_path = "/Users/dirk/mycar/data2/tub_seattle"
+        self.base_path = "/Users/dirk/mycar/data3"
         self.tub = Tub(self.base_path)
-        self.len = len(self.tub)
         self.records = [TubRecord(self.config, self.tub.base_path, record)
                         for record in self.tub]
-        self.img = self.get_img(self.i)
+        self.len = len(self.records)
+        self.i = 0
+        self.current_rec = self.records[self.i]
+        self.img = self.get_img(self.current_rec)
         self.thread = None
         self.build_frame()
+        print('Length', self.len)
 
-    def get_path(self, i):
-        return self.base_path + f"{i}_cam_image_array_.jpg"
-
-    def get_img(self, i):
-        record = self.records[i]
+    def get_img(self, record):
         img_arr = record.image()
-        # path_i = self.get_path(i)
-        # img = Image.open(path_i).resize((320, 240))
         img = Image.fromarray(img_arr)
         return ImageTk.PhotoImage(img)
 
@@ -72,28 +68,28 @@ class TubUI:
                                      relief=tk.SUNKEN)
         self.record_label.grid(row=0, column=0, columnspan=2)
 
-        self.button_fwd = tk.Button(self.ctr_fram, text="Fwd",
-                                    command=lambda: self.step(True),
-                                    width=w, height=h)
-        self.button_fwd.grid(row=1, column=0)
+
         self.button_bwd = tk.Button(self.ctr_fram, text="Bwd",
                                     command=lambda: self.step(False),
                                     width=w, height=h)
-        self.button_bwd.grid(row=1, column=1)
-
-        self.btn_play_txt = tk.StringVar(self.ctr_fram, "Play")
-        self.btn_play = tk.Button(self.ctr_fram, textvariable=self.btn_play_txt,
-                                  command=lambda: self.thread_func(True),
-                                  width=w, height=h)
-        self.btn_play.grid(row=2, column=0)
+        self.button_bwd.grid(row=1, column=0)
+        self.button_fwd = tk.Button(self.ctr_fram, text="Fwd",
+                                    command=lambda: self.step(True),
+                                    width=w, height=h)
+        self.button_fwd.grid(row=1, column=1)
 
         self.btn_rwd_txt = tk.StringVar(self.ctr_fram, "Rewind")
         self.btn_rwd = tk.Button(self.ctr_fram, textvariable=self.btn_rwd_txt,
                                  command=lambda: self.thread_func(False),
                                  width=w, height=h)
-        self.btn_rwd.grid(row=2, column=1)
+        self.btn_rwd.grid(row=2, column=0)
+        self.btn_play_txt = tk.StringVar(self.ctr_fram, "Play")
+        self.btn_play = tk.Button(self.ctr_fram, textvariable=self.btn_play_txt,
+                                  command=lambda: self.thread_func(True),
+                                  width=w, height=h)
+        self.btn_play.grid(row=2, column=1)
 
-        self.slider = tk.Scale(self.ctr_fram, from_=0, to=self.len,
+        self.slider = tk.Scale(self.ctr_fram, from_=0, to=self.len - 1,
                                orient=tk.HORIZONTAL, command=self.slide)
         self.slider.grid(row=3, columnspan=2)
 
@@ -101,7 +97,7 @@ class TubUI:
         self.but_exit = tk.Button(self.window, text="Quit",
                                   command=self.quit,
                                   fg='tomato', borderwidth=0)
-        self.but_exit.grid(row=3, column=3, columnspan=2)
+        self.but_exit.grid(row=4, column=3, columnspan=2)
 
     def step(self, fwd=True):
         self.i += 1 if fwd else -1
@@ -112,16 +108,18 @@ class TubUI:
         self.update()
 
     def update(self):
-        self.rec_txt.set(f"Record {self.i}")
-        self.img = self.get_img(self.i)
+        self.current_rec = self.records[self.i]
+        index = self.current_rec.underlying['_index']
+        self.rec_txt.set(f"Record {index}")
+        self.img = self.get_img(self.current_rec)
         self.img_frame.configure(image=self.img)
+        # the slider needs to count continuously through the records
         self.slider.set(self.i)
-        angle = self.records[self.i].underlying['user/angle']
+        angle = self.current_rec.underlying['user/angle']
         self.barVar.set(angle * 50 + 50)
 
     def loop(self, fwd=True):
         count = 0
-
         tic = time.time()
         while self.run:
             self.step(fwd)
