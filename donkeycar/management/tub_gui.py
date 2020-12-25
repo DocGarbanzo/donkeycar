@@ -27,7 +27,7 @@ class TubUI:
         self.img = self.get_img(self.current_rec)
         self.thread = None
         self.build_frame()
-        print('Length', self.len)
+        self.update()
 
     def get_img(self, record):
         img_arr = record.image()
@@ -46,16 +46,30 @@ class TubUI:
         self.data_fram = tk.LabelFrame(self.window,
                                        padx=10, pady=10)
         self.data_fram.grid(row=0, column=0, rowspan=3)
-        self.steering_label = tk.Label(self.data_fram, text='steering',
-                                        relief=tk.SUNKEN)
-        self.steering_label.grid(row=0, column=0, columnspan=3)
-        self.barVar = tk.DoubleVar()
-        self.barVar.set(0)
+
+        self.steering_text = tk.StringVar()
+        self.steering_label = tk.Label(self.data_fram,
+                                       textvariable=self.steering_text)
+        self.steering_label.grid(row=0, column=0, sticky=tk.NW)
+        self.steering_val = tk.DoubleVar()
+        self.steering_val.set(0)
         self.steering_bar = ttk.Progressbar(self.data_fram,
-                                            variable=self.barVar,
+                                            variable=self.steering_val,
                                             orient=tk.HORIZONTAL,
                                             length=100, mode='determinate')
-        self.steering_bar.grid(row=1, column=0, columnspan=3)
+        self.steering_bar.grid(row=0, column=1, columnspan=2)
+
+        self.throttle_text = tk.StringVar()
+        self.throttle_label = tk.Label(self.data_fram,
+                                       textvariable=self.throttle_text)
+        self.throttle_label.grid(row=1, column=0, sticky=tk.NW)
+        self.throttle_val = tk.DoubleVar()
+        self.throttle_val.set(0)
+        self.throttle_bar = ttk.Progressbar(self.data_fram,
+                                            variable=self.throttle_val,
+                                            orient=tk.HORIZONTAL,
+                                            length=100, mode='determinate')
+        self.throttle_bar.grid(row=1, column=1, columnspan=2)
 
         # control box
         w, h = (3, 1)
@@ -97,7 +111,7 @@ class TubUI:
         self.but_exit = tk.Button(self.window, text="Quit",
                                   command=self.quit,
                                   fg='tomato', borderwidth=0)
-        self.but_exit.grid(row=4, column=3, columnspan=2)
+        self.but_exit.grid(row=4, column=7, columnspan=2, sticky=tk.E)
 
     def step(self, fwd=True):
         self.i += 1 if fwd else -1
@@ -116,7 +130,11 @@ class TubUI:
         # the slider needs to count continuously through the records
         self.slider.set(self.i)
         angle = self.current_rec.underlying['user/angle']
-        self.barVar.set(angle * 50 + 50)
+        self.steering_val.set(angle * 50 + 50)
+        self.steering_text.set(f'Steering: {angle:+3.2f}')
+        throttle = self.current_rec.underlying['user/throttle']
+        self.throttle_val.set(throttle * 100)
+        self.throttle_text.set(f'Throttle: {throttle:+3.2f}')
 
     def loop(self, fwd=True):
         count = 0
