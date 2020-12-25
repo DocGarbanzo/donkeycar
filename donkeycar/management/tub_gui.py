@@ -9,14 +9,13 @@ from donkeycar import load_config
 from donkeycar.parts.tub_v2 import Tub
 from donkeycar.pipeline.types import TubRecord
 
-LookUp = namedtuple('LookUp', ['record_field', 'display_field',
-                               'max_value_id', 'centered'])
+LookUp = namedtuple('LookUp', ['record_field', 'max_value_id', 'centered'])
 lookup_entries = [
-    LookUp('user/angle', 'Angle', '', centered=True),
-    LookUp('user/throttle', 'Throttle', '', centered=False),
-    LookUp('car/speed', 'Speed', 'MAX_SPEED', centered=False),
-    LookUp('car/gyro', 'Acceleration', 'IMU_GYRO_NORM', centered=True),
-    LookUp('car/accel', 'Gyro', 'IMU_ACCEL_NORM', centered=True)
+    LookUp('user/angle', '', centered=True),
+    LookUp('user/throttle', '', centered=False),
+    LookUp('car/speed', 'MAX_SPEED', centered=False),
+    LookUp('imu/gyro', 'IMU_GYRO_NORM', centered=True),
+    LookUp('imu/accel', 'IMU_ACCEL_NORM', centered=True)
 ]
 
 record_map = {l.record_field: l for l in lookup_entries}
@@ -25,22 +24,25 @@ record_map = {l.record_field: l for l in lookup_entries}
 class LabelBar:
     row = 0
 
-    def __init__(self, context, name, max_val=1.0, center=False, colwidth=3):
+    def __init__(self, context, name, colwidth=3):
+        self.context = context
         self.text = tk.StringVar()
-        self.label = tk.Label(context.data_frame, textvariable=self.text)
+        self.label = tk.Label(self.context.data_frame, textvariable=self.text)
         self.label.grid(row=self.row, column=0, sticky=tk.NW)
         self.bar_val = tk.DoubleVar()
-        self.steering_bar = ttk.Progressbar(context.data_frame,
+        self.steering_bar = ttk.Progressbar(self.context.data_frame,
                                             variable=self.bar_val,
                                             orient=tk.HORIZONTAL,
                                             length=100, mode='determinate')
         self.steering_bar.grid(row=self.row, column=1, columnspan=colwidth-1)
         self.name = name
-        self.max = max_val
-        self.center = center
+        lookup = record_map[self.name]
+        self.max = getattr(self.context.config, lookup.max_value_id, 1.0)
+        self.center = lookup.centered
         LabelBar.row += 1
 
-    def update(self, val):
+    def update(self):
+        val = self.context.current_rec.underlying[self.name]
         norm_val = val / self.max
         new_bar_val = (norm_val + 1) * 50 if self.center else norm_val * 100
         self.bar_val.set(new_bar_val)
@@ -88,8 +90,8 @@ class TubUI:
                                 *self.tub.manifest.inputs)
         self.w.grid(row=0, column=0, columnspan=3)
         LabelBar.row +=1
-        self.steering = LabelBar(self, 'Steering', center=True)
-        self.throttle = LabelBar(self, 'Throttle', center=False)
+        self.steering = LabelBar(self, 'user/angle')
+        self.throttle = LabelBar(self, 'user/throttle')
 
         # control box
         w, h = (3, 1)
@@ -147,10 +149,8 @@ class TubUI:
         self.img_frame.configure(image=self.img)
         # the slider needs to count continuously through the records
         self.slider.set(self.i)
-        angle = self.current_rec.underlying['user/angle']
-        self.steering.update(angle)
-        throttle = self.current_rec.underlying['user/throttle']
-        self.throttle.update(throttle)
+        self.steering.update()
+        self.throttle.update()
 
     def loop(self, fwd=True):
         count = 0
