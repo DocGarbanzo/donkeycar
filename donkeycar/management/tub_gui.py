@@ -1,3 +1,4 @@
+import math
 from collections import namedtuple
 import tkinter as tk
 from tkinter import ttk
@@ -14,6 +15,7 @@ lookup_entries = [
     LookUp('user/angle', '', centered=True),
     LookUp('user/throttle', '', centered=False),
     LookUp('car/speed', 'MAX_SPEED', centered=False),
+    LookUp('car/inst_speed', 'MAX_SPEED', centered=False),
     LookUp('imu/gyro', 'IMU_GYRO_NORM', centered=True),
     LookUp('imu/accel', 'IMU_ACCEL_NORM', centered=True)
 ]
@@ -134,9 +136,9 @@ class TubUI:
                                   width=w, height=h)
         self.btn_stop.grid(row=3, column=0, columnspan=2)
 
-        self.slider = tk.Scale(self.window, from_=0, to=self.len - 1,
-                               orient=tk.HORIZONTAL, command=self.slide)
-        self.slider.grid(row=4, column=0, columnspan=9, sticky='NSEW')
+        self.slider = ttk.Scale(self.window, from_=0, to=self.len - 1,
+                                orient=tk.HORIZONTAL, command=self.slide,)
+        self.slider.grid(row=4, column=0, columnspan=8, sticky='NSEW', padx=10)
 
         # quit button
         self.but_exit = tk.Button(self.window, text="Quit",
@@ -152,16 +154,17 @@ class TubUI:
             self.i = self.len - 1
         self.update()
 
-    def update(self):
+    def update(self, update_slider=True):
         self.current_rec = self.records[self.i]
         index = self.current_rec.underlying['_index']
         self.rec_txt.set(f"Record {index}")
         self.img = self.get_img(self.current_rec)
         self.img_frame.configure(image=self.img)
-        # the slider needs to count continuously through the records
-        self.slider.set(self.i)
         for field, bar in self.bars.items():
             bar.update()
+        if update_slider:
+            # the slider needs to count continuously through the records
+            self.slider.set(self.i)
 
     def add_remove_bars(self, field):
         # stop loop if running
@@ -194,8 +197,8 @@ class TubUI:
         self.run = False
 
     def slide(self, val):
-        self.i = int(val)
-        self.update()
+        self.i = int(math.floor(float(val)))
+        self.update(False)
 
     def quit(self):
         self.run = False
