@@ -18,7 +18,7 @@ lookup_entries = [
     LookUp('imu/accel', 'IMU_ACCEL_NORM', centered=True)
 ]
 
-record_map = {l.record_field: l for l in lookup_entries}
+record_map = {entry.record_field: entry for entry in lookup_entries}
 
 
 class LabelBar:
@@ -30,11 +30,11 @@ class LabelBar:
         self.label = tk.Label(self.context.data_frame, textvariable=self.text)
         self.label.grid(row=self.row, column=0, sticky=tk.NW)
         self.bar_val = tk.DoubleVar()
-        self.steering_bar = ttk.Progressbar(self.context.data_frame,
-                                            variable=self.bar_val,
-                                            orient=tk.HORIZONTAL,
-                                            length=100, mode='determinate')
-        self.steering_bar.grid(row=self.row, column=1, columnspan=colwidth-1)
+        self.bar = ttk.Progressbar(self.context.data_frame,
+                                   variable=self.bar_val,
+                                   orient=tk.HORIZONTAL,
+                                   length=100, mode='determinate')
+        self.bar.grid(row=self.row, column=1, columnspan=colwidth - 1)
         self.name = name
         lookup = record_map[self.name]
         self.max = getattr(self.context.config, lookup.max_value_id, 1.0)
@@ -48,12 +48,16 @@ class LabelBar:
         self.bar_val.set(new_bar_val)
         self.text.set(self.name + f': {val:+3.2f}')
 
+    def destroy(self):
+        self.label.destroy()
+        self.bar.destroy()
+
 
 class TubUI:
     def __init__(self, window):
         self.window = window
         self.window.title("Tub GUI")
-        #self.window.configure(background='grey45')
+        # self.window.configure(background='grey45')
         self.run = False
         self.config = load_config("/Users/dirk/mycar/config.py")
         self.base_path = "/Users/dirk/mycar/data3"
@@ -65,6 +69,7 @@ class TubUI:
         self.current_rec = self.records[self.i]
         self.img = self.get_img(self.current_rec)
         self.thread = None
+        self.bars = dict()
         self.build_frame()
         self.update()
 
@@ -84,14 +89,15 @@ class TubUI:
         # data box
         self.data_frame = tk.LabelFrame(self.window, padx=10, pady=10)
         self.data_frame.grid(row=0, column=0, rowspan=3)
+
+        self.var_label = tk.Label(self.data_frame, text='Add/remove')
+        self.var_label.grid(row=0, column=0)
         self.var_select = tk.StringVar()
-        self.var_select.set(self.tub.manifest.inputs[0])  # default value
         self.w = ttk.OptionMenu(self.data_frame, self.var_select,
-                                *self.tub.manifest.inputs)
-        self.w.grid(row=0, column=0, columnspan=3)
-        LabelBar.row +=1
-        self.steering = LabelBar(self, 'user/angle')
-        self.throttle = LabelBar(self, 'user/throttle')
+                                *self.tub.manifest.inputs,
+                                command=self.add_remove_bars)
+        self.w.grid(row=0, column=1, columnspan=2)
+        LabelBar.row += 1
 
         # control box
         w, h = (3, 1)
@@ -149,8 +155,23 @@ class TubUI:
         self.img_frame.configure(image=self.img)
         # the slider needs to count continuously through the records
         self.slider.set(self.i)
-        self.steering.update()
-        self.throttle.update()
+        for field, bar in self.bars.items():
+            bar.update()
+
+    def add_remove_bars(self, field):
+        # stop loop if running
+        was_running = False
+        if self.run:
+            self.run = False
+            was_running = True
+        if field in record_map:
+            if field in self.bars:
+                self.bars[field].destroy()
+                del (self.bars[field])
+            else:
+                self.bars[field] = LabelBar(self, field)
+        if was_running:
+            self.run = True
 
     def loop(self, fwd=True):
         count = 0
@@ -160,7 +181,7 @@ class TubUI:
             time.sleep(0.05)
             count += 1
         print('self.run', self.run)
-        #print(f'Took {time.time() - tic}s where we expected {1.0}s')
+        # print(f'Took {time.time() - tic}s where we expected {1.0}s')
 
     def thread_func(self, fwd=True):
         self.run = not self.run
@@ -170,7 +191,7 @@ class TubUI:
         else:
             self.btn_rwd_txt.set("Stop" if self.run else "Rewind")
             self.btn_rwd.configure(fg='red' if self.run else 'black')
-        self.thread = Thread(target=self.loop, args=(fwd, ))
+        self.thread = Thread(target=self.loop, args=(fwd,))
         self.thread.start()
 
     def slide(self, val):
