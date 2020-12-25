@@ -1,4 +1,4 @@
-
+from collections import namedtuple
 import tkinter as tk
 from tkinter import ttk
 import time
@@ -9,17 +9,28 @@ from donkeycar import load_config
 from donkeycar.parts.tub_v2 import Tub
 from donkeycar.pipeline.types import TubRecord
 
+LookUp = namedtuple('LookUp', ['record_field', 'display_field',
+                               'max_value_id', 'centered'])
+lookup_entries = [
+    LookUp('user/angle', 'Angle', '', centered=True),
+    LookUp('user/throttle', 'Throttle', '', centered=False),
+    LookUp('car/speed', 'Speed', 'MAX_SPEED', centered=False),
+    LookUp('car/gyro', 'Acceleration', 'IMU_GYRO_NORM', centered=True),
+    LookUp('car/accel', 'Gyro', 'IMU_ACCEL_NORM', centered=True)
+]
+
+record_map = {l.record_field: l for l in lookup_entries}
+
 
 class LabelBar:
     row = 0
 
     def __init__(self, context, name, max_val=1.0, center=False, colwidth=3):
-        print(self.row)
         self.text = tk.StringVar()
-        self.label = tk.Label(context, textvariable=self.text)
+        self.label = tk.Label(context.data_frame, textvariable=self.text)
         self.label.grid(row=self.row, column=0, sticky=tk.NW)
         self.bar_val = tk.DoubleVar()
-        self.steering_bar = ttk.Progressbar(context,
+        self.steering_bar = ttk.Progressbar(context.data_frame,
                                             variable=self.bar_val,
                                             orient=tk.HORIZONTAL,
                                             length=100, mode='determinate')
@@ -69,11 +80,16 @@ class TubUI:
                             padx=15, pady=15)
 
         # data box
-        self.data_fram = tk.LabelFrame(self.window, padx=10, pady=10)
-        self.data_fram.grid(row=0, column=0, rowspan=3)
-
-        self.steering = LabelBar(self.data_fram, 'Steering', center=True)
-        self.throttle = LabelBar(self.data_fram, 'Throttle', center=False)
+        self.data_frame = tk.LabelFrame(self.window, padx=10, pady=10)
+        self.data_frame.grid(row=0, column=0, rowspan=3)
+        self.var_select = tk.StringVar()
+        self.var_select.set(self.tub.manifest.inputs[0])  # default value
+        self.w = ttk.OptionMenu(self.data_frame, self.var_select,
+                                *self.tub.manifest.inputs)
+        self.w.grid(row=0, column=0, columnspan=3)
+        LabelBar.row +=1
+        self.steering = LabelBar(self, 'Steering', center=True)
+        self.throttle = LabelBar(self, 'Throttle', center=False)
 
         # control box
         w, h = (3, 1)
