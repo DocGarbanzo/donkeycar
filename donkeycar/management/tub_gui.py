@@ -16,8 +16,8 @@ lookup_entries = [
     LookUp('user/throttle', '', centered=False),
     LookUp('car/speed', 'MAX_SPEED', centered=False),
     LookUp('car/inst_speed', 'MAX_SPEED', centered=False),
-    LookUp('imu/gyro', 'IMU_GYRO_NORM', centered=True),
-    LookUp('imu/accel', 'IMU_ACCEL_NORM', centered=True)
+    LookUp('car/gyro', 'IMU_GYRO_NORM', centered=True),
+    LookUp('car/accel', 'IMU_ACCEL_NORM', centered=True)
 ]
 
 record_map = {entry.record_field: entry for entry in lookup_entries}
@@ -26,11 +26,12 @@ record_map = {entry.record_field: entry for entry in lookup_entries}
 class LabelBar:
     row = 0
 
-    def __init__(self, context, name, colwidth=3):
+    def __init__(self, context, name, vec_index=None, colwidth=3):
         self.context = context
         self.text = tk.StringVar()
-        self.label = tk.Label(self.context.data_frame, textvariable=self.text)
-        self.label.grid(row=self.row, column=0, sticky=tk.NW)
+        self.label = tk.Label(self.context.data_frame,
+                              textvariable=self.text, width=16)
+        self.label.grid(row=self.row, column=0, sticky=tk.W)
         self.bar_val = tk.DoubleVar()
         self.bar = ttk.Progressbar(self.context.data_frame,
                                    variable=self.bar_val,
@@ -41,14 +42,19 @@ class LabelBar:
         lookup = record_map[self.name]
         self.max = getattr(self.context.config, lookup.max_value_id, 1.0)
         self.center = lookup.centered
+        self.vec_index = vec_index
         LabelBar.row += 1
 
     def update(self):
         val = self.context.current_rec.underlying[self.name]
+        name = self.name
+        if self.vec_index is not None:
+            val = val[self.vec_index]
+            name += f'_{self.vec_index}'
         norm_val = val / self.max
         new_bar_val = (norm_val + 1) * 50 if self.center else norm_val * 100
         self.bar_val.set(new_bar_val)
-        self.text.set(self.name + f': {val:+3.2f}')
+        self.text.set(name + f' {val:+07.3f}')
 
     def destroy(self):
         self.label.destroy()
@@ -64,6 +70,8 @@ class TubUI:
         self.config = load_config("/Users/dirk/mycar/config.py")
         self.base_path = "/Users/dirk/mycar/data3"
         self.tub = Tub(self.base_path)
+        self.type_dict = dict(zip(self.tub.manifest.inputs,
+                              self.tub.manifest.types))
         self.records = [TubRecord(self.config, self.tub.base_path, record)
                         for record in self.tub]
         self.len = len(self.records)
@@ -173,14 +181,23 @@ class TubUI:
             self.run = False
             was_running = True
         if field in record_map:
-            if field in self.bars:
-                self.bars[field].destroy()
-                del (self.bars[field])
+            if self.type_dict[field] == 'vector':
+                for i in range(3):
+                    self._manage_bar_entry(field, vec_index=i)
             else:
-                self.bars[field] = LabelBar(self, field)
+                self._manage_bar_entry(field)
+
         if was_running:
             self.run = True
         self.update()
+
+    def _manage_bar_entry(self, field, vec_index=None):
+        field_i = field + f'_{vec_index}' if vec_index is not None else field
+        if field_i in self.bars:
+            self.bars[field_i].destroy()
+            del(self.bars[field_i])
+        else:
+            self.bars[field_i] = LabelBar(self, field, vec_index)
 
     def loop(self, fwd=True):
         while self.run:
