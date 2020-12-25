@@ -2,7 +2,7 @@ from collections import namedtuple
 import tkinter as tk
 from tkinter import ttk
 import time
-from threading import Thread
+from threading import Thread, active_count, Lock
 from PIL import ImageTk, Image
 
 from donkeycar import load_config
@@ -72,6 +72,7 @@ class TubUI:
         self.bars = dict()
         self.build_frame()
         self.update()
+        self.count = 0
 
     def get_img(self, record):
         img_arr = record.image()
@@ -174,14 +175,9 @@ class TubUI:
             self.run = True
 
     def loop(self, fwd=True):
-        count = 0
-        tic = time.time()
         while self.run:
             self.step(fwd)
-            time.sleep(0.05)
-            count += 1
-        print('self.run', self.run)
-        # print(f'Took {time.time() - tic}s where we expected {1.0}s')
+            time.sleep(0.01)
 
     def thread_func(self, fwd=True):
         self.run = not self.run
@@ -191,8 +187,10 @@ class TubUI:
         else:
             self.btn_rwd_txt.set("Stop" if self.run else "Rewind")
             self.btn_rwd.configure(fg='red' if self.run else 'black')
-        self.thread = Thread(target=self.loop, args=(fwd,))
-        self.thread.start()
+        if self.run:
+            self.thread = Thread(target=self.loop, args=(fwd,))
+            self.thread.start()
+        print('Active threads:', active_count())
 
     def slide(self, val):
         self.i = int(val)
@@ -200,13 +198,7 @@ class TubUI:
 
     def quit(self):
         self.run = False
-        if self.thread:
-            print("sleep")
-            time.sleep(3.0)
-            print("join")
-            self.thread.join()
         try:
-            print("Try destroying window")
             self.window.destroy()
         except Exception as e:
             exit(str(e))
