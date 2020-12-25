@@ -92,7 +92,7 @@ class TubUI:
         self.data_frame.grid(row=0, column=0, rowspan=3)
 
         self.var_label = tk.Label(self.data_frame, text='Add/remove')
-        self.var_label.grid(row=0, column=0)
+        self.var_label.grid(row=0, column=0, sticky=tk.W)
         self.var_select = tk.StringVar()
         self.w = ttk.OptionMenu(self.data_frame, self.var_select,
                                 *self.tub.manifest.inputs,
@@ -103,7 +103,7 @@ class TubUI:
         # control box
         w, h = (3, 1)
         self.ctr_fram = tk.LabelFrame(self.window, padx=10, pady=10)
-        self.ctr_fram.grid(row=0, column=7, rowspan=3)
+        self.ctr_fram.grid(row=0, column=7, rowspan=4)
 
         self.rec_txt = tk.StringVar(self.ctr_fram, f"Record {self.i}")
         self.record_label = tk.Label(self.ctr_fram, textvariable=self.rec_txt,
@@ -119,26 +119,30 @@ class TubUI:
                                     width=w, height=h)
         self.button_fwd.grid(row=1, column=1)
 
-        self.btn_rwd_txt = tk.StringVar(self.ctr_fram, "Rewind")
-        self.btn_rwd = tk.Button(self.ctr_fram, textvariable=self.btn_rwd_txt,
-                                 command=lambda: self.thread_func(False),
+        self.btn_rwd = tk.Button(self.ctr_fram, text="Rewind",
+                                 command=lambda: self.thread_run(False),
                                  width=w, height=h)
         self.btn_rwd.grid(row=2, column=0)
-        self.btn_play_txt = tk.StringVar(self.ctr_fram, "Play")
-        self.btn_play = tk.Button(self.ctr_fram, textvariable=self.btn_play_txt,
-                                  command=lambda: self.thread_func(True),
+
+        self.btn_play = tk.Button(self.ctr_fram, text="Play",
+                                  command=lambda: self.thread_run(True),
                                   width=w, height=h)
         self.btn_play.grid(row=2, column=1)
 
-        self.slider = tk.Scale(self.ctr_fram, from_=0, to=self.len - 1,
+        self.btn_stop = tk.Button(self.ctr_fram, text="Stop",
+                                  command=self.thread_stop,
+                                  width=w, height=h)
+        self.btn_stop.grid(row=3, column=0, columnspan=2)
+
+        self.slider = tk.Scale(self.window, from_=0, to=self.len - 1,
                                orient=tk.HORIZONTAL, command=self.slide)
-        self.slider.grid(row=3, columnspan=2)
+        self.slider.grid(row=4, column=0, columnspan=9, sticky='NSEW')
 
         # quit button
         self.but_exit = tk.Button(self.window, text="Quit",
                                   command=self.quit,
                                   fg='tomato', borderwidth=0)
-        self.but_exit.grid(row=4, column=7, columnspan=2, sticky=tk.E)
+        self.but_exit.grid(row=5, column=7, columnspan=2, sticky=tk.E)
 
     def step(self, fwd=True):
         self.i += 1 if fwd else -1
@@ -173,24 +177,21 @@ class TubUI:
                 self.bars[field] = LabelBar(self, field)
         if was_running:
             self.run = True
+        self.update()
 
     def loop(self, fwd=True):
         while self.run:
             self.step(fwd)
             time.sleep(0.01)
 
-    def thread_func(self, fwd=True):
-        self.run = not self.run
-        if fwd:
-            self.btn_play_txt.set("Stop" if self.run else "Play")
-            self.btn_play.configure(fg='red' if self.run else 'black')
-        else:
-            self.btn_rwd_txt.set("Stop" if self.run else "Rewind")
-            self.btn_rwd.configure(fg='red' if self.run else 'black')
-        if self.run:
-            self.thread = Thread(target=self.loop, args=(fwd,))
-            self.thread.start()
+    def thread_run(self, fwd=True):
+        self.run = True
+        self.thread = Thread(target=self.loop, args=(fwd,))
+        self.thread.start()
         print('Active threads:', active_count())
+
+    def thread_stop(self):
+        self.run = False
 
     def slide(self, val):
         self.i = int(val)
