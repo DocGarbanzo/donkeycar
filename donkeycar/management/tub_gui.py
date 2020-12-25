@@ -10,6 +10,32 @@ from donkeycar.parts.tub_v2 import Tub
 from donkeycar.pipeline.types import TubRecord
 
 
+class LabelBar:
+    row = 0
+
+    def __init__(self, context, name, max_val=1.0, center=False, colwidth=3):
+        print(self.row)
+        self.text = tk.StringVar()
+        self.label = tk.Label(context, textvariable=self.text)
+        self.label.grid(row=self.row, column=0, sticky=tk.NW)
+        self.bar_val = tk.DoubleVar()
+        self.steering_bar = ttk.Progressbar(context,
+                                            variable=self.bar_val,
+                                            orient=tk.HORIZONTAL,
+                                            length=100, mode='determinate')
+        self.steering_bar.grid(row=self.row, column=1, columnspan=colwidth-1)
+        self.name = name
+        self.max = max_val
+        self.center = center
+        LabelBar.row += 1
+
+    def update(self, val):
+        norm_val = val / self.max
+        new_bar_val = (norm_val + 1) * 50 if self.center else norm_val * 100
+        self.bar_val.set(new_bar_val)
+        self.text.set(self.name + f': {val:+3.2f}')
+
+
 class TubUI:
     def __init__(self, window):
         self.window = window
@@ -43,45 +69,21 @@ class TubUI:
                             padx=15, pady=15)
 
         # data box
-        self.data_fram = tk.LabelFrame(self.window,
-                                       padx=10, pady=10)
+        self.data_fram = tk.LabelFrame(self.window, padx=10, pady=10)
         self.data_fram.grid(row=0, column=0, rowspan=3)
 
-        self.steering_text = tk.StringVar()
-        self.steering_label = tk.Label(self.data_fram,
-                                       textvariable=self.steering_text)
-        self.steering_label.grid(row=0, column=0, sticky=tk.NW)
-        self.steering_val = tk.DoubleVar()
-        self.steering_val.set(0)
-        self.steering_bar = ttk.Progressbar(self.data_fram,
-                                            variable=self.steering_val,
-                                            orient=tk.HORIZONTAL,
-                                            length=100, mode='determinate')
-        self.steering_bar.grid(row=0, column=1, columnspan=2)
-
-        self.throttle_text = tk.StringVar()
-        self.throttle_label = tk.Label(self.data_fram,
-                                       textvariable=self.throttle_text)
-        self.throttle_label.grid(row=1, column=0, sticky=tk.NW)
-        self.throttle_val = tk.DoubleVar()
-        self.throttle_val.set(0)
-        self.throttle_bar = ttk.Progressbar(self.data_fram,
-                                            variable=self.throttle_val,
-                                            orient=tk.HORIZONTAL,
-                                            length=100, mode='determinate')
-        self.throttle_bar.grid(row=1, column=1, columnspan=2)
+        self.steering = LabelBar(self.data_fram, 'Steering', center=True)
+        self.throttle = LabelBar(self.data_fram, 'Throttle', center=False)
 
         # control box
         w, h = (3, 1)
-        self.ctr_fram = tk.LabelFrame(self.window,
-                                      padx=10, pady=10)
+        self.ctr_fram = tk.LabelFrame(self.window, padx=10, pady=10)
         self.ctr_fram.grid(row=0, column=7, rowspan=3)
 
         self.rec_txt = tk.StringVar(self.ctr_fram, f"Record {self.i}")
         self.record_label = tk.Label(self.ctr_fram, textvariable=self.rec_txt,
                                      relief=tk.SUNKEN)
         self.record_label.grid(row=0, column=0, columnspan=2)
-
 
         self.button_bwd = tk.Button(self.ctr_fram, text="Bwd",
                                     command=lambda: self.step(False),
@@ -130,11 +132,9 @@ class TubUI:
         # the slider needs to count continuously through the records
         self.slider.set(self.i)
         angle = self.current_rec.underlying['user/angle']
-        self.steering_val.set(angle * 50 + 50)
-        self.steering_text.set(f'Steering: {angle:+3.2f}')
+        self.steering.update(angle)
         throttle = self.current_rec.underlying['user/throttle']
-        self.throttle_val.set(throttle * 100)
-        self.throttle_text.set(f'Throttle: {throttle:+3.2f}')
+        self.throttle.update(throttle)
 
     def loop(self, fwd=True):
         count = 0
