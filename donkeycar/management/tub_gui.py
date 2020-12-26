@@ -31,8 +31,8 @@ class LabelBar:
         self.context = context
         self.text = tk.StringVar()
         self.label = tk.Label(self.context.data_frame,
-                              textvariable=self.text, width=16)
-        self.label.grid(row=self.row, column=0, sticky=tk.W)
+                              textvariable=self.text, width=16, anchor=tk.E)
+        self.label.grid(row=self.row, column=0)
         self.bar_val = tk.DoubleVar()
         self.bar = ttk.Progressbar(self.context.data_frame,
                                    variable=self.bar_val,
@@ -101,45 +101,47 @@ class TubUI:
         self.i = 0
         self.current_rec = self.records[self.i]
         self.img = self.get_img(self.current_rec)
+        self.slider.configure(to=self.len - 1)
 
     def build_frame(self):
         # running row
         row = 0
         self.button_car_dir = tk.Button(self.window, text="Car dir",
                                         command=self.browse_car)
-        self.button_car_dir.grid(row=row, column=0)
+        self.button_car_dir.grid(row=row, column=0, sticky=tk.W)
         self.car_dir_label = tk.Label(self.window)
-        self.car_dir_label.grid(row=row, column=1, columnspan=2)
+        self.car_dir_label.grid(row=row, column=1, sticky=tk.W)
         self.button_tub_dir = tk.Button(self.window, text="Tub dir",
                                         command=self.browse_tub)
-        self.button_tub_dir.grid(row=row, column=3)
+        self.button_tub_dir.grid(row=row, column=2, sticky=tk.W)
         self.tub_dir_label = tk.Label(self.window)
-        self.tub_dir_label.grid(row=row, column=4, columnspan=2)
+        self.tub_dir_label.grid(row=row, column=3, columnspan=3, sticky=tk.W)
 
         # Image
         row += 1
         self.img_frame = tk.Label(self.window, image=self.img, bg='black',
                                   relief=tk.SUNKEN, borderwidth=3)
-        self.img_frame.grid(row=row, column=3, columnspan=4, rowspan=3,
+        self.img_frame.grid(row=row, column=2, columnspan=2, rowspan=3,
                             padx=15, pady=15)
 
         # data box
         self.data_frame = tk.LabelFrame(self.window, padx=10, pady=10)
-        self.data_frame.grid(row=row, column=0, rowspan=3)
+        self.data_frame.grid(row=row, column=0, columnspan=2, rowspan=3,
+                             padx=10)
 
-        self.var_label = tk.Label(self.data_frame, text='Add/remove')
+        self.var_label = tk.Label(self.data_frame, text='Add or remove')
         self.var_label.grid(row=row, column=0, sticky=tk.W)
         self.var_select = tk.StringVar()
-        self.w = ttk.OptionMenu(self.data_frame, self.var_select,
-                                *self.tub.manifest.inputs,
-                                command=self.add_remove_bars)
-        self.w.grid(row=row, column=1, columnspan=2)
+        self.var_menu = ttk.OptionMenu(self.data_frame, self.var_select,
+                                       *self.tub.manifest.inputs,
+                                       command=self.add_remove_bars)
+        self.var_menu.grid(row=row, column=1, columnspan=2)
         LabelBar.row = row + 1
 
         # control box
         w, h = (3, 1)
         self.ctr_fram = tk.LabelFrame(self.window, padx=10, pady=10)
-        self.ctr_fram.grid(row=row, column=7, rowspan=4)
+        self.ctr_fram.grid(row=row, column=4, columnspan=2, rowspan=4, padx=10)
 
         self.rec_txt = tk.StringVar(self.ctr_fram, f"Record {self.i}")
         self.record_label = tk.Label(self.ctr_fram, textvariable=self.rec_txt,
@@ -147,42 +149,37 @@ class TubUI:
         self.record_label.grid(row=row, column=0, columnspan=2)
 
         self.button_bwd = tk.Button(self.ctr_fram, text="Bwd",
-                                    command=lambda: self.step(False),
-                                    width=w, height=h)
-        self.button_bwd.grid(row=row + 1, column=0)
+                                    command=lambda: self.step(False),)
+        #                            width=w, height=h)
+        self.button_bwd.grid(row=row + 1, column=0, sticky=tk.NSEW)
         self.button_fwd = tk.Button(self.ctr_fram, text="Fwd",
-                                    command=lambda: self.step(True),
-                                    width=w, height=h)
-        self.button_fwd.grid(row=row + 1, column=1)
+                                    command=lambda: self.step(True))
+        self.button_fwd.grid(row=row + 1, column=1, sticky=tk.NSEW)
 
         self.btn_rwd = tk.Button(self.ctr_fram, text="Rewind",
-                                 command=lambda: self.thread_run(False),
-                                 width=w, height=h)
-        self.btn_rwd.grid(row=row + 2, column=0)
+                                 command=lambda: self.thread_run(False))
+        self.btn_rwd.grid(row=row + 2, column=0, sticky=tk.NSEW)
 
         self.btn_play = tk.Button(self.ctr_fram, text="Play",
-                                  command=lambda: self.thread_run(True),
-                                  width=w, height=h)
-        self.btn_play.grid(row=row + 2, column=1)
+                                  command=lambda: self.thread_run(True))
+        self.btn_play.grid(row=row + 2, column=1, sticky=tk.NSEW)
 
         self.btn_stop = tk.Button(self.ctr_fram, text="Stop",
                                   command=self.thread_stop,
                                   width=w, height=h)
-        self.btn_stop.grid(row=row + 3, column=0, columnspan=2)
+        self.btn_stop.grid(row=row + 3, column=0, columnspan=2, sticky=tk.NSEW)
 
         # slider
         row += 4
         self.slider = ttk.Scale(self.window, from_=0, to=self.len - 1,
                                 orient=tk.HORIZONTAL, command=self.slide,)
-        self.slider.grid(row=row, column=0, columnspan=8, sticky='NSEW',
-                         padx=10)
+        self.slider.grid(column=0, columnspan=6, sticky=tk.NSEW, padx=10)
 
         # quit button
         row += 1
         self.but_exit = tk.Button(self.window, text="Quit",
-                                  command=self.quit,
-                                  fg='tomato', borderwidth=0)
-        self.but_exit.grid(row=row, column=7, columnspan=2, sticky=tk.E)
+                                  command=self.quit, fg='tomato')
+        self.but_exit.grid(column=5, sticky=tk.E)
 
     def step(self, fwd=True):
         self.i += 1 if fwd else -1
