@@ -116,9 +116,9 @@ class TubUI:
         self.df = self.df.drop(labels=to_drop, axis=1)
         self.df = self.df.set_index('_index')
 
-        self.ax1.clear()
-        self.ax1 = self.figure.add_subplot(111)
-        self.df.plot(kind='line', legend=True, ax=self.ax1)
+        ax1 = self.figure.add_subplot(111)
+        ax1.clear()
+        self.df.plot(kind='line', legend=True, ax=ax1)
         self.graph.draw()
 
     def build_frame(self):
@@ -192,17 +192,25 @@ class TubUI:
 
         row += 1
         self.figure = Figure(dpi=100)
-        self.ax1 = self.figure.add_subplot(111)
         self.graph = FigureCanvasTkAgg(self.figure, self.window)
         self.graph.draw()
         self.graph.get_tk_widget().grid(column=0, columnspan=6, sticky=tk.NSEW,
                                         padx=10)
+        row += 1
+        self.toolbar = NavigationToolbar2Tk(self.graph, self.window,
+                                            pack_toolbar=False)
+        self.toolbar.update()
+        self.toolbar.grid(row=row, column=0, columnspan=5, sticky=tk.W, padx=10)
+        self.graph.mpl_connect("key_press_event", self.on_key_press)
 
         # quit button
-        row += 1
         self.but_exit = tk.Button(self.window, text="Quit",
                                   command=self.quit, fg='tomato')
-        self.but_exit.grid(column=5, sticky=tk.E)
+        self.but_exit.grid(row=row, column=5, sticky=tk.E)
+
+    def on_key_press(self, event):
+        print("you pressed {}".format(event.key))
+        key_press_handler(event, self.graph, self.toolbar)
 
     def step(self, fwd=True):
         self.i += 1 if fwd else -1
