@@ -30,10 +30,17 @@ lookup_entries = [
 record_map = {entry.record_field: entry for entry in lookup_entries}
 
 
+def decompose(field):
+    field_split = field.split('_')
+    if len(field_split) > 1 and field_split[-1].isdigit():
+        return '_'.join(field_split[:-1]), int(field_split[-1])
+    return field, None
+
+
 class LabelBar:
     row = 0
 
-    def __init__(self, context, name, vec_index=None, colwidth=3):
+    def __init__(self, context, field, colwidth=3):
         self.context = context
         self.text = tk.StringVar()
         self.label = tk.Label(self.context.data_frame,
@@ -45,23 +52,22 @@ class LabelBar:
                                    orient=tk.HORIZONTAL,
                                    length=100, mode='determinate')
         self.bar.grid(row=self.row, column=1, columnspan=colwidth - 1)
-        self.name = name
-        lookup = record_map[self.name]
+        self.field = field
+        lookup = record_map[decompose(self.field)[0]]
         self.max = getattr(self.context.config, lookup.max_value_id, 1.0)
         self.center = lookup.centered
-        self.vec_index = vec_index
         LabelBar.row += 1
 
     def update(self):
-        val = self.context.current_rec.underlying[self.name]
-        name = self.name
-        if self.vec_index is not None:
-            val = val[self.vec_index]
-            name += f'_{self.vec_index}'
+        decomp_name = decompose(self.field)
+        val = self.context.current_rec.underlying[decomp_name[0]]
+        if decomp_name[1] is not None:
+            val = val[decomp_name[1]]
+
         norm_val = val / self.max
         new_bar_val = (norm_val + 1) * 50 if self.center else norm_val * 100
         self.bar_val.set(new_bar_val)
-        self.text.set(name + f' {val:+07.3f}')
+        self.text.set(self.field + f' {val:+07.3f}')
 
     def destroy(self):
         self.label.destroy()
@@ -77,7 +83,6 @@ class TubUI:
         self.config = None
         self.base_path = None
         self.tub = None
-        self.type_dict = None
         self.records = None
         self.len = 1
         self.i = 0
@@ -85,7 +90,7 @@ class TubUI:
         self.img = None
         self.thread = None
         self.bars = dict()
-        self.car_dir = ''
+        self.car_dir = None
         self.drop_down = []
         self.build_frame()
         self.count = 0
@@ -98,8 +103,7 @@ class TubUI:
 
     def update_tub(self):
         self.tub = Tub(self.base_path)
-        self.type_dict = dict(zip(self.tub.manifest.inputs,
-                                  self.tub.manifest.types))
+
         self.records = [TubRecord(self.config, self.tub.base_path, record)
                         for record in self.tub]
         self.len = len(self.records)
@@ -107,15 +111,26 @@ class TubUI:
         self.current_rec = self.records[self.i]
         self.img = self.get_img(self.current_rec)
         self.slider.configure(to=self.len - 1)
-        self.drop_down = self.tub.manifest.inputs
-        self.var_menu.config(value=self.drop_down)
 
         self.df = pd.DataFrame(list(self.tub))
         to_drop = {'_timestamp_ms', 'cam/image_array', 'timestamp', 'car/lap'}
         to_drop = to_drop.intersection(self.df.columns)
         self.df = self.df.drop(labels=to_drop, axis=1)
         self.df = self.df.set_index('_index')
+        self.unravel_df()
+        self.drop_down = list(self.df.columns)
+        self.var_menu.config(value=self.drop_down)
+
         self.update_plot(self.df)
+
+    def unravel_df(self):
+        for k, v in zip(self.tub.manifest.inputs, self.tub.manifest.types):
+            if v == 'vector' or v == 'list':
+                dim = len(self.current_rec.underlying[k])
+                df_keys = [k + f'_{i}' for i in range(dim)]
+                self.df[df_keys] = pd.DataFrame(self.df[k].tolist(),
+                                                index=self.df.index)
+                self.df = self.df.drop(k, axis=1)
 
     def update_plot(self, df):
         ax1 = self.figure.add_subplot(111)
@@ -126,14 +141,14 @@ class TubUI:
     def build_frame(self):
         # running row
         row = 0
-        self.button_car_dir = tk.Button(self.window, text="Car dir",
+        self.btn_car_dir = tk.Button(self.window, text="Car dir",
                                         command=self.browse_car)
-        self.button_car_dir.grid(row=row, column=0, sticky=tk.W)
+        self.btn_car_dir.grid(row=row, column=0, sticky=tk.W)
         self.car_dir_label = tk.Label(self.window)
         self.car_dir_label.grid(row=row, column=1, sticky=tk.W)
-        self.button_tub_dir = tk.Button(self.window, text="Tub dir",
+        self.btn_tub_dir = tk.Button(self.window, text="Tub dir",
                                         command=self.browse_tub)
-        self.button_tub_dir.grid(row=row, column=2, sticky=tk.W)
+        self.btn_tub_dir.grid(row=row, column=2, sticky=tk.W)
         self.tub_dir_label = tk.Label(self.window)
         self.tub_dir_label.grid(row=row, column=3, columnspan=3, sticky=tk.W)
 
@@ -166,13 +181,13 @@ class TubUI:
                                      relief=tk.SUNKEN)
         self.record_label.grid(row=row, column=0, columnspan=2)
 
-        self.button_bwd = tk.Button(self.ctr_fram, text="<",
-                                    command=lambda: self.step(False),)
+        self.btn_bwd = tk.Button(self.ctr_fram, text="<",
+                                 command=lambda: self.step(False), )
         #                            width=w, height=h)
-        self.button_bwd.grid(row=row + 1, column=0, sticky=tk.NSEW)
-        self.button_fwd = tk.Button(self.ctr_fram, text=">",
+        self.btn_bwd.grid(row=row + 1, column=0, sticky=tk.NSEW)
+        self.btn_fwd = tk.Button(self.ctr_fram, text=">",
                                     command=lambda: self.step(True))
-        self.button_fwd.grid(row=row + 1, column=1, sticky=tk.NSEW)
+        self.btn_fwd.grid(row=row + 1, column=1, sticky=tk.NSEW)
 
         self.btn_rwd = tk.Button(self.ctr_fram, text="<<",
                                  command=lambda: self.thread_run(False))
@@ -241,12 +256,8 @@ class TubUI:
         if self.run:
             self.run = False
             was_running = True
-        if field in record_map:
-            if self.type_dict[field] == 'vector':
-                for i in range(3):
-                    self._manage_bar_entry(field, vec_index=i)
-            else:
-                self._manage_bar_entry(field)
+        if decompose(field)[0] in record_map:
+            self.manage_bar_entry(field)
 
         if was_running:
             self.run = True
@@ -255,13 +266,12 @@ class TubUI:
         df = self.df[self.bars.keys()]
         self.update_plot(df)
 
-    def _manage_bar_entry(self, field, vec_index=None):
-        field_i = field + f'_{vec_index}' if vec_index is not None else field
-        if field_i in self.bars:
-            self.bars[field_i].destroy()
-            del(self.bars[field_i])
+    def manage_bar_entry(self, field):
+        if field in self.bars:
+            self.bars[field].destroy()
+            del(self.bars[field])
         else:
-            self.bars[field_i] = LabelBar(self, field, vec_index)
+            self.bars[field] = LabelBar(self, field)
 
     def loop(self, fwd=True):
         while self.run:
