@@ -68,22 +68,21 @@ class TubUI:
         self.window.title("Tub GUI")
         # self.window.configure(background='grey45')
         self.run = False
-        self.config = load_config("/Users/dirk/mycar/config.py")
-        self.base_path = "/Users/dirk/mycar/data3"
-        self.tub = Tub(self.base_path)
-        self.type_dict = dict(zip(self.tub.manifest.inputs,
-                              self.tub.manifest.types))
-        self.records = [TubRecord(self.config, self.tub.base_path, record)
-                        for record in self.tub]
-        self.len = len(self.records)
+        self.config = None
+        self.base_path = None
+        self.tub = None
+        self.type_dict = None
+        self.records = None
+        self.len = 1
         self.i = 0
-        self.current_rec = self.records[self.i]
-        self.img = self.get_img(self.current_rec)
+        self.current_rec = None
+        self.img = None
         self.thread = None
         self.bars = dict()
         self.car_dir = ''
+        self.drop_down = []
         self.build_frame()
-        self.update()
+#        self.update()
         self.count = 0
 
     def get_img(self, record):
@@ -102,6 +101,8 @@ class TubUI:
         self.current_rec = self.records[self.i]
         self.img = self.get_img(self.current_rec)
         self.slider.configure(to=self.len - 1)
+        self.drop_down = self.tub.manifest.inputs
+        self.var_menu.config(value=self.drop_down)
 
     def build_frame(self):
         # running row
@@ -131,15 +132,13 @@ class TubUI:
 
         self.var_label = tk.Label(self.data_frame, text='Add or remove')
         self.var_label.grid(row=row, column=0, sticky=tk.W)
-        self.var_select = tk.StringVar()
-        self.var_menu = ttk.OptionMenu(self.data_frame, self.var_select,
-                                       *self.tub.manifest.inputs,
-                                       command=self.add_remove_bars)
+
+        self.var_menu = ttk.Combobox(self.data_frame, value=self.drop_down)
+        self.var_menu.bind('<<ComboboxSelected>>', self.add_remove_bars)
         self.var_menu.grid(row=row, column=1, columnspan=2)
         LabelBar.row = row + 1
 
         # control box
-        w, h = (3, 1)
         self.ctr_fram = tk.LabelFrame(self.window, padx=10, pady=10)
         self.ctr_fram.grid(row=row, column=4, columnspan=2, rowspan=4, padx=10)
 
@@ -148,25 +147,24 @@ class TubUI:
                                      relief=tk.SUNKEN)
         self.record_label.grid(row=row, column=0, columnspan=2)
 
-        self.button_bwd = tk.Button(self.ctr_fram, text="Bwd",
+        self.button_bwd = tk.Button(self.ctr_fram, text="<",
                                     command=lambda: self.step(False),)
         #                            width=w, height=h)
         self.button_bwd.grid(row=row + 1, column=0, sticky=tk.NSEW)
-        self.button_fwd = tk.Button(self.ctr_fram, text="Fwd",
+        self.button_fwd = tk.Button(self.ctr_fram, text=">",
                                     command=lambda: self.step(True))
         self.button_fwd.grid(row=row + 1, column=1, sticky=tk.NSEW)
 
-        self.btn_rwd = tk.Button(self.ctr_fram, text="Rewind",
+        self.btn_rwd = tk.Button(self.ctr_fram, text="<<",
                                  command=lambda: self.thread_run(False))
         self.btn_rwd.grid(row=row + 2, column=0, sticky=tk.NSEW)
 
-        self.btn_play = tk.Button(self.ctr_fram, text="Play",
+        self.btn_play = tk.Button(self.ctr_fram, text=">>",
                                   command=lambda: self.thread_run(True))
         self.btn_play.grid(row=row + 2, column=1, sticky=tk.NSEW)
 
         self.btn_stop = tk.Button(self.ctr_fram, text="Stop",
-                                  command=self.thread_stop,
-                                  width=w, height=h)
+                                  command=self.thread_stop)
         self.btn_stop.grid(row=row + 3, column=0, columnspan=2, sticky=tk.NSEW)
 
         # slider
@@ -201,7 +199,8 @@ class TubUI:
             # the slider needs to count continuously through the records
             self.slider.set(self.i)
 
-    def add_remove_bars(self, field):
+    def add_remove_bars(self, inp):
+        field = self.var_menu.get()
         # stop loop if running
         was_running = False
         if self.run:
