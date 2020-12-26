@@ -4,8 +4,11 @@ from collections import namedtuple
 import tkinter as tk
 from tkinter import ttk, filedialog
 import time
-from threading import Thread, active_count, Lock
+from threading import Thread, active_count
 from PIL import ImageTk, Image
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 from donkeycar import load_config
 from donkeycar.parts.tub_v2 import Tub
@@ -82,8 +85,8 @@ class TubUI:
         self.car_dir = ''
         self.drop_down = []
         self.build_frame()
-#        self.update()
         self.count = 0
+        self.df = None
 
     def get_img(self, record):
         img_arr = record.image()
@@ -103,6 +106,13 @@ class TubUI:
         self.slider.configure(to=self.len - 1)
         self.drop_down = self.tub.manifest.inputs
         self.var_menu.config(value=self.drop_down)
+
+        self.df = pd.DataFrame(list(self.tub))
+        to_drop = {'_timestamp_ms', 'cam/image_array', 'timestamp', 'car/lap'}
+        to_drop = to_drop.intersection(self.df.columns)
+        self.df = self.df.drop(labels=to_drop, axis=1)
+        self.df = self.df.set_index('_index')
+        self.df.plot(kind='line', legend=True, ax=self.ax1)
 
     def build_frame(self):
         # running row
@@ -172,6 +182,13 @@ class TubUI:
         self.slider = ttk.Scale(self.window, from_=0, to=self.len - 1,
                                 orient=tk.HORIZONTAL, command=self.slide,)
         self.slider.grid(column=0, columnspan=6, sticky=tk.NSEW, padx=10)
+
+        row += 1
+        figure1 = plt.Figure(figsize=(6, 4), dpi=100)
+        self.ax1 = figure1.add_subplot(111)
+        self.graph = FigureCanvasTkAgg(figure1, self.window)
+        self.graph.get_tk_widget().grid(column=0, columnspan=6, sticky=tk.NSEW,
+                                        padx=10)
 
         # quit button
         row += 1
