@@ -8,7 +8,10 @@ from threading import Thread, active_count
 from PIL import ImageTk, Image
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, \
+    NavigationToolbar2Tk
+from matplotlib.backend_bases import key_press_handler
 
 from donkeycar import load_config
 from donkeycar.parts.tub_v2 import Tub
@@ -112,7 +115,11 @@ class TubUI:
         to_drop = to_drop.intersection(self.df.columns)
         self.df = self.df.drop(labels=to_drop, axis=1)
         self.df = self.df.set_index('_index')
+
+        self.ax1.clear()
+        self.ax1 = self.figure.add_subplot(111)
         self.df.plot(kind='line', legend=True, ax=self.ax1)
+        self.graph.draw()
 
     def build_frame(self):
         # running row
@@ -184,9 +191,10 @@ class TubUI:
         self.slider.grid(column=0, columnspan=6, sticky=tk.NSEW, padx=10)
 
         row += 1
-        figure1 = plt.Figure(figsize=(6, 4), dpi=100)
-        self.ax1 = figure1.add_subplot(111)
-        self.graph = FigureCanvasTkAgg(figure1, self.window)
+        self.figure = Figure(dpi=100)
+        self.ax1 = self.figure.add_subplot(111)
+        self.graph = FigureCanvasTkAgg(self.figure, self.window)
+        self.graph.draw()
         self.graph.get_tk_widget().grid(column=0, columnspan=6, sticky=tk.NSEW,
                                         padx=10)
 
