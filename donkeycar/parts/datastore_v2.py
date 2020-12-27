@@ -233,7 +233,7 @@ class Manifest(object):
         has_catalogs = False
 
         if self.manifest_path.exists():
-            self.seekeable = Seekable(self.manifest_path, read_only=self.read_only)
+            self.seekeable = Seekable(self.manifest_path, read_only=False)
             if self.seekeable.has_content():
                 self._read_contents()
             has_catalogs = len(self.catalog_paths) > 0
@@ -266,6 +266,11 @@ class Manifest(object):
     def delete_record(self, record_index):
         # Does not actually delete the record, but marks it as deleted.
         self.deleted_indexes.add(record_index)
+        self._update_catalog_metadata(update=True)
+
+    def un_delete_record(self, record_index):
+        # Does not actually delete the record, but marks it as deleted.
+        self.deleted_indexes.discard(record_index)
         self._update_catalog_metadata(update=True)
 
     def _add_catalog(self):

@@ -78,6 +78,9 @@ class Tub(object):
             else:
                 self.manifest.delete_record(index)
 
+    def un_delete_record(self, record_index):
+        self.manifest.un_delete_record(record_index)
+
     def close(self):
         self.manifest.close()
 

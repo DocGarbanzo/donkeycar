@@ -134,6 +134,7 @@ class TubUI:
                                '3.00', '4.00']
         self.speed = None
         self.df = None
+        self.lr = [0, 0]
         self.build_frame()
         self.count = 0
         self.window.bind("<Key>", self.handle_char_key)
@@ -170,6 +171,8 @@ class TubUI:
         for bar in self.bars.values():
             bar.destroy()
         self.bars.clear()
+        index = self.current_rec.underlying['_index']
+        self.lr = [index, index]
 
     def unravel_df(self):
         for k, v in zip(self.tub.manifest.inputs, self.tub.manifest.types):
@@ -191,7 +194,7 @@ class TubUI:
         row = 0
         self.btn_car_dir = tk.Button(self.window, text="Car dir",
                                         command=self.browse_car)
-        self.btn_car_dir.grid(row=row, column=0, sticky=tk.W)
+        self.btn_car_dir.grid(row=row, column=0, sticky=tk.W, padx=10)
         self.car_dir_label = ttk.Label(self.window)
         self.car_dir_label.grid(row=row, column=1, sticky=tk.W)
         self.update_config()
@@ -228,9 +231,8 @@ class TubUI:
         self.ctr_fram.grid(row=row, column=4, columnspan=2, rowspan=4, padx=10)
 
         self.rec_txt = tk.StringVar(self.ctr_fram)
-        # self.rec_txt.set(f"Record {self.i:06}")
         self.record_label = ttk.Label(self.ctr_fram, textvariable=self.rec_txt,
-                                     font='TkFixedFont')
+                                      font='TkFixedFont')
         self.record_label.grid(row=row, column=0, sticky=tk.E)
 
         self.speed_var = tk.StringVar(self.window)
@@ -242,8 +244,7 @@ class TubUI:
         self.speed_menu.grid(row=row, column=1)
 
         self.btn_bwd = tk.Button(self.ctr_fram, text="<",
-                                 command=lambda: self.step(False), )
-        #                            width=w, height=h)
+                                 command=lambda: self.step(False))
         self.btn_bwd.grid(row=row + 1, column=0, sticky=tk.NSEW)
         self.btn_fwd = tk.Button(self.ctr_fram, text=">",
                                     command=lambda: self.step(True))
@@ -269,11 +270,29 @@ class TubUI:
         self.slider.grid(column=0, columnspan=6, sticky=tk.NSEW, padx=10)
 
         row += 1
+        self.btn_set_l = tk.Button(self.window, text="Set left",
+                                    command=lambda: self.set_lr(True))
+        self.btn_set_r = tk.Button(self.window, text="Set right",
+                                    command=lambda: self.set_lr(False))
+        self.btn_set_l.grid(row=row, column=0, sticky=tk.W, padx=10)
+        self.btn_set_r.grid(row=row, column=1, sticky=tk.W)
+        self.lr_txt = tk.StringVar(self.window)
+        self.lr_txt.set(f'Index range [{self.lr[0]}, {self.lr[1]})')
+        self.lr_label = ttk.Label(self.window, textvariable=self.lr_txt)
+        self.lr_label.grid(row=row, column=2, columnspan=2)
+        self.btn_del_lr = tk.Button(self.window, text="Delete",
+                                    command=lambda: self.del_lr(True))
+        self.btn_undel_lr = tk.Button(self.window, text="Undelete",
+                                    command=lambda: self.del_lr(False))
+        self.btn_del_lr.grid(row=row, column=4, sticky=tk.E)
+        self.btn_undel_lr.grid(row=row, column=5, sticky=tk.E, padx=10)
+
+        row += 1
         self.figure = Figure(figsize=(6, 4))
         self.graph = FigureCanvasTkAgg(self.figure, self.window)
         self.graph.draw()
         self.graph.get_tk_widget().grid(column=0, columnspan=6, sticky=tk.NSEW,
-                                        padx=10)
+                                        padx=10, pady=10)
         row += 1
         self.toolbar = NavigationToolbar2Tk(self.graph, self.window,
                                             pack_toolbar=False)
@@ -290,7 +309,6 @@ class TubUI:
         self.update()
 
     def on_key_press(self, event):
-        print("you pressed {}".format(event.key))
         key_press_handler(event, self.graph, self.toolbar)
 
     def step(self, fwd=True):
@@ -377,6 +395,19 @@ class TubUI:
         self.update_tub()
         self.update()
         self.rc_data['last_tub'] = self.base_path
+
+    def set_lr(self, is_l=True):
+        self.lr[0 if is_l else 1] = self.current_rec.underlying['_index']
+        self.lr_txt.set(f'Index range [{self.lr[0]}, {self.lr[1]})')
+
+    def del_lr(self, is_del):
+        del_list = list(range(*self.lr))
+        if is_del:
+            for d in del_list:
+                self.tub.delete_record(d)
+        else:
+            for d in del_list:
+                self.tub.un_delete_record(d)
 
     def quit(self):
         self.run = False
