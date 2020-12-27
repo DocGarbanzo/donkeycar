@@ -23,10 +23,6 @@ LookUp = namedtuple('LookUp', ['record_field', 'max_value_id', 'centered'])
 lookup_entries = [
     LookUp('user/angle', '', centered=True),
     LookUp('user/throttle', '', centered=False),
-    LookUp('car/speed', 'MAX_SPEED', centered=False),
-    LookUp('car/inst_speed', 'MAX_SPEED', centered=False),
-    LookUp('car/gyro', 'IMU_GYRO_NORM', centered=True),
-    LookUp('car/accel', 'IMU_ACCEL_NORM', centered=True)
 ]
 
 record_map = {entry.record_field: entry for entry in lookup_entries}
