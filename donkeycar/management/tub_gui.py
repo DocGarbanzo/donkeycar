@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import math
 import os
 from collections import namedtuple
@@ -143,7 +144,7 @@ class TubUI:
     def update_tub(self):
         if not self.base_path:
             return
-        self.tub = Tub(self.base_path)
+        self.tub = Tub(self.base_path, read_only=True)
         self.records = [TubRecord(self.config, self.tub.base_path, record)
                         for record in self.tub]
         self.len = len(self.records)
