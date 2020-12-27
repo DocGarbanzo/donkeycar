@@ -78,9 +78,10 @@ class LabelBar:
     def __init__(self, context, field, colwidth=3):
         self.context = context
         self.text = tk.StringVar()
-        self.label = tk.Label(self.context.data_frame,
-                              textvariable=self.text, width=16, anchor=tk.E)
-        self.label.grid(row=self.row, column=0)
+        self.label = ttk.Label(self.context.data_frame,
+                               textvariable=self.text, anchor=tk.E,
+                               font='TkFixedFont')
+        self.label.grid(row=self.row, column=0, sticky=tk.E)
         self.bar_val = tk.DoubleVar()
         self.bar = ttk.Progressbar(self.context.data_frame,
                                    variable=self.bar_val,
@@ -191,14 +192,14 @@ class TubUI:
         self.btn_car_dir = tk.Button(self.window, text="Car dir",
                                         command=self.browse_car)
         self.btn_car_dir.grid(row=row, column=0, sticky=tk.W)
-        self.car_dir_label = tk.Label(self.window)
+        self.car_dir_label = ttk.Label(self.window)
         self.car_dir_label.grid(row=row, column=1, sticky=tk.W)
         self.update_config()
 
         self.btn_tub_dir = tk.Button(self.window, text="Tub dir",
                                      command=self.browse_tub)
         self.btn_tub_dir.grid(row=row, column=2, sticky=tk.W)
-        self.tub_dir_label = tk.Label(self.window)
+        self.tub_dir_label = ttk.Label(self.window)
         self.tub_dir_label.grid(row=row, column=3, columnspan=3, sticky=tk.W)
 
         # Image
@@ -213,7 +214,7 @@ class TubUI:
         self.data_frame.grid(row=row, column=0, columnspan=2, rowspan=3,
                              padx=10)
 
-        self.var_label = tk.Label(self.data_frame, text='Add or remove')
+        self.var_label = ttk.Label(self.data_frame, text='Add or remove')
         self.var_label.grid(row=row, column=0, sticky=tk.W)
 
         self.var_menu = ttk.Combobox(self.data_frame, value=self.drop_down,
@@ -226,10 +227,11 @@ class TubUI:
         self.ctr_fram = tk.LabelFrame(self.window, padx=10, pady=10)
         self.ctr_fram.grid(row=row, column=4, columnspan=2, rowspan=4, padx=10)
 
-        self.rec_txt = tk.StringVar(self.ctr_fram, f"Record {self.i}")
-        self.record_label = tk.Label(self.ctr_fram, textvariable=self.rec_txt,
-                                     relief=tk.FLAT)
-        self.record_label.grid(row=row, column=0)
+        self.rec_txt = tk.StringVar(self.ctr_fram)
+        # self.rec_txt.set(f"Record {self.i:06}")
+        self.record_label = ttk.Label(self.ctr_fram, textvariable=self.rec_txt,
+                                     font='TkFixedFont')
+        self.record_label.grid(row=row, column=0, sticky=tk.E)
 
         self.speed_var = tk.StringVar(self.window)
         self.speed_var.set("1.00")  # default value
@@ -304,7 +306,7 @@ class TubUI:
             return
         self.current_rec = self.records[self.i]
         index = self.current_rec.underlying['_index']
-        self.rec_txt.set(f"Record {index}")
+        self.rec_txt.set(f"Record {index:06}")
         self.img = self.get_img(self.current_rec)
         self.img_frame.configure(image=self.img)
         for field, bar in self.bars.items():
