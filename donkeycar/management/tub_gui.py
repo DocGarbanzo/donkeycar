@@ -7,6 +7,8 @@ import time
 from threading import Thread, active_count
 from PIL import ImageTk, Image
 import pandas as pd
+import yaml
+import datetime
 
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, \
@@ -28,6 +30,42 @@ lookup_entries = [
 ]
 
 record_map = {entry.record_field: entry for entry in lookup_entries}
+rc_path = os.path.expanduser('~/.donkeyrc')
+
+
+def combine_record_map(field_list):
+    new_lookups = []
+    for entry in field_list:
+        assert isinstance(entry, dict), \
+            'Dictionary required in lookup conversion'
+        lookup = LookUp(**entry)
+        new_lookups.append(lookup)
+
+    new_record_map = {entry.record_field: entry for entry in new_lookups}
+    record_map.update(new_record_map)
+    return record_map
+
+
+def read_rc():
+    if os.path.exists(rc_path):
+        with open(rc_path) as f:
+            data = yaml.load(f, Loader=yaml.FullLoader)
+            print(f'Donkey file {rc_path} loaded.')
+            return data
+    else:
+        print(f'Donkey file {rc_path} does not exist.')
+        return {}
+
+
+def write_rc(data):
+    if os.path.exists(rc_path):
+        print(f'Donkey file {rc_path} updated.')
+
+    with open(rc_path, mode='w') as f:
+        now = datetime.datetime.now()
+        data['time_stamp'] = now
+        data = yaml.dump(data, f)
+        return data
 
 
 def decompose(field):
@@ -53,7 +91,7 @@ class LabelBar:
                                    length=100, mode='determinate')
         self.bar.grid(row=self.row, column=1, columnspan=colwidth - 1)
         self.field = field
-        lookup = record_map[decompose(self.field)[0]]
+        lookup = context.record_map[decompose(self.field)[0]]
         self.max = getattr(self.context.config, lookup.max_value_id, 1.0)
         self.center = lookup.centered
         LabelBar.row += 1
@@ -75,13 +113,15 @@ class LabelBar:
 
 
 class TubUI:
-    def __init__(self, window):
+    def __init__(self, window, rc_data):
         self.window = window
+        self.rc_data = rc_data
         self.window.title("Tub GUI")
+        self.record_map = combine_record_map(self.rc_data.get('field_mapping'))
         # self.window.configure(background='grey45')
         self.run = False
         self.config = None
-        self.base_path = None
+        self.base_path = self.rc_data.get('last_tub')
         self.tub = None
         self.records = None
         self.len = 1
@@ -90,11 +130,11 @@ class TubUI:
         self.img = None
         self.thread = None
         self.bars = dict()
-        self.car_dir = None
+        self.car_dir = self.rc_data.get('car_dir')
         self.drop_down = []
+        self.df = None
         self.build_frame()
         self.count = 0
-        self.df = None
 
     def get_img(self, record):
         img_arr = record.image()
@@ -102,14 +142,14 @@ class TubUI:
         return ImageTk.PhotoImage(img)
 
     def update_tub(self):
+        if not self.base_path:
+            return
         self.tub = Tub(self.base_path)
-
         self.records = [TubRecord(self.config, self.tub.base_path, record)
                         for record in self.tub]
         self.len = len(self.records)
         self.i = 0
         self.current_rec = self.records[self.i]
-        self.img = self.get_img(self.current_rec)
         self.slider.configure(to=self.len - 1)
 
         self.df = pd.DataFrame(list(self.tub))
@@ -120,7 +160,7 @@ class TubUI:
         self.unravel_df()
         self.drop_down = list(self.df.columns)
         self.var_menu.config(value=self.drop_down)
-
+        self.tub_dir_label.config(text=self.base_path)
         self.update_plot(self.df)
 
     def unravel_df(self):
@@ -146,8 +186,10 @@ class TubUI:
         self.btn_car_dir.grid(row=row, column=0, sticky=tk.W)
         self.car_dir_label = tk.Label(self.window)
         self.car_dir_label.grid(row=row, column=1, sticky=tk.W)
+        self.update_config()
+
         self.btn_tub_dir = tk.Button(self.window, text="Tub dir",
-                                        command=self.browse_tub)
+                                     command=self.browse_tub)
         self.btn_tub_dir.grid(row=row, column=2, sticky=tk.W)
         self.tub_dir_label = tk.Label(self.window)
         self.tub_dir_label.grid(row=row, column=3, columnspan=3, sticky=tk.W)
@@ -224,6 +266,9 @@ class TubUI:
         self.but_exit = tk.Button(self.window, text="Quit",
                                   command=self.quit, fg='tomato')
         self.but_exit.grid(row=row, column=5, sticky=tk.E)
+        # if tub was given.
+        self.update_tub()
+        self.update()
 
     def on_key_press(self, event):
         print("you pressed {}".format(event.key))
@@ -238,6 +283,8 @@ class TubUI:
         self.update()
 
     def update(self, update_slider=True):
+        if not self.records:
+            return
         self.current_rec = self.records[self.i]
         index = self.current_rec.underlying['_index']
         self.rec_txt.set(f"Record {index}")
@@ -256,7 +303,7 @@ class TubUI:
         if self.run:
             self.run = False
             was_running = True
-        if decompose(field)[0] in record_map:
+        if decompose(field)[0] in self.record_map:
             self.manage_bar_entry(field)
 
         if was_running:
@@ -295,19 +342,25 @@ class TubUI:
         self.car_dir = filedialog.askdirectory(
             initialdir=os.path.expanduser('~'),
             title="Select the car dir")
-        self.car_dir_label.configure(text=self.car_dir)
-        self.config = load_config(os.path.join(self.car_dir, 'config.py'))
+        self.update_config()
+        self.rc_data['car_dir'] = self.car_dir
+
+    def update_config(self):
+        if self.car_dir:
+            self.car_dir_label.configure(text=self.car_dir)
+            self.config = load_config(os.path.join(self.car_dir, 'config.py'))
 
     def browse_tub(self):
         start_dir = self.car_dir if self.car_dir else os.path.expanduser('~')
         self.base_path = filedialog.askdirectory(initialdir=start_dir,
                                                  title="Select the tub dir")
-        self.tub_dir_label.config(text=self.base_path)
         self.update_tub()
         self.update()
+        self.rc_data['last_tub'] = self.base_path
 
     def quit(self):
         self.run = False
+        write_rc(self.rc_data)
         try:
             self.window.destroy()
         except Exception as e:
@@ -318,6 +371,7 @@ class TubUI:
 
 if __name__ == "__main__":
     # This creates the main window of an application
+    data_rc = read_rc()
     window = tk.Tk()
-    ui = TubUI(window)
+    ui = TubUI(window, data_rc)
     window.mainloop()
