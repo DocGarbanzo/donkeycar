@@ -317,18 +317,9 @@ class TubUI:
 
     def add_remove_bars(self, inp):
         field = self.var_menu.get()
-        # stop loop if running
-        was_running = False
-        if self.run:
-            self.run = False
-            was_running = True
         if decompose(field)[0] in self.record_map:
             self.manage_bar_entry(field)
-
-        if was_running:
-            self.run = True
         self.update()
-
         df = self.df[self.bars.keys()]
         self.update_plot(df)
 
