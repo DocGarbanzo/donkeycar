@@ -135,6 +135,11 @@ class TubUI:
         self.df = None
         self.build_frame()
         self.count = 0
+        self.window.bind("<Key>", self.handle_char_key)
+        self.window.bind("<Left>", self.handle_left_key)
+        self.window.bind("<Right>", self.handle_right_key)
+        self.window.bind("<Up>", self.handle_up_key)
+        self.window.bind("<Down>", self.handle_down_key)
 
     def get_img(self, record):
         img_arr = record.image()
@@ -391,6 +396,28 @@ class TubUI:
             exit(str(e))
         finally:
             exit(0)
+
+    def handle_char_key(self, event=None):
+        if event.char == ' ':
+            self.thread_stop() if self.run else self.thread_run()
+
+    def handle_left_key(self, event=None):
+        self.step(fwd=False)
+
+    def handle_right_key(self, event=None):
+        self.step(fwd=True)
+
+    def handle_up_key(self, event=None):
+        index = self.speed_settings.index(self.speed_var.get())
+        if index < len(self.speed_settings) - 1:
+            self.speed_var.set(self.speed_settings[index + 1])
+            self.set_speed(self.speed_var.get())
+
+    def handle_down_key(self, event=None):
+        index = self.speed_settings.index(self.speed_var.get())
+        if index > 0:
+            self.speed_var.set(self.speed_settings[index - 1])
+            self.set_speed(self.speed_var.get())
 
 
 if __name__ == "__main__":
