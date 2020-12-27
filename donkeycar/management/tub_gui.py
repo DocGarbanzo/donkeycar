@@ -132,6 +132,9 @@ class TubUI:
         self.bars = dict()
         self.car_dir = self.rc_data.get('car_dir')
         self.drop_down = []
+        self.speed_settings = ['0.25', '0.50', '1.00', '1.50', '2.00',
+                               '3.00', '4.00']
+        self.speed = None
         self.df = None
         self.build_frame()
         self.count = 0
@@ -209,7 +212,8 @@ class TubUI:
         self.var_label = tk.Label(self.data_frame, text='Add or remove')
         self.var_label.grid(row=row, column=0, sticky=tk.W)
 
-        self.var_menu = ttk.Combobox(self.data_frame, value=self.drop_down)
+        self.var_menu = ttk.Combobox(self.data_frame, value=self.drop_down,
+                                     width=10)
         self.var_menu.bind('<<ComboboxSelected>>', self.add_remove_bars)
         self.var_menu.grid(row=row, column=1, columnspan=2)
         LabelBar.row = row + 1
@@ -220,8 +224,16 @@ class TubUI:
 
         self.rec_txt = tk.StringVar(self.ctr_fram, f"Record {self.i}")
         self.record_label = tk.Label(self.ctr_fram, textvariable=self.rec_txt,
-                                     relief=tk.SUNKEN)
-        self.record_label.grid(row=row, column=0, columnspan=2)
+                                     relief=tk.FLAT)
+        self.record_label.grid(row=row, column=0)
+
+        self.speed_var = tk.StringVar(self.window)
+        self.speed_var.set("1.00")  # default value
+        self.speed_menu = ttk.OptionMenu(self.ctr_fram, self.speed_var, '1.00',
+                                         *self.speed_settings,
+                                         command=self.set_speed)
+        self.set_speed("1.00")
+        self.speed_menu.grid(row=row, column=1)
 
         self.btn_bwd = tk.Button(self.ctr_fram, text="<",
                                  command=lambda: self.step(False), )
@@ -313,6 +325,10 @@ class TubUI:
         df = self.df[self.bars.keys()]
         self.update_plot(df)
 
+    def set_speed(self, inp):
+        self.speed = float(inp) * self.config.DRIVE_LOOP_HZ
+        print(f'Setting speed to {self.speed}')
+
     def manage_bar_entry(self, field):
         if field in self.bars:
             self.bars[field].destroy()
@@ -323,7 +339,7 @@ class TubUI:
     def loop(self, fwd=True):
         while self.run:
             self.step(fwd)
-            time.sleep(0.01)
+            time.sleep(1.0 / self.speed)
 
     def thread_run(self, fwd=True):
         self.run = True
