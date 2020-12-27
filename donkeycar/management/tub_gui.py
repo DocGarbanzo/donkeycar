@@ -138,8 +138,6 @@ class TubUI:
         self.window.bind("<Key>", self.handle_char_key)
         self.window.bind("<Left>", self.handle_left_key)
         self.window.bind("<Right>", self.handle_right_key)
-        self.window.bind("<Up>", self.handle_up_key)
-        self.window.bind("<Down>", self.handle_down_key)
 
     def get_img(self, record):
         img_arr = record.image()
@@ -269,7 +267,7 @@ class TubUI:
         self.slider.grid(column=0, columnspan=6, sticky=tk.NSEW, padx=10)
 
         row += 1
-        self.figure = Figure(dpi=100)
+        self.figure = Figure(figsize=(6, 4))
         self.graph = FigureCanvasTkAgg(self.figure, self.window)
         self.graph.draw()
         self.graph.get_tk_widget().grid(column=0, columnspan=6, sticky=tk.NSEW,
@@ -391,24 +389,24 @@ class TubUI:
     def handle_char_key(self, event=None):
         if event.char == ' ':
             self.thread_stop() if self.run else self.thread_run()
+        elif event.char == 'q':
+            self.quit()
+        elif event.char == '+':
+            index = self.speed_settings.index(self.speed_var.get())
+            if index < len(self.speed_settings) - 1:
+                self.speed_var.set(self.speed_settings[index + 1])
+                self.set_speed(self.speed_var.get())
+        elif event.char == '-':
+            index = self.speed_settings.index(self.speed_var.get())
+            if index > 0:
+                self.speed_var.set(self.speed_settings[index - 1])
+                self.set_speed(self.speed_var.get())
 
     def handle_left_key(self, event=None):
         self.step(fwd=False)
 
     def handle_right_key(self, event=None):
         self.step(fwd=True)
-
-    def handle_up_key(self, event=None):
-        index = self.speed_settings.index(self.speed_var.get())
-        if index < len(self.speed_settings) - 1:
-            self.speed_var.set(self.speed_settings[index + 1])
-            self.set_speed(self.speed_var.get())
-
-    def handle_down_key(self, event=None):
-        index = self.speed_settings.index(self.speed_var.get())
-        if index > 0:
-            self.speed_var.set(self.speed_settings[index - 1])
-            self.set_speed(self.speed_var.get())
 
 
 if __name__ == "__main__":
