@@ -252,6 +252,7 @@ class TubUI:
         self.btn_play.grid(row=row + 2, column=1, sticky=tk.NSEW)
 
         self.btn_stop = tk.Button(self.ctr_fram, text="Stop",
+                                  state=tk.DISABLED,
                                   command=self.thread_stop)
         self.btn_stop.grid(row=row + 3, column=0, columnspan=2, sticky=tk.NSEW)
 
@@ -345,10 +346,16 @@ class TubUI:
         self.run = True
         self.thread = Thread(target=self.loop, args=(fwd,))
         self.thread.start()
+        self.btn_play.config(state=tk.DISABLED)
+        self.btn_rwd.config(state=tk.DISABLED)
+        self.btn_stop.config(state=tk.NORMAL)
         print('Active threads:', active_count())
 
     def thread_stop(self):
         self.run = False
+        self.btn_play.config(state=tk.NORMAL)
+        self.btn_rwd.config(state=tk.NORMAL)
+        self.btn_stop.config(state=tk.DISABLED)
 
     def slide(self, val):
         self.i = int(math.floor(float(val)))
