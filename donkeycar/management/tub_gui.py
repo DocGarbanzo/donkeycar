@@ -165,6 +165,10 @@ class TubUI:
         self.var_menu.config(value=self.drop_down)
         self.tub_dir_label.config(text=self.base_path)
         self.update_plot(self.df)
+        # clear bars:
+        for bar in self.bars.values():
+            bar.destroy()
+        self.bars.clear()
 
     def unravel_df(self):
         for k, v in zip(self.tub.manifest.inputs, self.tub.manifest.types):
