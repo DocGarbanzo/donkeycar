@@ -77,37 +77,49 @@ class LabelBar:
 
     def __init__(self, context, field, colwidth=3):
         self.context = context
+        self.field = field
         self.text = tk.StringVar()
         self.label = ttk.Label(self.context.data_frame,
                                textvariable=self.text, anchor=tk.E,
                                font='TkFixedFont')
         self.label.grid(row=self.row, column=0, sticky=tk.E)
-        self.bar_val = tk.DoubleVar()
-        self.bar = ttk.Progressbar(self.context.data_frame,
-                                   variable=self.bar_val,
-                                   orient=tk.HORIZONTAL,
-                                   length=100, mode='determinate')
-        self.bar.grid(row=self.row, column=1, columnspan=colwidth - 1)
-        self.field = field
-        lookup = context.record_map[decompose(self.field)[0]]
-        self.max = getattr(self.context.config, lookup.max_value_id, 1.0)
-        self.center = lookup.centered
+
+        # only add bar if we have normalisation data
+        self.lookup = context.record_map.get(decompose(self.field)[0])
+        if self.lookup:
+            self.bar_val = tk.DoubleVar()
+            self.bar = ttk.Progressbar(self.context.data_frame,
+                                       variable=self.bar_val,
+                                       orient=tk.HORIZONTAL,
+                                       length=100, mode='determinate')
+            self.bar.grid(row=self.row, column=1, columnspan=colwidth - 1)
+            self.max = getattr(self.context.config, self.lookup.max_value_id,
+                               1.0)
+            self.center = self.lookup.centered
         LabelBar.row += 1
 
     def update(self):
-        decomp_name = decompose(self.field)
-        val = self.context.current_rec.underlying[decomp_name[0]]
-        if decomp_name[1] is not None:
-            val = val[decomp_name[1]]
-
-        norm_val = val / self.max
-        new_bar_val = (norm_val + 1) * 50 if self.center else norm_val * 100
-        self.bar_val.set(new_bar_val)
-        self.text.set(self.field + f' {val:+07.3f}')
+        decomp_field = decompose(self.field)
+        val = self.context.current_rec.underlying[decomp_field[0]]
+        if decomp_field[1] is not None:
+            val = val[decomp_field[1]]
+        # update bar if present
+        if self.lookup:
+            norm_val = val / self.max
+            new_bar_val = (norm_val + 1) * 50 if self.center else norm_val * 100
+            self.bar_val.set(new_bar_val)
+        if isinstance(val, float):
+            text = f' {val:+07.3f}'
+        elif isinstance(val, int):
+            text = f' {val:10}'
+        else:
+            text = ' ' + val
+        self.text.set(self.field + text)
 
     def destroy(self):
         self.label.destroy()
-        self.bar.destroy()
+        if self.lookup:
+            self.bar.destroy()
 
 
 class TubUI:
@@ -158,10 +170,9 @@ class TubUI:
         self.slider.configure(to=self.len - 1)
 
         self.df = pd.DataFrame(list(self.tub)).dropna()
-        to_drop = {'_timestamp_ms', 'cam/image_array', 'timestamp', 'car/lap'}
-        to_drop = to_drop.intersection(self.df.columns)
-        self.df = self.df.drop(labels=to_drop, axis=1)
-        self.df = self.df.set_index('_index')
+        to_drop = {'cam/image_array'}
+        self.df.drop(labels=to_drop, axis=1, errors='ignore', inplace=True)
+        self.df.set_index('_index', inplace=True)
         self.unravel_df()
         self.drop_down = list(self.df.columns)
         self.var_menu.config(value=self.drop_down)
@@ -181,9 +192,10 @@ class TubUI:
                 df_keys = [k + f'_{i}' for i in range(dim)]
                 self.df[df_keys] = pd.DataFrame(self.df[k].tolist(),
                                                 index=self.df.index)
-                self.df = self.df.drop(k, axis=1)
+                self.df.drop(k, axis=1, inplace=True)
 
     def update_plot(self, df):
+        df = df.drop(labels=['_timestamp_ms'], axis=1, errors='ignore')
         ax1 = self.figure.add_subplot(111)
         ax1.clear()
         df.plot(kind='line', legend=True, ax=ax1)
@@ -193,7 +205,7 @@ class TubUI:
         # running row
         row = 0
         self.btn_car_dir = tk.Button(self.window, text="Car dir",
-                                        command=self.browse_car)
+                                     command=self.browse_car)
         self.btn_car_dir.grid(row=row, column=0, sticky=tk.W, padx=10)
         self.car_dir_label = ttk.Label(self.window)
         self.car_dir_label.grid(row=row, column=1, sticky=tk.W)
@@ -247,7 +259,7 @@ class TubUI:
                                  command=lambda: self.step(False))
         self.btn_bwd.grid(row=row + 1, column=0, sticky=tk.NSEW)
         self.btn_fwd = tk.Button(self.ctr_fram, text=">",
-                                    command=lambda: self.step(True))
+                                 command=lambda: self.step(True))
         self.btn_fwd.grid(row=row + 1, column=1, sticky=tk.NSEW)
 
         self.btn_rwd = tk.Button(self.ctr_fram, text="<<",
@@ -266,14 +278,14 @@ class TubUI:
         # slider
         row += 4
         self.slider = ttk.Scale(self.window, from_=0, to=self.len - 1,
-                                orient=tk.HORIZONTAL, command=self.slide,)
+                                orient=tk.HORIZONTAL, command=self.slide, )
         self.slider.grid(column=0, columnspan=6, sticky=tk.NSEW, padx=10)
 
         row += 1
         self.btn_set_l = tk.Button(self.window, text="Set left",
-                                    command=lambda: self.set_lr(True))
+                                   command=lambda: self.set_lr(True))
         self.btn_set_r = tk.Button(self.window, text="Set right",
-                                    command=lambda: self.set_lr(False))
+                                   command=lambda: self.set_lr(False))
         self.btn_set_l.grid(row=row, column=0, sticky=tk.W, padx=10)
         self.btn_set_r.grid(row=row, column=1, sticky=tk.W)
         self.lr_txt = tk.StringVar(self.window)
@@ -283,9 +295,9 @@ class TubUI:
         self.btn_del_lr = tk.Button(self.window, text="Delete",
                                     command=lambda: self.del_lr(True))
         self.btn_undel_lr = tk.Button(self.window, text="Undelete",
-                                    command=lambda: self.del_lr(False))
+                                      command=lambda: self.del_lr(False))
         self.btn_del_lr.grid(row=row, column=3)
-        self.btn_undel_lr.grid(row=row, column=4, sticky=tk.E,)
+        self.btn_undel_lr.grid(row=row, column=4, sticky=tk.E, )
         self.btn_refresh_tub = tk.Button(self.window, text="Refresh",
                                          command=self.update_tub)
         self.btn_refresh_tub.grid(row=row, column=5, sticky=tk.E, padx=10)
@@ -341,11 +353,14 @@ class TubUI:
 
     def add_remove_bars(self, inp):
         field = self.var_menu.get()
-        if decompose(field)[0] in self.record_map:
-            self.manage_bar_entry(field)
+        self.manage_bar_entry(field)
         self.update()
-        # if bars empty print everything
-        df = self.df[self.bars.keys()] if self.bars.keys() else self.df
+        # df for print should contain all bars as long as they don't contain
+        # strings and everything if bars are empty
+        field_map = dict(zip(self.tub.manifest.inputs, self.tub.manifest.types))
+        cols = [c for c in self.bars.keys() if decompose(c)[0] in field_map and
+                field_map[decompose(c)[0]] != 'str']
+        df = self.df[cols] if cols else self.df
         self.update_plot(df)
 
     def set_speed(self, inp):
@@ -355,7 +370,7 @@ class TubUI:
     def manage_bar_entry(self, field):
         if field in self.bars:
             self.bars[field].destroy()
-            del(self.bars[field])
+            del (self.bars[field])
         else:
             self.bars[field] = LabelBar(self, field)
 
