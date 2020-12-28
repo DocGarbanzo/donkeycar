@@ -31,6 +31,8 @@ rc_path = os.path.expanduser('~/.donkeyrc')
 
 
 def combine_record_map(field_list):
+    if field_list is None:
+        field_list = {}
     new_lookups = []
     for entry in field_list:
         assert isinstance(entry, dict), \
@@ -212,7 +214,8 @@ class TubUI:
         self.update_config()
 
         self.btn_tub_dir = tk.Button(self.window, text="Tub dir",
-                                     command=self.browse_tub)
+                                     command=self.browse_tub,
+                                     state=tk.DISABLED)
         self.btn_tub_dir.grid(row=row, column=2, sticky=tk.W)
         self.tub_dir_label = ttk.Label(self.window)
         self.tub_dir_label.grid(row=row, column=3, columnspan=3, sticky=tk.W)
@@ -364,8 +367,8 @@ class TubUI:
         self.update_plot(df)
 
     def set_speed(self, inp):
-        self.speed = float(inp) * self.config.DRIVE_LOOP_HZ
-        print(f'Setting speed to {self.speed}')
+        if self.config:
+            self.speed = float(inp) * self.config.DRIVE_LOOP_HZ
 
     def manage_bar_entry(self, field):
         if field in self.bars:
@@ -404,6 +407,8 @@ class TubUI:
             title="Select the car dir")
         self.update_config()
         self.rc_data['car_dir'] = self.car_dir
+        self.set_speed(1)
+        self.btn_tub_dir.configure(state=tk.NORMAL)
 
     def update_config(self):
         if self.car_dir:
