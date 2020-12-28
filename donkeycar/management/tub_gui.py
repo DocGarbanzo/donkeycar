@@ -157,7 +157,7 @@ class TubUI:
         self.current_rec = self.records[self.i]
         self.slider.configure(to=self.len - 1)
 
-        self.df = pd.DataFrame(list(self.tub))
+        self.df = pd.DataFrame(list(self.tub)).dropna()
         to_drop = {'_timestamp_ms', 'cam/image_array', 'timestamp', 'car/lap'}
         to_drop = to_drop.intersection(self.df.columns)
         self.df = self.df.drop(labels=to_drop, axis=1)
@@ -279,13 +279,16 @@ class TubUI:
         self.lr_txt = tk.StringVar(self.window)
         self.lr_txt.set(f'Index range [{self.lr[0]}, {self.lr[1]})')
         self.lr_label = ttk.Label(self.window, textvariable=self.lr_txt)
-        self.lr_label.grid(row=row, column=2, columnspan=2)
+        self.lr_label.grid(row=row, column=2)
         self.btn_del_lr = tk.Button(self.window, text="Delete",
                                     command=lambda: self.del_lr(True))
         self.btn_undel_lr = tk.Button(self.window, text="Undelete",
                                     command=lambda: self.del_lr(False))
-        self.btn_del_lr.grid(row=row, column=4, sticky=tk.E)
-        self.btn_undel_lr.grid(row=row, column=5, sticky=tk.E, padx=10)
+        self.btn_del_lr.grid(row=row, column=3)
+        self.btn_undel_lr.grid(row=row, column=4, sticky=tk.E,)
+        self.btn_refresh_tub = tk.Button(self.window, text="Refresh",
+                                         command=self.update_tub)
+        self.btn_refresh_tub.grid(row=row, column=5, sticky=tk.E, padx=10)
 
         row += 1
         self.figure = Figure(figsize=(6, 4))
@@ -325,10 +328,13 @@ class TubUI:
         self.current_rec = self.records[self.i]
         index = self.current_rec.underlying['_index']
         self.rec_txt.set(f"Record {index:06}")
-        self.img = self.get_img(self.current_rec)
-        self.img_frame.configure(image=self.img)
-        for field, bar in self.bars.items():
-            bar.update()
+        try:
+            self.img = self.get_img(self.current_rec)
+            self.img_frame.configure(image=self.img)
+            for field, bar in self.bars.items():
+                bar.update()
+        except KeyError as e:
+            print(f"Bad record {index}", e)
         if update_slider:
             # the slider needs to count continuously through the records
             self.slider.set(self.i)
