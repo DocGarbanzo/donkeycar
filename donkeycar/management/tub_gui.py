@@ -221,7 +221,7 @@ class TubUI:
         self.var_label.grid(row=row, column=0, sticky=tk.W)
 
         self.var_menu = ttk.Combobox(self.data_frame, value=self.drop_down,
-                                     width=10)
+                                     width=10, state='readonly')
         self.var_menu.bind('<<ComboboxSelected>>', self.add_remove_bars)
         self.var_menu.grid(row=row, column=1, columnspan=2)
         LabelBar.row = row + 1
@@ -338,7 +338,8 @@ class TubUI:
         if decompose(field)[0] in self.record_map:
             self.manage_bar_entry(field)
         self.update()
-        df = self.df[self.bars.keys()]
+        # if bars empty print everything
+        df = self.df[self.bars.keys()] if self.bars.keys() else self.df
         self.update_plot(df)
 
     def set_speed(self, inp):
