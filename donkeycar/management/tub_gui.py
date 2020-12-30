@@ -89,6 +89,7 @@ class LabelBar:
 
         # only add bar if we have normalisation data
         self.lookup = context.record_map.get(decompose(self.field)[0])
+        text = f'Added field {self.field}'
         if self.lookup:
             self.bar_val = tk.DoubleVar()
             self.bar = ttk.Progressbar(self.context.data_frame,
@@ -96,10 +97,16 @@ class LabelBar:
                                        orient=tk.HORIZONTAL,
                                        length=100, mode='determinate')
             self.bar.grid(row=self.row, column=1, columnspan=colwidth - 1)
-            self.max = getattr(self.context.config, self.lookup.max_value_id,
+            self.max = getattr(self.context.config,
+                               self.lookup.max_value_id,
                                1.0)
             self.center = self.lookup.centered
+            text += f' with max value={self.max} centered={self.center}'
+        else:
+            text += "... but you don't see a bar because you are missing a " \
+                    "field list entry in your .donkeyrc or it is a string field"
         LabelBar.row += 1
+        self.context.status.configure(text=text)
 
     def update(self):
         decomp_field = decompose(self.field)
@@ -123,6 +130,7 @@ class LabelBar:
         self.label.destroy()
         if self.lookup:
             self.bar.destroy()
+        self.context.status.configure(text=f'Removed field {self.field}')
 
 
 class TubUI:
@@ -187,6 +195,8 @@ class TubUI:
         self.bars.clear()
         index = self.current_rec.underlying['_index']
         self.lr = [index, index]
+        self.status.configure(text=f'Loaded tub {self.base_path} with '
+                                   f'{self.len} records.')
 
     def unravel_df(self):
         for k, v in zip(self.tub.manifest.inputs, self.tub.manifest.types):
@@ -383,6 +393,7 @@ class TubUI:
         if field in self.bars:
             self.bars[field].destroy()
             del (self.bars[field])
+
         else:
             self.bars[field] = LabelBar(self, field)
 
