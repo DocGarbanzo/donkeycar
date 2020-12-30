@@ -4,13 +4,13 @@ import os
 from collections import namedtuple
 import tkinter as tk
 from tkinter import ttk, filedialog
-from ttkthemes import ThemedStyle
 import time
 from threading import Thread, active_count
 from PIL import ImageTk, Image
 import pandas as pd
 import yaml
 import datetime
+import platform
 
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, \
@@ -322,7 +322,11 @@ class TubUI:
         # quit button
         self.but_exit = ttk.Button(self.window, text="Quit", command=self.quit)
         self.but_exit.grid(row=row, column=5, sticky=tk.E)
-        # if tub was given.
+        # status bar
+        row += 1
+        self.status = ttk.Label(self.window, text="Donkey ready...")
+        self.status.grid(row=row, column=0, columnspan=6, sticky=tk.W)
+
         self.update_config()
         self.update_tub()
         self.update()
@@ -337,6 +341,9 @@ class TubUI:
         elif self.i < 0 and not fwd:
             self.i = self.len - 1
         self.update()
+        if not self.run:
+            self.status.configure(text=f'Donkey step '
+                                       f'{"forward" if fwd else "backward"}')
 
     def update(self, update_slider=True):
         if self.records is None or self.config is None:
@@ -380,9 +387,11 @@ class TubUI:
             self.bars[field] = LabelBar(self, field)
 
     def loop(self, fwd=True):
+        self.status.configure(text='Donkey running...')
         while self.run:
             self.step(fwd)
             time.sleep(1.0 / (self.speed * self.config.DRIVE_LOOP_HZ))
+        self.status.configure(text='Donkey stopped')
 
     def thread_run(self, fwd=True):
         self.run = True
@@ -391,7 +400,6 @@ class TubUI:
         self.btn_play.config(state=tk.DISABLED)
         self.btn_rwd.config(state=tk.DISABLED)
         self.btn_stop.config(state=tk.NORMAL)
-        print('Active threads:', active_count())
 
     def thread_stop(self):
         self.run = False
@@ -483,11 +491,14 @@ class TubUI:
 
 
 if __name__ == "__main__":
-    # This creates the main window of an application
     data_rc = read_rc()
     window = tk.Tk()
-    window.style = ttk.Style()
-    style = ThemedStyle(window)
-    style.set_theme("scidblue")
+    # For Linux spice up the optics from 80s to 90s at least
+    if platform.system() == 'Linux':
+        from ttkthemes import ThemedStyle
+        style = ThemedStyle(window)
+        style.set_theme("scidblue")
+        window.style = ttk.Style()
+
     ui = TubUI(window, data_rc)
     window.mainloop()
