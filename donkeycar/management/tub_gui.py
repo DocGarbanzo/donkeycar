@@ -259,22 +259,22 @@ class TubUI:
         self.set_speed("1.00")
         self.speed_menu.grid(row=row, column=1)
 
-        self.btn_bwd = tk.Button(self.ctr_fram, text="<",
+        self.btn_bwd = ttk.Button(self.ctr_fram, text="<",
                                  command=lambda: self.step(False))
         self.btn_bwd.grid(row=row + 1, column=0, sticky=tk.NSEW)
-        self.btn_fwd = tk.Button(self.ctr_fram, text=">",
+        self.btn_fwd = ttk.Button(self.ctr_fram, text=">",
                                  command=lambda: self.step(True))
         self.btn_fwd.grid(row=row + 1, column=1, sticky=tk.NSEW)
 
-        self.btn_rwd = tk.Button(self.ctr_fram, text="<<",
+        self.btn_rwd = ttk.Button(self.ctr_fram, text="<<",
                                  command=lambda: self.thread_run(False))
         self.btn_rwd.grid(row=row + 2, column=0, sticky=tk.NSEW)
 
-        self.btn_play = tk.Button(self.ctr_fram, text=">>",
+        self.btn_play = ttk.Button(self.ctr_fram, text=">>",
                                   command=lambda: self.thread_run(True))
         self.btn_play.grid(row=row + 2, column=1, sticky=tk.NSEW)
 
-        self.btn_stop = tk.Button(self.ctr_fram, text="Stop",
+        self.btn_stop = ttk.Button(self.ctr_fram, text="Stop",
                                   state=tk.DISABLED,
                                   command=self.thread_stop)
         self.btn_stop.grid(row=row + 3, column=0, columnspan=2, sticky=tk.NSEW)
@@ -286,9 +286,9 @@ class TubUI:
         self.slider.grid(column=0, columnspan=6, sticky=tk.NSEW, padx=10)
 
         row += 1
-        self.btn_set_l = tk.Button(self.window, text="Set left",
+        self.btn_set_l = ttk.Button(self.window, text="Set left",
                                    command=lambda: self.set_lr(True))
-        self.btn_set_r = tk.Button(self.window, text="Set right",
+        self.btn_set_r = ttk.Button(self.window, text="Set right",
                                    command=lambda: self.set_lr(False))
         self.btn_set_l.grid(row=row, column=0, sticky=tk.W, padx=10)
         self.btn_set_r.grid(row=row, column=1, sticky=tk.W)
@@ -296,13 +296,13 @@ class TubUI:
         self.lr_txt.set(f'Index range [{self.lr[0]}, {self.lr[1]})')
         self.lr_label = ttk.Label(self.window, textvariable=self.lr_txt)
         self.lr_label.grid(row=row, column=2)
-        self.btn_del_lr = tk.Button(self.window, text="Delete",
+        self.btn_del_lr = ttk.Button(self.window, text="Delete",
                                     command=lambda: self.del_lr(True))
-        self.btn_undel_lr = tk.Button(self.window, text="Undelete",
+        self.btn_undel_lr = ttk.Button(self.window, text="Undelete",
                                       command=lambda: self.del_lr(False))
         self.btn_del_lr.grid(row=row, column=3)
         self.btn_undel_lr.grid(row=row, column=4, sticky=tk.E, )
-        self.btn_refresh_tub = tk.Button(self.window, text="Refresh",
+        self.btn_refresh_tub = ttk.Button(self.window, text="Refresh",
                                          command=self.update_tub)
         self.btn_refresh_tub.grid(row=row, column=5, sticky=tk.E, padx=10)
 
@@ -320,8 +320,7 @@ class TubUI:
         self.graph.mpl_connect("key_press_event", self.on_key_press)
 
         # quit button
-        self.but_exit = tk.Button(self.window, text="Quit",
-                                  command=self.quit, fg='tomato')
+        self.but_exit = ttk.Button(self.window, text="Quit", command=self.quit)
         self.but_exit.grid(row=row, column=5, sticky=tk.E)
         # if tub was given.
         self.update_config()
@@ -489,6 +488,6 @@ if __name__ == "__main__":
     window = tk.Tk()
     window.style = ttk.Style()
     style = ThemedStyle(window)
-    style.set_theme("scidgrey")
+    style.set_theme("scidblue")
     ui = TubUI(window, data_rc)
     window.mainloop()
