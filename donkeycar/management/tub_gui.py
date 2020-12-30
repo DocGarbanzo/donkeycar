@@ -4,6 +4,7 @@ import os
 from collections import namedtuple
 import tkinter as tk
 from tkinter import ttk, filedialog
+from ttkthemes import ThemedStyle
 import time
 from threading import Thread, active_count
 from PIL import ImageTk, Image
@@ -161,7 +162,7 @@ class TubUI:
         return ImageTk.PhotoImage(img)
 
     def update_tub(self):
-        if not self.base_path:
+        if self.base_path is None or self.config is None:
             return
         self.tub = Tub(self.base_path, read_only=True)
         self.records = [TubRecord(self.config, self.tub.base_path, record)
@@ -206,14 +207,14 @@ class TubUI:
     def build_frame(self):
         # running row
         row = 0
-        self.btn_car_dir = tk.Button(self.window, text="Car dir",
+        self.btn_car_dir = ttk.Button(self.window, text="Car dir",
                                      command=self.browse_car)
         self.btn_car_dir.grid(row=row, column=0, sticky=tk.W, padx=10)
         self.car_dir_label = ttk.Label(self.window)
         self.car_dir_label.grid(row=row, column=1, sticky=tk.W)
-        self.update_config()
 
-        self.btn_tub_dir = tk.Button(self.window, text="Tub dir",
+
+        self.btn_tub_dir = ttk.Button(self.window, text="Tub dir",
                                      command=self.browse_tub,
                                      state=tk.DISABLED)
         self.btn_tub_dir.grid(row=row, column=2, sticky=tk.W)
@@ -236,7 +237,7 @@ class TubUI:
         self.var_label.grid(row=row, column=0, sticky=tk.W)
 
         self.var_menu = ttk.Combobox(self.data_frame, value=self.drop_down,
-                                     width=10, state='readonly')
+                                     width=12, state='readonly')
         self.var_menu.bind('<<ComboboxSelected>>', self.add_remove_bars)
         self.var_menu.grid(row=row, column=1, columnspan=2)
         LabelBar.row = row + 1
@@ -323,6 +324,7 @@ class TubUI:
                                   command=self.quit, fg='tomato')
         self.but_exit.grid(row=row, column=5, sticky=tk.E)
         # if tub was given.
+        self.update_config()
         self.update_tub()
         self.update()
 
@@ -338,7 +340,7 @@ class TubUI:
         self.update()
 
     def update(self, update_slider=True):
-        if not self.records:
+        if self.records is None or self.config is None:
             return
         self.current_rec = self.records[self.i]
         index = self.current_rec.underlying['_index']
@@ -349,6 +351,8 @@ class TubUI:
             for field, bar in self.bars.items():
                 bar.update()
         except KeyError as e:
+            print(f"Bad record {index}", e)
+        except Exception as e:
             print(f"Bad record {index}", e)
         if update_slider:
             # the slider needs to count continuously through the records
@@ -367,8 +371,7 @@ class TubUI:
         self.update_plot(df)
 
     def set_speed(self, inp):
-        if self.config:
-            self.speed = float(inp) * self.config.DRIVE_LOOP_HZ
+        self.speed = float(inp)
 
     def manage_bar_entry(self, field):
         if field in self.bars:
@@ -380,7 +383,7 @@ class TubUI:
     def loop(self, fwd=True):
         while self.run:
             self.step(fwd)
-            time.sleep(1.0 / self.speed)
+            time.sleep(1.0 / (self.speed * self.config.DRIVE_LOOP_HZ))
 
     def thread_run(self, fwd=True):
         self.run = True
@@ -405,15 +408,23 @@ class TubUI:
         self.car_dir = filedialog.askdirectory(
             initialdir=os.path.expanduser('~'),
             title="Select the car dir")
-        self.update_config()
-        self.rc_data['car_dir'] = self.car_dir
-        self.set_speed(1)
-        self.btn_tub_dir.configure(state=tk.NORMAL)
+        if self.update_config():
+            self.rc_data['car_dir'] = self.car_dir
+
 
     def update_config(self):
         if self.car_dir:
-            self.car_dir_label.configure(text=self.car_dir)
-            self.config = load_config(os.path.join(self.car_dir, 'config.py'))
+            try:
+                self.config = load_config(os.path.join(self.car_dir, 'config.py'))
+                self.set_speed(1)
+                self.car_dir_label.configure(text=self.car_dir)
+                self.btn_tub_dir.configure(state=tk.NORMAL)
+                return True
+            except FileNotFoundError:
+                print(f'Directory {self.car_dir} has no config.py')
+            except Exception as e:
+                print(e)
+            return False
 
     def browse_tub(self):
         start_dir = self.car_dir if self.car_dir else os.path.expanduser('~')
@@ -448,7 +459,10 @@ class TubUI:
 
     def handle_char_key(self, event=None):
         if event.char == ' ':
-            self.thread_stop() if self.run else self.thread_run()
+            if self.run:
+                self.thread_stop()
+            else:
+                self.thread_run()
         elif event.char == 'q':
             self.quit()
         elif event.char == '+':
@@ -473,5 +487,8 @@ if __name__ == "__main__":
     # This creates the main window of an application
     data_rc = read_rc()
     window = tk.Tk()
+    window.style = ttk.Style()
+    style = ThemedStyle(window)
+    style.set_theme("scidgrey")
     ui = TubUI(window, data_rc)
     window.mainloop()
