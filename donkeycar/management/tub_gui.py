@@ -19,7 +19,7 @@ from matplotlib.backend_bases import key_press_handler
 
 from donkeycar import load_config
 from donkeycar.parts.tub_v2 import Tub
-from donkeycar.pipeline.types import TubRecord
+from donkeycar.pipeline.types import TubRecord, create_filter_string
 
 LookUp = namedtuple('LookUp', ['record_field', 'max_value_id', 'centered'])
 lookup_entries = [
@@ -158,8 +158,11 @@ class TubUI:
         self.speed = None
         self.df = None
         self.lr = [0, 0]
+        self.filter_expression = None
+        self.record_filter = self.rc_data.get('record_filter', '')
         self.build_frame()
         self.count = 0
+        self.enable_keys = True
         self.window.bind("<Key>", self.handle_char_key)
         self.window.bind("<Left>", self.handle_left_key)
         self.window.bind("<Right>", self.handle_right_key)
@@ -173,8 +176,17 @@ class TubUI:
         if self.base_path is None or self.config is None:
             return
         self.tub = Tub(self.base_path, read_only=True)
+
+        def select(underlying):
+            if self.filter_expression is None:
+                return True
+            else:
+                record = TubRecord(self.config, self.tub.base_path, underlying)
+                res = eval(self.filter_expression)
+                return res
+
         self.records = [TubRecord(self.config, self.tub.base_path, record)
-                        for record in self.tub]
+                        for record in self.tub if select(record)]
         self.len = len(self.records)
         self.i = 0
         self.current_rec = self.records[self.i]
@@ -195,7 +207,7 @@ class TubUI:
         self.bars.clear()
         index = self.current_rec.underlying['_index']
         self.lr = [index, index]
-        self.status.configure(text=f'Loaded tub {self.base_path} with '
+        self.update_status(f'Loaded tub {self.base_path} with '
                                    f'{self.len} records.')
 
     def unravel_df(self):
@@ -222,7 +234,6 @@ class TubUI:
         self.btn_car_dir.grid(row=row, column=0, sticky=tk.W, padx=10)
         self.car_dir_label = ttk.Label(self.window)
         self.car_dir_label.grid(row=row, column=1, sticky=tk.W)
-
 
         self.btn_tub_dir = ttk.Button(self.window, text="Tub dir",
                                      command=self.browse_tub,
@@ -312,9 +323,20 @@ class TubUI:
                                       command=lambda: self.del_lr(False))
         self.btn_del_lr.grid(row=row, column=3)
         self.btn_undel_lr.grid(row=row, column=4, sticky=tk.E, )
-        self.btn_refresh_tub = ttk.Button(self.window, text="Refresh",
+        self.btn_refresh_tub = ttk.Button(self.window, text="Reload",
                                          command=self.update_tub)
         self.btn_refresh_tub.grid(row=row, column=5, sticky=tk.E, padx=10)
+
+        row += 1
+        self.label_filter = ttk.Button(text='Record filter',
+                                       command=self.update_filter)
+        self.label_filter.grid(row=row, column=0, sticky=tk.W, padx=10)
+        self.entry_filter_var = tk.StringVar()
+        self.entry_filter_var.trace_add("write", self.filter_on_entry)
+        self.entry_filter = tk.Entry(self.window,
+                                     textvariable=self.entry_filter_var)
+        self.entry_filter.grid(row=row, column=1, columnspan=5,
+                               sticky=tk.NSEW, padx=10)
 
         row += 1
         self.figure = Figure(figsize=(6, 4))
@@ -352,7 +374,7 @@ class TubUI:
             self.i = self.len - 1
         self.update()
         if not self.run:
-            self.status.configure(text=f'Donkey step '
+            self.update_status(f'Donkey step '
                                        f'{"forward" if fwd else "backward"}')
 
     def update(self, update_slider=True):
@@ -398,11 +420,11 @@ class TubUI:
             self.bars[field] = LabelBar(self, field)
 
     def loop(self, fwd=True):
-        self.status.configure(text='Donkey running...')
+        self.update_status('Donkey running...')
         while self.run:
             self.step(fwd)
             time.sleep(1.0 / (self.speed * self.config.DRIVE_LOOP_HZ))
-        self.status.configure(text='Donkey stopped')
+        self.update_status('Donkey stopped')
 
     def thread_run(self, fwd=True):
         self.run = True
@@ -428,7 +450,6 @@ class TubUI:
             title="Select the car dir")
         if self.update_config():
             self.rc_data['car_dir'] = self.car_dir
-
 
     def update_config(self):
         if self.car_dir:
@@ -465,8 +486,43 @@ class TubUI:
             for d in del_list:
                 self.tub.un_delete_record(d)
 
+    def update_filter(self):
+        filter = self.entry_filter_var.get()
+        # empty string resets the filter
+        if filter == '':
+            self.record_filter = ''
+            self.filter_expression = None
+            return
+        filter_expression = create_filter_string(filter, 
+                                                 self.tub.manifest.inputs,
+                                                 record_name='record')
+        try:
+            record = self.current_rec
+            res = eval(filter_expression)
+            status = f'Filter on current record: {res}'
+            if isinstance(res, bool):
+                self.record_filter = filter
+                self.filter_expression = filter_expression
+            else:
+                status += ' - non bool expression can\'t be applied'
+            self.update_status(status)
+                
+        except Exception as e:
+            self.update_status(f'Filter error on current record: {e}')
+
+        self.enable_keys = True
+
+    def filter_on_entry(self, a, b, c):
+        self.enable_keys = False
+        filter_txt = self.entry_filter_var.get()
+        self.update_status('Received filter: ' + filter_txt)
+
+    def update_status(self, msg: str) -> None:
+        self.status.configure(text=msg)
+
     def quit(self):
         self.run = False
+        self.rc_data['record_filter'] = self.record_filter
         write_rc(self.rc_data)
         try:
             self.window.destroy()
@@ -476,6 +532,8 @@ class TubUI:
             exit(0)
 
     def handle_char_key(self, event=None):
+        if not self.enable_keys:
+            return
         if event.char == ' ':
             if self.run:
                 self.thread_stop()
@@ -495,10 +553,12 @@ class TubUI:
                 self.set_speed(self.speed_var.get())
 
     def handle_left_key(self, event=None):
-        self.step(fwd=False)
+        if self.enable_keys:
+            self.step(fwd=False)
 
     def handle_right_key(self, event=None):
-        self.step(fwd=True)
+        if self.enable_keys:
+            self.step(fwd=True)
 
 
 if __name__ == "__main__":

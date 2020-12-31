@@ -12,6 +12,7 @@ from progress.bar import IncrementalBar
 import donkeycar as dk
 from donkeycar.management.joystick_creator import CreateJoystick
 from donkeycar.management.tub import TubManager
+from donkeycar.pipeline.training import train
 from donkeycar.utils import *
 
 PACKAGE_PATH = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -432,6 +433,8 @@ class Train(BaseCommand):
         parser.add_argument('--config', default='./config.py', help='location of config file to use. default: ./config.py')
         parser.add_argument('--framework', choices=['tensorflow', 'pytorch', None], required=False, help='the AI framework to use (tensorflow|pytorch). Defaults to config.DEFAULT_AI_FRAMEWORK')
         parser.add_argument('--checkpoint', type=str, help='location of checkpoint to resume training from')
+        parser.add_argument('--filter', default=None,
+                            help='filter like user/throttle > 0')
         parsed_args = parser.parse_args(args)
         return parsed_args
 
@@ -443,7 +446,7 @@ class Train(BaseCommand):
 
         if framework == 'tensorflow':
             from donkeycar.pipeline.training import train
-            train(cfg, args.tub, args.model, args.type)
+            train(cfg, args.tub, args.model, args.type, args.filter)
         elif framework == 'pytorch':
             from donkeycar.parts.pytorch.torch_train import train
             train(cfg, args.tub, args.model, args.type,
@@ -478,7 +481,7 @@ def execute_from_command_line():
     else:
         dk.utils.eprint('Usage: The available commands are:')
         dk.utils.eprint(list(commands.keys()))
-        
+
     
 if __name__ == "__main__":
     execute_from_command_line()

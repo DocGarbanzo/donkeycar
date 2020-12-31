@@ -1,6 +1,6 @@
 import math
 import os
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Optional
 
 from donkeycar.config import Config
 from donkeycar.parts.keras import KerasPilot
@@ -76,8 +76,8 @@ class BatchSequence(object):
         return dataset.repeat().batch(self.batch_size)
 
 
-def train(cfg: Config, tub_paths: str, model: str, model_type: str) \
-        -> tf.keras.callbacks.History:
+def train(cfg: Config, tub_paths: str, model: str, model_type: str,
+          select: Optional[str] = None) -> tf.keras.callbacks.History:
     """
     Train the model
     """
@@ -98,7 +98,7 @@ def train(cfg: Config, tub_paths: str, model: str, model_type: str) \
     if cfg.PRINT_MODEL_SUMMARY:
         print(kl.model.summary())
 
-    dataset = TubDataset(cfg, all_tub_paths)
+    dataset = TubDataset(cfg, all_tub_paths, select=select)
     training_records, validation_records = dataset.train_test_split()
     print('Records # Training %s' % len(training_records))
     print('Records # Validation %s' % len(validation_records))

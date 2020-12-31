@@ -77,8 +77,12 @@ def test_train(config: Config, car_dir: str, data: Data) -> None:
 
 
 @pytest.mark.parametrize('model_type', ['linear', 'categorical', 'inferred'])
-def test_training_pipeline(config: Config, model_type: str, car_dir: str) \
-        -> None:
+@pytest.mark.parametrize('select', ['user/throttle > 0.5',
+                                    'user/angle < 0',
+                                    'user/throttle < 0.6 and user/angle > -0.5']
+                         )
+def test_training_pipeline(config: Config, model_type: str, car_dir: str,
+                           select: str) -> None:
     """
     Testing consistency of the model interfaces and data used in training
     pipeline.
@@ -86,12 +90,13 @@ def test_training_pipeline(config: Config, model_type: str, car_dir: str) \
     :param config:                  donkey config
     :param model_type:              test specification of model type
     :param tub_dir:                 tub directory (car_dir/tub)
+    :param select:                  filter for records
     :return:                        None
     """
     kl = get_model_by_type(model_type, config)
     tub_dir = os.path.join(car_dir, 'tub')
     # don't shuffle so we can identify data for testing
-    dataset = TubDataset(config, [tub_dir], shuffle=False)
+    dataset = TubDataset(config, [tub_dir], shuffle=False, select=select)
     training_records, validation_records = dataset.train_test_split()
     seq = BatchSequence(kl, config, training_records, True)
     data_train = seq.create_tf_data()
