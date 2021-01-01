@@ -16,19 +16,16 @@ from docopt import docopt
 from PIL import Image
 from progress.bar import IncrementalBar
 
-import donkeycar as dk
 from donkeycar.parts.datastore import Tub as LegacyTub
 from donkeycar.parts.tub_v2 import Tub
 
 
-def convert_to_tub_v2(paths, output_path, include_tub_name=False):
+def convert_to_tub_v2(paths, output_path):
     """
     Convert from old tubs to new one
 
-
     :param paths:               legacy tub paths
     :param output_path:         new tub output path
-    :param include_tub_name:    if we should include legacy tub name into record
     :return:                    None
     """
     empty_record = {'__empty__': True}
@@ -43,9 +40,8 @@ def convert_to_tub_v2(paths, output_path, include_tub_name=False):
             # add input and type for empty records recording
             inputs = legacy_tub.inputs + ['__empty__']
             types = legacy_tub.types + ['boolean']
-            if include_tub_name:
-                inputs.append('tub_name')
-                types.append('str')
+            inputs.append('session_id')
+            types.append('str')
             output_tub = Tub(output_path, inputs, types,
                              list(legacy_tub.meta.items()))
 
@@ -62,8 +58,7 @@ def convert_to_tub_v2(paths, output_path, include_tub_name=False):
                 image_path = os.path.join(legacy_tub.path, image_path)
                 image_data = Image.open(image_path)
                 record['cam/image_array'] = image_data
-                if include_tub_name:
-                    record['tub_name'] = legacy_name
+                record['session_id'] = legacy_name
                 # first record or they are continuous, just append
                 if not previous_index or current_index == previous_index + 1:
                     output_tub.write_record(record)
@@ -91,6 +86,5 @@ if __name__ == '__main__':
 
     input_path = args["--tub"]
     output_path = args["--output"]
-    include_name = args["--include_name"]
     paths = input_path.split(',')
-    convert_to_tub_v2(paths, output_path, include_tub_name=include_name)
+    convert_to_tub_v2(paths, output_path)

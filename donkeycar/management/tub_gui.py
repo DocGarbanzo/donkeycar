@@ -103,8 +103,8 @@ class LabelBar:
             self.center = self.lookup.centered
             text += f' with max value={self.max} centered={self.center}'
         else:
-            text += "... but you don't see a bar because you are missing a " \
-                    "field list entry in your .donkeyrc or it is a string field"
+            text += "... not showing a bar because it is a string field " \
+                    "or there is no field list entry in your .donkeyrc"
         LabelBar.row += 1
         self.context.status.configure(text=text)
 
@@ -137,7 +137,7 @@ class TubUI:
     def __init__(self, window, rc_data):
         self.window = window
         self.rc_data = rc_data
-        self.window.title("Tub GUI")
+        self.window.title("Donkey Tub Manager")
         self.record_map = combine_record_map(self.rc_data.get('field_mapping'))
         # self.window.configure(background='grey45')
         self.run = False
@@ -155,7 +155,7 @@ class TubUI:
         self.drop_down = []
         self.speed_settings = ['0.25', '0.50', '1.00', '1.50', '2.00',
                                '3.00', '4.00']
-        self.speed = None
+        self.speed = 1.0
         self.df = None
         self.lr = [0, 0]
         self.filter_expression = None
@@ -172,10 +172,12 @@ class TubUI:
         img = Image.fromarray(img_arr)
         return ImageTk.PhotoImage(img)
 
-    def update_tub(self):
+    def update_tub(self, reload=False):
         if self.base_path is None or self.config is None:
             return
-        self.tub = Tub(self.base_path, read_only=True)
+        if not os.path.exists(os.path.join(self.base_path, 'manifest.json')):
+            self.update_status(f'Path {self.base_path} is not a valid tub.')
+        self.tub = Tub(self.base_path)
 
         def select(underlying):
             if self.filter_expression is None:
@@ -192,7 +194,8 @@ class TubUI:
         self.current_rec = self.records[self.i]
         self.slider.configure(to=self.len - 1)
 
-        self.df = pd.DataFrame(list(self.tub)).dropna()
+        underlying_generator = (t.underlying for t in self.records)
+        self.df = pd.DataFrame(underlying_generator).dropna()
         to_drop = {'cam/image_array'}
         self.df.drop(labels=to_drop, axis=1, errors='ignore', inplace=True)
         self.df.set_index('_index', inplace=True)
@@ -200,15 +203,17 @@ class TubUI:
         self.drop_down = list(self.df.columns)
         self.var_menu.config(value=self.drop_down)
         self.tub_dir_label.config(text=self.base_path)
-        self.update_plot(self.df)
-        # clear bars:
-        for bar in self.bars.values():
-            bar.destroy()
-        self.bars.clear()
         index = self.current_rec.underlying['_index']
         self.lr = [index, index]
         self.update_status(f'Loaded tub {self.base_path} with '
                                    f'{self.len} records.')
+        # clear bars for new tub only but not for reloading
+        if not reload:
+            for bar in self.bars.values():
+                bar.destroy()
+            self.bars.clear()
+        # update graph
+        self.update_plot_from_current_bars()
 
     def unravel_df(self):
         for k, v in zip(self.tub.manifest.inputs, self.tub.manifest.types):
@@ -229,13 +234,13 @@ class TubUI:
     def build_frame(self):
         # running row
         row = 0
-        self.btn_car_dir = ttk.Button(self.window, text="Car dir",
+        self.btn_car_dir = tk.Button(self.window, text="Car dir",
                                      command=self.browse_car)
         self.btn_car_dir.grid(row=row, column=0, sticky=tk.W, padx=10)
         self.car_dir_label = ttk.Label(self.window)
         self.car_dir_label.grid(row=row, column=1, sticky=tk.W)
 
-        self.btn_tub_dir = ttk.Button(self.window, text="Tub dir",
+        self.btn_tub_dir = tk.Button(self.window, text="Tub dir",
                                      command=self.browse_tub,
                                      state=tk.DISABLED)
         self.btn_tub_dir.grid(row=row, column=2, sticky=tk.W)
@@ -277,25 +282,24 @@ class TubUI:
         self.speed_menu = ttk.OptionMenu(self.ctr_fram, self.speed_var, '1.00',
                                          *self.speed_settings,
                                          command=self.set_speed)
-        self.set_speed("1.00")
         self.speed_menu.grid(row=row, column=1)
 
-        self.btn_bwd = ttk.Button(self.ctr_fram, text="<",
+        self.btn_bwd = tk.Button(self.ctr_fram, text="<",
                                  command=lambda: self.step(False))
         self.btn_bwd.grid(row=row + 1, column=0, sticky=tk.NSEW)
-        self.btn_fwd = ttk.Button(self.ctr_fram, text=">",
+        self.btn_fwd = tk.Button(self.ctr_fram, text=">",
                                  command=lambda: self.step(True))
         self.btn_fwd.grid(row=row + 1, column=1, sticky=tk.NSEW)
 
-        self.btn_rwd = ttk.Button(self.ctr_fram, text="<<",
+        self.btn_rwd = tk.Button(self.ctr_fram, text="<<",
                                  command=lambda: self.thread_run(False))
         self.btn_rwd.grid(row=row + 2, column=0, sticky=tk.NSEW)
 
-        self.btn_play = ttk.Button(self.ctr_fram, text=">>",
+        self.btn_play = tk.Button(self.ctr_fram, text=">>",
                                   command=lambda: self.thread_run(True))
         self.btn_play.grid(row=row + 2, column=1, sticky=tk.NSEW)
 
-        self.btn_stop = ttk.Button(self.ctr_fram, text="Stop",
+        self.btn_stop = tk.Button(self.ctr_fram, text="Stop",
                                   state=tk.DISABLED,
                                   command=self.thread_stop)
         self.btn_stop.grid(row=row + 3, column=0, columnspan=2, sticky=tk.NSEW)
@@ -307,9 +311,9 @@ class TubUI:
         self.slider.grid(column=0, columnspan=6, sticky=tk.NSEW, padx=10)
 
         row += 1
-        self.btn_set_l = ttk.Button(self.window, text="Set left",
+        self.btn_set_l = tk.Button(self.window, text="Set left index",
                                    command=lambda: self.set_lr(True))
-        self.btn_set_r = ttk.Button(self.window, text="Set right",
+        self.btn_set_r = tk.Button(self.window, text="Set right index",
                                    command=lambda: self.set_lr(False))
         self.btn_set_l.grid(row=row, column=0, sticky=tk.W, padx=10)
         self.btn_set_r.grid(row=row, column=1, sticky=tk.W)
@@ -317,18 +321,18 @@ class TubUI:
         self.lr_txt.set(f'Index range [{self.lr[0]}, {self.lr[1]})')
         self.lr_label = ttk.Label(self.window, textvariable=self.lr_txt)
         self.lr_label.grid(row=row, column=2)
-        self.btn_del_lr = ttk.Button(self.window, text="Delete",
+        self.btn_del_lr = tk.Button(self.window, text="Delete",
                                     command=lambda: self.del_lr(True))
-        self.btn_undel_lr = ttk.Button(self.window, text="Undelete",
+        self.btn_undel_lr = tk.Button(self.window, text="Undelete",
                                       command=lambda: self.del_lr(False))
         self.btn_del_lr.grid(row=row, column=3)
         self.btn_undel_lr.grid(row=row, column=4, sticky=tk.E, )
-        self.btn_refresh_tub = ttk.Button(self.window, text="Reload",
-                                         command=self.update_tub)
+        self.btn_refresh_tub = tk.Button(self.window, text="Reload tub",
+                                         command=lambda: self.update_tub(True))
         self.btn_refresh_tub.grid(row=row, column=5, sticky=tk.E, padx=10)
 
         row += 1
-        self.label_filter = ttk.Button(text='Record filter',
+        self.label_filter = tk.Button(text='Set filter',
                                        command=self.update_filter)
         self.label_filter.grid(row=row, column=0, sticky=tk.W, padx=10)
         self.entry_filter_var = tk.StringVar()
@@ -352,7 +356,7 @@ class TubUI:
         self.graph.mpl_connect("key_press_event", self.on_key_press)
 
         # quit button
-        self.but_exit = ttk.Button(self.window, text="Quit", command=self.quit)
+        self.but_exit = tk.Button(self.window, text="Quit", command=self.quit)
         self.but_exit.grid(row=row, column=5, sticky=tk.E)
         # status bar
         row += 1
@@ -362,6 +366,10 @@ class TubUI:
         self.update_config()
         self.update_tub()
         self.update()
+        self.window.bind('<Return>', self.enable_keys)
+
+    def enable_keys(self, event):
+        self.enable_keys = True
 
     def on_key_press(self, event):
         key_press_handler(event, self.graph, self.toolbar)
@@ -375,7 +383,7 @@ class TubUI:
         self.update()
         if not self.run:
             self.update_status(f'Donkey step '
-                                       f'{"forward" if fwd else "backward"}')
+                               f'{"forward" if fwd else "backward"}')
 
     def update(self, update_slider=True):
         if self.records is None or self.config is None:
@@ -400,8 +408,12 @@ class TubUI:
         field = self.var_menu.get()
         self.manage_bar_entry(field)
         self.update()
-        # df for print should contain all bars as long as they don't contain
-        # strings and everything if bars are empty
+        self.update_plot_from_current_bars()
+
+    def update_plot_from_current_bars(self):
+        """ DataFrame for print should contain all bars as long as they don't
+            contain strings and everything if bars are empty
+        """
         field_map = dict(zip(self.tub.manifest.inputs, self.tub.manifest.types))
         cols = [c for c in self.bars.keys() if decompose(c)[0] in field_map and
                 field_map[decompose(c)[0]] != 'str']
@@ -410,6 +422,8 @@ class TubUI:
 
     def set_speed(self, inp):
         self.speed = float(inp)
+        self.update_status(f'Setting speed to {inp} - you can also use the '
+                           f'+/- keys for that.')
 
     def manage_bar_entry(self, field):
         if field in self.bars:
@@ -492,6 +506,7 @@ class TubUI:
         if filter == '':
             self.record_filter = ''
             self.filter_expression = None
+            self.enable_keys = True
             return
         filter_expression = create_filter_string(filter, 
                                                  self.tub.manifest.inputs,

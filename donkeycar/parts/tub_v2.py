@@ -1,6 +1,8 @@
 import atexit
 import os
 import time
+from datetime import datetime
+import json
 
 import numpy as np
 from PIL import Image
@@ -108,7 +110,10 @@ class TubWriter(object):
     """
     def __init__(self, base_path, inputs=[], types=[], metadata=[],
                  max_catalog_len=1000):
-        self.tub = Tub(base_path, inputs, types, metadata, max_catalog_len)
+        self.tub = Tub(base_path, inputs + ['session_id'], types + ['str'],
+                       metadata, max_catalog_len)
+        self.session_id = self.create_session_id()
+
         def shutdown_hook():
             self.close()
 
@@ -116,8 +121,9 @@ class TubWriter(object):
         atexit.register(shutdown_hook)
 
     def run(self, *args):
-        assert len(self.tub.inputs) == len(args)
-        record = dict(zip(self.tub.inputs, args))
+        assert len(self.tub.inputs) - 1 == len(args), \
+            f'Expected {len(self.tub.inputs)-1} inputs but received {len(args)}'
+        record = dict(zip(self.tub.inputs, args + (self.session_id,)))
         self.tub.write_record(record)
         return self.tub.manifest.current_index
 
@@ -125,4 +131,23 @@ class TubWriter(object):
         return self.tub.__iter__()
 
     def close(self):
-        self.tub.manifest.close()
+        self.tub.close()
+
+    def create_session_id(self):
+        idx = len(self.tub.manifest.current_catalog.seekable.line_lengths)
+        contents = self.tub.manifest.current_catalog.seekable.read_from(idx)
+        last_num = -1
+        if contents:
+            last_record = json.loads(contents[0])
+            last_session_id = last_record.get('session_id')
+            if last_session_id:
+                session_id_parts = last_session_id.split('_')
+                if len(session_id_parts) == 2 \
+                        and session_id_parts[1].isnumeric() \
+                        and len(session_id_parts[0].split('-')) == 3:
+                    last_num = int(session_id_parts[1])
+        tub_num = last_num + 1
+        date = datetime.now().strftime('%y-%m-%d')
+        session_id = date + '_' + str(tub_num)
+        return session_id
+
