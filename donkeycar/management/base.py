@@ -442,7 +442,8 @@ class Train(BaseCommand):
         args = self.parse_args(args)
         args.tub = ','.join(args.tub)
         cfg = load_config(args.config)
-        framework = args.framework if args.framework else cfg.DEFAULT_AI_FRAMEWORK
+        framework = args.framework if args.framework \
+            else getattr(cfg, 'DEFAULT_AI_FRAMEWORK', 'tensorflow')
 
         if framework == 'tensorflow':
             from donkeycar.pipeline.training import train

@@ -68,9 +68,24 @@ donkey tubclean <folder containing tubs>
 ## Train the model
 **Note:** _This section only applies to version >= 4.1_
 This command trains the model.
+
 ```bash
-donkey train --tub=<tub_path> [--config=<config.py>] [--model=<model path>] [--model_type=(linear|categorical|inferred)] 
+donkey train --tub=<tub_path> [--config=<config.py>] [--model=<model path>] 
+[--model_type=(linear|categorical|inferred)] [--filter=<expr>]
 ```
+* Uses the data from the `--tub` datastore
+* Uses the config file from the `--config` path (optionally)
+* Saves the model into `--model`
+* Uses the model type `--type`
+* Supports a logic expression to filter records, for example:
+    * `user/throttle > 0` only uses records with positive throttle
+    * `_index >= 500` ignores the first 500 records
+    * `not(user/angle < 0 and user/throttle < 0.4 and _index > 1000)` filters 
+      out all left turns, with lower speed that occurred after the 1000 record
+    * `session_id == "tub_111_20_10_11" or session_id == "tub_112_20_10_11"` 
+      selects only two recordings from the tub. These refer to the v3.X tub 
+      names when converting to the v4.x tub format. 
+
 The `createcar` command still creates a `train.py` file for backward 
 compatibility, but it's not required for training.
 
@@ -94,36 +109,6 @@ donkey makemovie --tub=<tub_path> [--out=<tub_movie.mp4>] [--config=<config.py>]
 * optional `--salient` will overlay a visualization of which pixels excited the NN the most
 * optional `--start` and/or `--end` can specify a range of frame numbers to use.
 * scale will cause ouput image to be scaled by this amount
-
-## Check Tub
-
-This command allows you to see how many records are contained in any/all tubs. It will also open each record and ensure that the data is readable and intact. If not, it will allow you to remove corrupt records.
-
-> Note: This should be moved from manage.py to donkey command
-
-Usage:
-
-```bash
-donkey tubcheck <tub_path> [--fix]
-```
-
-* Run on the host computer or the robot
-* It will print summary of record count and channels recorded for each tub
-* It will print the records that throw an exception while reading
-* The optional `--fix` will delete records that have problems
-
-## Augment Tub
-
-This command allows you to perform the data augmentation on a tub or set of tubs directly. The augmentation is also available in training via the `--aug` flag. Preprocessing the tub can speed up the training as the augmentation can take some time. Also you can train with the unmodified tub and the augmented tub joined together. 
-
-Usage:
-
-```bash
-donkey tubaugment <tub_path> [--inplace]
-```
-
-* Run on the host computer or the robot
-* The optional `--inplace` will replace the original tub images when provided. Otherwise `tub_XY_YY-MM-DD` will be copied to a new tub `tub_XX_aug_YY-MM-DD` and the original data remains unchanged
 
 
 ## Histogram

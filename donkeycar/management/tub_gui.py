@@ -499,9 +499,11 @@ class TubUI:
         if is_del:
             for d in del_list:
                 self.tub.delete_record(d)
+            self.update_status(f'Deleting records {self.lr}')
         else:
             for d in del_list:
                 self.tub.un_delete_record(d)
+            self.update_status(f'Undeleting records {self.lr}')
 
     def update_filter(self):
         filter = self.entry_filter_var.get()
@@ -512,9 +514,8 @@ class TubUI:
             self.enable_keys = True
             self.rc_data['record_filter'] = self.record_filter
             return
-        filter_expression = create_filter_string(filter, 
-                                                 self.tub.manifest.inputs,
-                                                 record_name='record')
+        filter_expression = create_filter_string(
+            filter, self.current_rec.underlying.keys(), record_name='record')
         try:
             record = self.current_rec
             res = eval(filter_expression)
