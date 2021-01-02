@@ -104,10 +104,11 @@ class TubDataset(object):
 def create_filter_string(filter_text: str, inputs: List[str],
                          record_name: str = 'record') -> str:
     """ Converts text like 'user/angle' into 'record.underlying['user/angle']
-    so that it can be used in a filter.
+    so that it can be used in a filter. Will replace only expressions that
+    are found in the inputs list.
 
     :param filter_text: input text like 'user/throttle > 0.1'
-    :param inputs:      input fields of the record
+    :param inputs:      supported input fields of the record
     :param record_name: name of the record in the expression
     :return:            updated string that has all input fields wrapped
     """

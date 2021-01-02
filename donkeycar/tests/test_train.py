@@ -23,7 +23,7 @@ def config() -> Config:
     cfg.IMAGE_DEPTH = 3
     cfg.PRINT_MODEL_SUMMARY = True
     cfg.EARLY_STOP_PATIENCE = 1000
-    cfg.MAX_EPOCHS = 20
+    cfg.MAX_EPOCHS = 5
     cfg.MODEL_CATEGORICAL_MAX_THROTTLE_RANGE = 0.8
     cfg.VERBOSE_TRAIN = True
     cfg.MIN_DELTA = 0.0005
@@ -44,8 +44,8 @@ def car_dir(tmpdir_factory):
 
 # define the test data
 d1 = Data(type='linear', name='lin1', convergence=0.6, pretrained=None)
-d2 = Data(type='categorical', name='cat1', convergence=0.85, pretrained=None)
-d3 = Data(type='inferred', name='inf1', convergence=0.6, pretrained=None)
+d2 = Data(type='categorical', name='cat1', convergence=0.9, pretrained=None)
+d3 = Data(type='inferred', name='inf1', convergence=0.9, pretrained=None)
 d4 = Data(type='latent', name='lat1', convergence=0.5, pretrained=None)
 d5 = Data(type='latent', name='lat2', convergence=0.5, pretrained='lat1')
 test_data = [d1, d2, d3]

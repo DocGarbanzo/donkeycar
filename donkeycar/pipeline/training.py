@@ -100,8 +100,8 @@ def train(cfg: Config, tub_paths: str, model: str, model_type: str,
 
     dataset = TubDataset(cfg, all_tub_paths, select=select)
     training_records, validation_records = dataset.train_test_split()
-    print('Records # Training %s' % len(training_records))
-    print('Records # Validation %s' % len(validation_records))
+    print(f'Records # Training {len(training_records)}')
+    print(f'Records # Validation {len(validation_records)}')
 
     training_pipe = BatchSequence(kl, cfg, training_records, is_train=True)
     validation_pipe = BatchSequence(kl, cfg, validation_records, is_train=False)
