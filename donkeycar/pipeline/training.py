@@ -106,8 +106,10 @@ def train(cfg: Config, tub_paths: str, model: str, model_type: str,
     training_pipe = BatchSequence(kl, cfg, training_records, is_train=True)
     validation_pipe = BatchSequence(kl, cfg, validation_records, is_train=False)
 
-    dataset_train = training_pipe.create_tf_data()
-    dataset_validate = validation_pipe.create_tf_data()
+    dataset_train = training_pipe.create_tf_data().prefetch(
+        tf.data.experimental.AUTOTUNE)
+    dataset_validate = validation_pipe.create_tf_data().prefetch(
+        tf.data.experimental.AUTOTUNE)
     train_size = len(training_pipe)
     val_size = len(validation_pipe)
 
