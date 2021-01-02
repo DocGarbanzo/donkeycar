@@ -11,6 +11,7 @@ import pandas as pd
 import yaml
 import datetime
 import platform
+import atexit
 
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, \
@@ -166,6 +167,8 @@ class TubUI:
         self.window.bind("<Key>", self.handle_char_key)
         self.window.bind("<Left>", self.handle_left_key)
         self.window.bind("<Right>", self.handle_right_key)
+        # Register at exit
+        atexit.register(write_rc, data=self.rc_data)
 
     def get_img(self, record):
         img_arr = record.image()
@@ -507,6 +510,7 @@ class TubUI:
             self.record_filter = ''
             self.filter_expression = None
             self.enable_keys = True
+            self.rc_data['record_filter'] = self.record_filter
             return
         filter_expression = create_filter_string(filter, 
                                                  self.tub.manifest.inputs,
@@ -518,6 +522,7 @@ class TubUI:
             if isinstance(res, bool):
                 self.record_filter = filter
                 self.filter_expression = filter_expression
+                self.rc_data['record_filter'] = self.record_filter
             else:
                 status += ' - non bool expression can\'t be applied'
             self.update_status(status)
@@ -537,7 +542,6 @@ class TubUI:
 
     def quit(self):
         self.run = False
-        self.rc_data['record_filter'] = self.record_filter
         write_rc(self.rc_data)
         try:
             self.window.destroy()
