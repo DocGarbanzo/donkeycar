@@ -453,7 +453,8 @@ class Train(BaseCommand):
             train(cfg, args.tub, args.model, args.type,
                   checkpoint_path=args.checkpoint)
         else:
-            print("Unrecognized framework: {}. Please specify one of 'tensorflow' or 'pytorch'".format(framework))
+            print(f"Unrecognized framework: {framework}. Please specify one of "
+                  f"'tensorflow' or 'pytorch'")
 
 
 def execute_from_command_line():
