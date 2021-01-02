@@ -83,8 +83,7 @@ donkey train --tub=<tub_path> [--config=<config.py>] [--model=<model path>]
     * `not(user/angle < 0 and user/throttle < 0.4 and _index > 1000)` filters 
       out all left turns, with lower speed that occurred after the 1000 record
     * `session_id == "tub_111_20_10_11" or session_id == "tub_112_20_10_11"` 
-      selects only two recordings from the tub. These refer to the v3.X tub 
-      names when converting to the v4.x tub format. 
+      selects only two recordings from the tub. 
 
 The `createcar` command still creates a `train.py` file for backward 
 compatibility, but it's not required for training.
@@ -225,3 +224,30 @@ Example:
 ```bash
 donkey cnnactivations --model models/model.h5 --image data/tub/1_cam-image_array_.jpg
 ```
+
+## Tub manager UI
+
+**Note:** _This section only applies to version >= 4.1.1_
+
+
+Usage:
+
+```bash
+donkey ui
+```
+
+Opens a UI to analyse tub data with features for. 
+* show selected data fields live as values and graphical bars
+* delete or un-delete records
+* try filters for data selection
+* plot data of selected data fields
+
+The UI is an alternative to the web based `donkey tubclean`.
+
+![Tub UI](/assets/tub_ui.png)
+
+If you have more data than `user/angle` and `user/throttle` and want to 
+visualise this through the bars, then you have to add an entry in the 
+`field_mapping` table in the file `~/.donkeyrc` specifying if the data is 
+centered and providing the name of the maximum value of that data in your 
+`myconfig.py`.

@@ -581,7 +581,7 @@ class TubUI:
             self.step(fwd=True)
 
 
-if __name__ == "__main__":
+def main():
     data_rc = read_rc()
     window = tk.Tk()
     # For Linux spice up the optics from 80s to 90s at least
@@ -593,3 +593,7 @@ if __name__ == "__main__":
 
     ui = TubUI(window, data_rc)
     window.mainloop()
+
+
+if __name__ == "__main__":
+    main()

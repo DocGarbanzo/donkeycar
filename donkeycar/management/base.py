@@ -457,6 +457,12 @@ class Train(BaseCommand):
                   f"'tensorflow' or 'pytorch'")
 
 
+class Gui(BaseCommand):
+    def run(self, args):
+        from donkeycar.management.tub_gui import main
+        main()
+
+
 def execute_from_command_line():
     """
     This is the function linked to the "donkey" terminal command.
@@ -472,6 +478,7 @@ def execute_from_command_line():
         'cnnactivations': ShowCnnActivations,
         'update': UpdateCar,
         'train': Train,
+        'ui': Gui,
     }
     
     args = sys.argv[:]
