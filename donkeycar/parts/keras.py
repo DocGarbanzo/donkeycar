@@ -27,7 +27,6 @@ from tensorflow.keras.layers import Conv3D, MaxPooling3D, Conv2DTranspose
 from tensorflow.keras.backend import concatenate
 from tensorflow.keras.models import Model, Sequential
 from tensorflow.python.keras.callbacks import EarlyStopping, ModelCheckpoint
-from tensorflow.keras.optimizers import Optimizer
 
 ONE_BYTE_SCALE = 1.0 / 255.0
 

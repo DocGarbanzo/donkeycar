@@ -180,6 +180,7 @@ class TubUI:
             return
         if not os.path.exists(os.path.join(self.base_path, 'manifest.json')):
             self.update_status(f'Path {self.base_path} is not a valid tub.')
+            return
         self.tub = Tub(self.base_path)
 
         def select(underlying):
@@ -547,9 +548,7 @@ class TubUI:
         try:
             self.window.destroy()
         except Exception as e:
-            exit(str(e))
-        finally:
-            exit(0)
+            print(e)
 
     def handle_char_key(self, event=None):
         if not self.enable_keys:
