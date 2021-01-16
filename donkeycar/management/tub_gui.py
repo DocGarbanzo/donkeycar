@@ -22,13 +22,13 @@ from donkeycar import load_config
 from donkeycar.parts.tub_v2 import Tub
 from donkeycar.pipeline.types import TubRecord, create_filter_string
 
-LookUp = namedtuple('LookUp', ['record_field', 'max_value_id', 'centered'])
+LookUp = namedtuple('LookUp', ['field', 'max_value_id', 'centered'])
 lookup_entries = [
     LookUp('user/angle', '', centered=True),
     LookUp('user/throttle', '', centered=False),
 ]
 
-record_map = {entry.record_field: entry for entry in lookup_entries}
+record_map = {entry.field: entry for entry in lookup_entries}
 rc_path = os.path.expanduser('~/.donkeyrc')
 
 
@@ -42,7 +42,7 @@ def combine_record_map(field_list):
         lookup = LookUp(**entry)
         new_lookups.append(lookup)
 
-    new_record_map = {entry.record_field: entry for entry in new_lookups}
+    new_record_map = {entry.field: entry for entry in new_lookups}
     record_map.update(new_record_map)
     return record_map
 
