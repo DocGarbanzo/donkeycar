@@ -64,6 +64,7 @@ class BackgroundColor(Widget):
 
 
 class BackgroundBoxLayout(BackgroundColor, BoxLayout):
+    radius = NumericProperty(10)
     pass
 
 

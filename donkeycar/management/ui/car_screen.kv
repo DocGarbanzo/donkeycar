@@ -3,8 +3,8 @@
     name: 'car'
     BoxLayout:
         orientation: 'vertical'
-        padding: 10
-        spacing: 10
+        padding: spacing
+        spacing: spacing
         BackgroundBoxLayout:
             orientation: 'vertical'
             size_hint_y: 0.6
@@ -37,7 +37,7 @@
                         'dropdown, select the Tub directory within that '\
                         'directory, usually this is called "data"'
                 GridLayout:
-                    spacing: 10
+                    spacing: spacing
                     cols: 2
                     MyLabel:
                         text: 'Car directory (hit return)'
@@ -74,7 +74,7 @@
             size_hint_y: 0.8
             BoxLayout:
                 orientation: 'vertical'
-                spacing: 10
+                spacing: spacing
                 Header:
                     size_hint_y: 0.5
                     title: 'Push Pilots'
@@ -86,7 +86,7 @@
                 BoxLayout:
                     size_hint_y: None
                     height: common_height
-                    spacing: layout_pad_x
+                    spacing: spacing
                     RoundedToggleButton:
                         id: btn_h5
                         text: 'Sync h5'
@@ -102,7 +102,7 @@
                 BoxLayout:
                     size_hint_y: None
                     height: common_height
-                    spacing: layout_pad_x
+                    spacing: spacing
                     ProgressBar:
                         id: push_bar
                     RoundedButton:
@@ -124,7 +124,7 @@
                         'Highly experimental!!!'
                 GridLayout:
                     cols: 2
-                    spacing: 10
+                    spacing: spacing
                     MyLabel:
                         text: 'Set model type'
                     MySpinner:

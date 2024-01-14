@@ -10,7 +10,7 @@
             "Load config from car directory, typically ~/mycar"
     BoxLayout:
         orientation: 'horizontal'
-        spacing: 10
+        spacing: spacing
         RoundedButton:
             text: 'Load config'
             on_release: root.open_popup()
@@ -26,7 +26,7 @@
         title: 'Tub Loader'
         description: "Load tub from within the car directory, typically ./data"
     BoxLayout:
-        spacing: 10
+        spacing: spacing
         RoundedButton:
             id: tub_button
             text: 'Load tub'
@@ -39,7 +39,7 @@
 
 <TubEditor>
     orientation: 'horizontal'
-    spacing: 10
+    spacing: spacing
     on_lr:
         msg = f'Setting range, '
         if root.lr[0] < root.lr[1]: msg += (f'affecting records inside [{root.lr[0]}, {root.lr[1]}) ' + \
@@ -77,7 +77,7 @@
 
 <TubFilter>:
     orientation: 'horizontal'
-    spacing: 10
+    spacing: spacing
     RoundedButton:
         text: 'Set filter'
         size_hint_x: 0.19
@@ -92,7 +92,7 @@
 
 <DataPlot>:
     padding: 0
-    spacing: 10
+    spacing: spacing
     RoundedButton:
         text: 'Reload Graph'
         on_release: root.plot_from_current_bars()
@@ -104,11 +104,11 @@
 <TubScreen>
     BoxLayout:
         orientation: 'vertical'
-        padding: 10
-        spacing: 10
+        padding: spacing
+        spacing: spacing
         BoxLayout:
             orientation: 'horizontal'
-            spacing: 10
+            spacing: spacing
             size_hint_y: 0.7
             ConfigManager:
                 id: config_manager
@@ -127,7 +127,7 @@
                     " down menu."
             BoxLayout:
                 orientation: 'horizontal'
-                spacing: 10
+                spacing: spacing
                 DataPanel:
                     id: data_panel
                     screen: root

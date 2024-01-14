@@ -36,7 +36,7 @@
             orientation: 'vertical'
             spacing: 20
             BoxLayout:
-                spacing: 10
+                spacing: spacing
                 orientation: 'vertical'
                 id: trafo_list
             RoundedButton:
@@ -51,11 +51,11 @@
     pos_hint: {'center_x': .5, 'center_y': .5}
     BoxLayout:
         orientation: "vertical"
-        padding: 10
-        spacing: 10
+        padding: spacing
+        spacing: spacing
         BackgroundBoxLayout:
             orientation: "vertical"
-            spacing: 10
+            spacing: spacing
             BoxLayout:
                 MyLabel:
                     size_hint_x: 0.5
@@ -91,7 +91,7 @@
         orientation: 'horizontal'
         size_hint_y: None
         height: self.minimum_height + layout_height
-        spacing: 10
+        spacing: spacing
         PilotLoader:
             id: pilot_loader
         RoundedButton:
@@ -114,15 +114,15 @@
 
 <PilotBoard>
     size_hint_y: 1.5
-    spacing: 10
+    spacing: spacing
 
 
 <PilotScreen>:
     name: 'pilot'
     BoxLayout:
         orientation: 'vertical'
-        padding: 10
-        spacing: 10
+        padding: spacing
+        spacing: spacing
         BackgroundBoxLayout:
             orientation: 'vertical'
             size_hint_y: None
@@ -135,7 +135,7 @@
             BoxLayout:
                 orientation: 'horizontal'
                 size_hint_y: 0.6
-                spacing: 10
+                spacing: spacing
                 MyLabel:
                     text: 'Add pilot'
                 RoundedButton:
@@ -171,7 +171,7 @@
                 size_hint_y: None
                 height: common_height
                 orientation: 'horizontal'
-                spacing: 10
+                spacing: spacing
                 RoundedToggleButton:
                     id: button_bright
                     size_hint_x: 0.5
@@ -198,7 +198,7 @@
                 size_hint_y: None
                 height: common_height
                 orientation: 'horizontal'
-                spacing: 10
+                spacing: spacing
                 Transformations:
                     id: pre_transformation
                     title: 'Pre-Augmentation Transformations'
@@ -228,7 +228,7 @@
                     root.index = int(self.value)
             BoxLayout:
                 orientation: 'horizontal'
-                spacing: 10
+                spacing: spacing
                 ControlPanel:
                     id: pilot_control
                     screen: root

@@ -1,9 +1,8 @@
 #:import platform sys.platform
 
 #:set common_height 30
-#:set layout_pad_x 10
-#:set layout_height common_height + layout_pad_x
-#:set layout_pad_xy [layout_pad_x, layout_pad_x // 2]
+#:set spacing 10
+#:set layout_height common_height + spacing
 
 
 #:set font_color 0.8, 0.9, 0.9, 1
@@ -56,7 +55,7 @@
 
 <BackgroundBoxLayout>
     background_color: 0,0,0,0  # the last zero is the critical on, make invisible
-    padding: layout_pad_x
+    padding: spacing
     spacing: 5
     canvas.before:
         Color:
@@ -64,7 +63,7 @@
         RoundedRectangle:
             pos: self.pos
             size: self.size
-            radius: [10,]
+            radius: [root.radius,]
 
 
 <MyLabel>:
@@ -93,8 +92,8 @@
 <PaddedBoxLayout>:
     size_hint_y: None
     height: layout_height
-    padding: layout_pad_xy
-    spacing: layout_pad_x
+    padding: [spacing, spacing // 2]
+    spacing: spacing
 
 
 <StatusBar>:
@@ -103,6 +102,7 @@
     size_hint_y: None
     height: common_height
     BackgroundBoxLayout:
+        radius: 6
         MyLabel:
             valign: 'middle'
             font_size: '12sp'
