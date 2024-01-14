@@ -479,9 +479,8 @@ class ShowPredictionPlots(BaseCommand):
                 tub_record, lambda x: normalize_image(x))
             pilot_angle, pilot_throttle = \
                 model.inference_from_dict(input_dict)
-            y_dict = model.y_transform(tub_record)
-            user_angle, user_throttle \
-                = y_dict[output_names[0]], y_dict[output_names[1]]
+            user_angle = tub_record.underlying['user/angle']
+            user_throttle = tub_record.underlying['user/throttle']
             user_angles.append(user_angle)
             user_throttles.append(user_throttle)
             pilot_angles.append(pilot_angle)
@@ -495,7 +494,7 @@ class ShowPredictionPlots(BaseCommand):
                                      'pilot_throttle': pilot_throttles})
         if dark:
             plt.style.use('dark_background')
-        fig = plt.figure()
+        fig = plt.figure('Tub Plot')
         title = f"Model Predictions\nTubs: {tub_paths}\nModel: {model_path}\n" \
                 f"Type: {model_type}"
         fig.suptitle(title)

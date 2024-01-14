@@ -3,11 +3,8 @@
 #:set common_height 30
 #:set layout_pad_x 10
 #:set layout_height common_height + layout_pad_x
-#:set layout_height_double 2 * common_height + layout_pad_x
 #:set layout_pad_xy [layout_pad_x, layout_pad_x // 2]
 
-#:set font_size_14 '14sp'
-#:set font_size_12 '12sp'
 
 #:set font_color 0.8, 0.9, 0.9, 1
 #:set action_text_color 0.6, 0.6, 0.4, 1
@@ -59,7 +56,7 @@
 
 <BackgroundBoxLayout>
     background_color: 0,0,0,0  # the last zero is the critical on, make invisible
-    padding: 10
+    padding: layout_pad_x
     spacing: 5
     canvas.before:
         Color:
@@ -104,7 +101,7 @@
     orientation: 'vertical'
     padding: [10, 0, 10, 10]
     size_hint_y: None
-    height: 30
+    height: common_height
     BackgroundBoxLayout:
         MyLabel:
             valign: 'middle'
@@ -203,8 +200,6 @@
         valign: 'middle'
         font_size: '12sp'
         color: root.font_color
-        size_hint_x: 0.8
-        padding_x: 10
         canvas.before:
             Color:
                 rgba: label_bar_back_color
@@ -261,6 +256,7 @@
         cols: 2
         MyLabel:
             id: record_num
+            font_size: '14sp'
             text: root.record_display
         MySpinner:
             id: control_spinner
