@@ -495,6 +495,7 @@ class ShowPredictionPlots(BaseCommand):
         if dark:
             plt.style.use('dark_background')
         fig = plt.figure('Tub Plot')
+        fig.set_layout_engine('tight')
         title = f"Model Predictions\nTubs: {tub_paths}\nModel: {model_path}\n" \
                 f"Type: {model_type}"
         fig.suptitle(title)
