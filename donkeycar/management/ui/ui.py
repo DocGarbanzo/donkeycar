@@ -16,7 +16,6 @@ from donkeycar.management.ui.common import AppScreen
 
 Logger.setLevel(LOG_LEVELS["info"])
 
-
 Window.size = (800, 800)
 
 
@@ -34,7 +33,7 @@ class StartScreen(AppScreen):
 
 
 class DonkeyApp(App):
-    title = 'Donkey App'
+    title = 'Donkey Car'
 
     def initialise(self, event):
         self.root.ids.tub_screen.ids.config_manager.load_action()
