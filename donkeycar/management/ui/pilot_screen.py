@@ -30,20 +30,26 @@ class PilotLoader(BoxLayout, FileChooserBase):
     filters = copy(ALL_FILTERS)
 
     def load_action(self):
+        def remove_pilot_from_db(entry):
+            if entry in rc_handler.data['pilots']:
+                rc_handler.data['pilots'].remove(entry)
+
         if self.file_path and self.pilot:
+            entry = [self.file_path, self.model_type]
             try:
                 self.pilot.load(os.path.join(self.file_path))
                 self.is_loaded = True
                 self.ids.pilot_spinner.text = self.model_type
-                entry = [self.file_path, self.model_type]
                 # if successfully loaded, add to rc file
                 if entry not in rc_handler.data['pilots']:
                     rc_handler.data['pilots'].append(entry)
                 Logger.info(f'Pilot: Successfully loaded {self.file_path}')
             except FileNotFoundError:
                 Logger.error(f'Pilot: Model {self.file_path} not found')
+                remove_pilot_from_db(entry)
             except Exception as e:
                 Logger.error(f'Failed loading {self.file_path}: {e}')
+                remove_pilot_from_db(entry)
 
     def on_model_type(self, obj, model_type):
         """ Kivy method that is called if self.model_type changes. """

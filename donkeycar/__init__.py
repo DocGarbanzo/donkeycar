@@ -4,9 +4,7 @@ from pyfiglet import Figlet
 import logging
 from pkg_resources import get_distribution
 
-logger = logging.getLogger(__name__)
-
-__version__ = get_distribution('donkeycar').version
+__version__ = '5.1.dev1+DocGarbanzo'
 
 logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO').upper())
 

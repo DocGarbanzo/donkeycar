@@ -272,6 +272,7 @@
                         root.database.delete_entry(select_spinner.text)
                         root.reload_database()
                         delete_switch.state = 'normal'
+                        self.disabled = True
                 RoundedButton:
                     size_hint_x: 0.75
                     id: update_comment
