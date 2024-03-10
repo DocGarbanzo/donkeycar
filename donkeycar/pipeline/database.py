@@ -21,17 +21,17 @@ class PilotDatabase:
         self.entries = self.read()
 
     def read(self) -> List[Dict]:
-        if os.path.exists(self.path):
-            try:
-                with open(self.path, "r") as read_file:
-                    data = json.load(read_file)
-                    logger.info(f'Found model database {self.path}')
-                    return data
-            except Exception as e:
-                logger.error(f"Could not open database file because: {e}")
-                return []
-        else:
+        if not os.path.exists(self.path):
             logger.warning(f'No model database found at {self.path}')
+            return []
+
+        try:
+            with open(self.path, "r") as read_file:
+                data = json.load(read_file)
+                logger.info(f'Found model database {self.path}')
+                return data
+        except Exception as e:
+            logger.error(f"Could not open database file because: {e}")
             return []
 
     def generate_model_name(self) -> Tuple[str, int]:
