@@ -28,48 +28,64 @@ class TubStatistics(object):
                     f' assuming use {"gym" if gyro_z_index==1 else "real"}')
 
     def generate_laptimes_from_records(self, overwrite=False):
+
+        def new_session(session_id, lap_times, this_session_id, this_lap,
+                               record):
+            if session_id is not None:
+                # copy results of current session
+                res[session_id] = copy(lap_times)
+                # reset lap times
+                lap_times.clear()
+
+            session_id = this_session_id
+            lap = this_lap
+            time_stamp_ms = record['_timestamp_ms']
+            dist = record['car/distance']
+            return session_id, lap, time_stamp_ms, dist, lap_times
+
         session_id = None
         lap = 0
         dist = 0
         time_stamp_ms = None
         lap_times = []
         res = {}
-        # self is iterable
+
         for record in self.tub:
             this_session_id = record.get('_session_id')
             this_lap = record['car/lap']
-            if this_session_id != session_id:
-                # stepping into new session
-                if session_id:
-                    # copy results of current session
-                    res[session_id] = copy(lap_times)
-                    # reset lap_times and lap
-                    lap_times.clear()
-                lap = this_lap
-                session_id = this_session_id
-                time_stamp_ms = record['_timestamp_ms']
-                dist = record['car/distance']
 
-            if this_lap != lap:
-                assert this_lap > lap, f'Found smaller lap {this_lap} than ' \
-                                       f'previous lap {lap} in session {session_id}'
-                this_time_stamp_ms = record['_timestamp_ms']
-                lap_time = (this_time_stamp_ms - time_stamp_ms) / 1000
-                this_dist = record['car/distance']
-                lap_dist = this_dist - dist
-                lap_times.append(dict(lap=lap, time=lap_time, distance=lap_dist))
-                lap = this_lap
-                time_stamp_ms = this_time_stamp_ms
-                dist = this_dist
-        # add last session id
+            if this_session_id != session_id:
+                session_id, lap, time_stamp_ms, dist, lap_times = new_session(
+                    session_id, lap_times, this_session_id, this_lap, record)
+                continue
+
+            if this_lap == lap:
+                continue
+
+            assert this_lap > lap, (f'Found smaller lap {this_lap} than previous'
+                                    f' lap {lap} in session {session_id}')
+
+            this_time_stamp_ms = record['_timestamp_ms']
+            lap_time = (this_time_stamp_ms - time_stamp_ms) / 1000
+            this_dist = record['car/distance']
+            lap_dist = this_dist - dist
+            lap_times.append(dict(lap=lap, time=lap_time, distance=lap_dist))
+
+            lap = this_lap
+            time_stamp_ms = this_time_stamp_ms
+            dist = this_dist
+
+        assert session_id is not None, "Session id should not be None"
         res[session_id] = lap_times
+
         for sess_id, lap_times in res.items():
             meta_session_id_dict = self.tub.manifest.metadata.get(sess_id)
             if not meta_session_id_dict:
                 self.tub.manifest.metadata[sess_id] = dict(laptimer=lap_times)
-            elif 'laptimer' in meta_session_id_dict and overwrite or \
-                    'laptimer' not in meta_session_id_dict:
+            elif ('laptimer' in meta_session_id_dict and overwrite
+                  or 'laptimer' not in meta_session_id_dict):
                 meta_session_id_dict['laptimer'] = lap_times
+
         self.tub.manifest.write_metadata()
         logger.info(f'Generated lap times {res}')
 

@@ -999,19 +999,22 @@ def square_plus_controller(in_tensor, size, l2, seq_len=None,
 
 
 def create_name(has_lap_pct, imu_dim, mem_len, multi_input, seq_len, size):
+    name = None
+
     if multi_input:
         if imu_dim:
             name = f'SquarePlusImu_{size}_{imu_dim}'
         elif has_lap_pct:
             name = f'SquarePlusMemLap_{size}_{mem_len}'
         elif mem_len:
-            name = f'SquarePlusMem_{size}_{mem_len}'
             assert seq_len is None, "SquarePlusMem doesn't work with LSTM"
-        else:
-            raise RuntimeError("Needs imu dim or mem length")
+            name = f'SquarePlusMem_{size}_{mem_len}'
     else:
         name = 'SquarePlus_' + size
+
     if seq_len:
         name += '_lstm_' + str(seq_len)
+
     return name
+
 
