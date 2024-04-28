@@ -1,6 +1,4 @@
-# working: transfer lists
-
-import board # type: ignore
+import board  # type: ignore
 import digitalio
 import pulseio
 import pwmio
@@ -153,6 +151,7 @@ def main():
             count += 1
     except KeyboardInterrupt:
         led.value = False   
+
 
 if __name__ == '__main__':
     main()
