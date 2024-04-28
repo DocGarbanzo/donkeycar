@@ -46,6 +46,12 @@ def output_pin_from_dict(d):
 
 
 def setup(str_in, input_pins, output_pins):
+    for p in input_pins:
+        p.deinit()
+    for p in output_pins:
+        p.deinit()
+    input_pins.clear()
+    output_pins.clear()
     d = dict()
     try:
         d = json.loads(str_in)
@@ -98,9 +104,11 @@ def read(serial, input_pins, output_pins, led, is_setup):
         led.value = True
         bytes_in = serial.readline()
         str_in = bytes_in.decode()[:-1]
-        if str_in[0] == '[' and is_setup:
+        serial.reset_input_buffer()
+        # because we have timeout, str_in can be empty
+        if str_in and str_in[0] == '[' and is_setup:
             update_output_pins(str_in, output_pins)
-        elif str_in[0] == '{':
+        elif str_in and str_in[0] == '{':
             res = setup(str_in, input_pins, output_pins)
     else:
         led.value = False
@@ -126,14 +134,15 @@ def write(serial, input_pins):
 
 def main():
     serial = usb_cdc.data
+    serial.timeout = 0.01
     serial.reset_input_buffer()
     led = digitalio.DigitalInOut(board.LED)
     led.direction = digitalio.Direction.OUTPUT
-    input_pins = []
-    output_pins = []
+    led.value = False
     count = 0
     is_setup = False
-    led.value = False
+    input_pins = []
+    output_pins = []
     try:
         while True:
             # reading input
@@ -141,12 +150,9 @@ def main():
             # sending output, catching number of bytes written
             if is_setup:
                 n = write(serial, input_pins)
-            # if count % 1000 == 0:
-            #     print(f'Count: {count}')    
             count += 1
     except KeyboardInterrupt:
-        led.value = False
-
+        led.value = False   
 
 if __name__ == '__main__':
     main()
