@@ -1,10 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Sun Jun 25 10:44:24 2017
-@author: wroscoe
-"""
-
 import time
 import numpy as np
 import logging
@@ -100,8 +93,9 @@ class Vehicle:
         logger.info(f'Adding part {part.__class__.__name__}.')
         entry = {'part': part, 'inputs': inputs, 'outputs': outputs,
                  'run_condition': run_condition}
-
-        if threaded:
+        all_parts = [p['part'] for p in self.parts]
+        # allow adding a part multiple times, but start its thread only once
+        if threaded and part not in all_parts:
             t = Thread(target=part.update, args=())
             t.daemon = True
             entry['thread'] = t
@@ -132,8 +126,6 @@ class Vehicle:
         max_loop_count : int
             Maximum number of loops the drive loop should execute. This is
             used for testing that all the parts of the vehicle work.
-        verbose: bool
-            If debug output should be printed into shell
         """
         loop_time = 1.0 / rate_hz
         self.loop_count = 0

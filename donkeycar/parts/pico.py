@@ -15,7 +15,7 @@ class Pico:
     To set up the pins on the pico, we need to send a configuration dictionary.
     An example is here:
 
-    setup_dict = {
+    pin_configuration = {
         'input_pins': {
             'pin_13': dict(gpio='GP13', mode='INPUT', pull_up=False),
             'pulse_in': dict(gpio='GP16', mode='PULSE_IN', maxlen=4),
@@ -47,6 +47,14 @@ class Pico:
         'OUTPUT': for digital output
         'PWM': for pulse width modulation output
     See above examples for the required keys for each mode.
+
+    The Pi Pico stores the pin configuration in non-volatile memory (NVM) and
+    reloads it on startup. Therefore, it is not necessary to send the pin
+    configuration every time the Pico is started. As long as the pin
+    configuration is not changed there is no need to every send the
+    configuration a second time.
+
+
     """
 
     def __init__(self, port: str = '/dev/ttyACM1',
@@ -56,7 +64,8 @@ class Pico:
         Initialize the Pico part.
         :param port:                port for data connection
         :param pin_configuration:   configuration for the pins (see above)
-        :param send_config:
+        :param send_config:         if the configuration should be sent to
+                                    the Pico at startup
         """
         self.serial = serial.Serial(port, 115200)
         self.counter = 0
@@ -110,3 +119,75 @@ class Pico:
         """
         self.running = False
         logger.info(f"Pico disconnected, ran {self.counter} loops")
+
+
+class PicoPWMOutput:
+    """
+    Donkey part to convert an input float number into a pwm duty cycle output
+    for the Pico's PWMOut pins. The input is a float in [in_min, in_max]
+    mapping to a duty cycle float within [duty_min, duty_max].
+    Note you can provide duty_max < duty_min, if an inversion of the signal
+    is required. Standard RC ESC and sero signals range between 1000us and
+    2000us, with 1500us being the center. At a 60Hz frequency this translates
+    to duty cycles between 6%-12%.
+    """
+
+    def __init__(self, in_min=0.0, in_max=1.0, duty_min=0.06, duty_max=0.012):
+        """
+        Initialize the PicoPWMOut part.
+        :param in_min:      minimum input value
+        :param in_max:      maximum input value
+        :param duty_min:    minimum duty cycle
+        :param duty_max:    maximum duty cycle
+        """
+        self.in_min = in_min
+        self.in_max = in_max
+        self.duty_min = duty_min
+        self.duty_max = duty_max
+        logger.info(f"PicoPWMOut added")
+
+    def run(self, x):
+        res = (self.in_min + (x - self.in_min)
+               * (self.duty_max - self.duty_min) / (self.in_max - self.in_min))
+        return res
+
+    def shutdown(self):
+        pass
+
+
+class PicoPWMInput:
+    """
+    Donkey part to convert a PulseIn signal from the Pico into a float output
+    between out min and out max. The PulseIn signal is expected to be a list
+    of integers containing hi, lo signals in microseconds.
+
+    """
+    def __init__(self, out_min=0.0, out_max=1.0, out_center=None,
+                 duty_min=0.06, duty_max=0.012):
+
+        """
+        Initialize the PicoPWMInput part.
+        :param out_min:     minimum output value
+        :param out_max:     maximum output value
+        :param out_center:      center value
+        :param duty_min:    minimum duty cycle
+        :param duty_max:    maximum duty cycle
+        """
+        self.out_min = out_min
+        self.out_max = out_max
+        self.out_center = out_center or (out_max + out_min) / 2
+        self.duty_min = duty_min
+        self.duty_max = duty_max
+        logger.info(
+            f"PicoPWMInput added with min:{out_min} and max:{out_max} and "
+            f"center:{self.out_center}")
+
+    def run(self, pulse_in):
+        # most recent measurements will be in the last 2 entries
+        if pulse_in and len(pulse_in) > 2:
+            duty = min(pulse_in[-2:]) / sum(pulse_in[-2:])
+            duty_rel = (duty - self.duty_min) / (self.duty_max - self.duty_min)
+            res = (self.out_min + (duty_rel - self.out_min)
+                   * (self.out_max - self.out_min))
+            return res
+        return self.out_center
