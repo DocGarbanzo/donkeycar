@@ -14,7 +14,8 @@ class Config:
             with open(filename, mode='rb') as config_file:
                 exec(compile(config_file.read(), filename, 'exec'), d.__dict__)
         except IOError as e:
-            e.strerror = 'Unable to load configuration file (%s)' % e.strerror
+            e.strerror = (f'Unable to load configuration file {e.strerror} '
+                          f'from path: {filename}')
             raise
         self.from_object(d)
         return True

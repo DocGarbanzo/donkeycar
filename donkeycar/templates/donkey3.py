@@ -611,7 +611,7 @@ def benchmark(cfg, model_path, verbose=False):
 if __name__ == '__main__':
     logger.info(f'Starting run of {__file__}')
     args = docopt(__doc__)
-    my_cfg = args.get('--my_cfg')
+    my_cfg = args.get('--my_cfg', '')
     config = dk.load_config(myconfig=my_cfg)
     if args['drive']:
         drive(cfg=config,
