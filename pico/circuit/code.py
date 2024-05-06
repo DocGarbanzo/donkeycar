@@ -1,12 +1,58 @@
-import board  # type: ignore
+import time
+import board
 import digitalio
+import analogio
 import pulseio
 import pwmio
 import usb_cdc
 import json
+import microcontroller
 
 
-def input_pin_from_dict(d):
+def write_bytes_to_nvm(byte_data):
+    # first clear the memory
+    l = len(byte_data)
+    if l >= 10000:
+        print(f'Cannot write {l} bytes to nvm, too large.')
+    bytes_to_save = f'{l:04}'.encode() + byte_data
+    microcontroller.nvm[0:l+4] = bytes_to_save
+    print(f'Wrote {l} bytes to nvm.')
+
+
+def bytes_to_dict(byte_data):
+    if byte_data == b'':
+        return {}
+    str_in = byte_data.decode()[:-1]
+    if not str_in:
+        return {}
+    try:
+        out_dict = json.loads(str_in)
+        return out_dict
+    except ValueError as e:
+        print(f'Failed to decode JSON because of {e}')
+    return {}
+
+
+def dict_to_bytes(dict_data):
+    str_out = json.dumps(dict_data) + '\n'
+    byte_out = str_out.encode()
+    return byte_out
+
+
+def read_dict_from_nvm():
+    lb = microcontroller.nvm[0:4]
+    lsb = lb.decode()
+    if not lsb.isdigit():
+        print(f'Failed to read length from nvm: {lsb}')
+        return {}
+    l = int(lsb)
+    byte_data = microcontroller.nvm[4:l+4]  # Read from NVM
+    dict_data = bytes_to_dict(byte_data)
+    print(f'Read setup dict from nvm: {dict_data}')
+    return dict_data
+
+
+def pin_from_dict(d):
     gpio = getattr(board, d['gpio'])
     assert gpio != board.LED, 'Cannot use LED pin as input'
     pin = None
@@ -19,113 +65,93 @@ def input_pin_from_dict(d):
     elif d['mode'] == 'PULSE_IN':
         pin = pulseio.PulseIn(gpio, maxlen=d.get('maxlen', 2))
         print(f'Configured pulse-in pin, gpio: {gpio}, maxlen: {pin.maxlen}')
-    return pin
-
-
-def output_pin_from_dict(d):
-    gpio = getattr(board, d['gpio'])
-    assert gpio != board.LED, 'Cannot use LED pin as output'
-    pin = None
-    if d['mode'] == 'OUTPUT':
+    elif d['mode'] == 'ANALOG_IN':
+        pin = analogio.AnalogIn(gpio)
+        print(f'Configured analog input pin, gpio: {gpio}')
+    elif d['mode'] == 'OUTPUT':
         pin = digitalio.DigitalInOut(gpio)
         pin.direction = digitalio.Direction.OUTPUT
         pin.value = False
-        print(f'Configured digital output pin, gpio: {gpio},', 
+        print(f'Configured digital output pin, gpio: {gpio},',
               f'value: {pin.value}')
     elif d['mode'] == 'PWM':
         duty_cycle_int = int(d.get('duty_cycle', 0.09) * 65535)
         freq = int(d.get('frequency', 60))
         pin = pwmio.PWMOut(gpio, frequency=freq)
         pin.duty_cycle = duty_cycle_int
-        print(f'Configured pwm output pin, gpio: {gpio},',  
-              f'frequency: {pin.frequency},', 
+        print(f'Configured pwm output pin, gpio: {gpio},',
+              f'frequency: {pin.frequency},',
               f'duty_cycle: {pin.duty_cycle/65535}')
     return pin
 
 
-def setup(str_in, input_pins, output_pins):
-    for p in input_pins:
-        p.deinit()
-    for p in output_pins:
-        p.deinit()
+def setup(setup_dict, input_pins, output_pins, store=False):
+    if not setup_dict:
+        return False
+    for pin in (input_pins | output_pins).values():
+        pin.deinit()
     input_pins.clear()
     output_pins.clear()
-    d = dict()
-    try:
-        d = json.loads(str_in)
-    except ValueError as e:
-        print(f'Setup failed because of {e}. ' + 
-              f'Expected json, but got: {str_in}')
-        return False
-    print(f'Received setup dict: {d}')
-    for input_pin in d.get('input_pins', []):
-        try:
-            pin = input_pin_from_dict(input_pin)
-            input_pins.append(pin)
-        except Exception as e:
-            print(f'Setup failed because of {e}.')
-    for output_pin in d.get('output_pins', []):
-        try:
-            pin = output_pin_from_dict(output_pin)
-            output_pins.append(pin)
-        except Exception as e:
-            print(f'Setup failed because of {e}.')
+    print(f'Received setup dict: {setup_dict}')
+    t_list = zip([input_pins, output_pins], ['input_pins', 'output_pins'])
+    for pins, pin_key in t_list:
+        for pin_name, pin_dict in setup_dict.get(pin_key, {}).items():
+            try:
+                pins[pin_name] = pin_from_dict(pin_dict)
+            except Exception as e:
+                print(f'Setup failed because of {e}.')
+                return False
+    
+    if store:
+        byte_data = dict_to_bytes(setup_dict)
+        write_bytes_to_nvm(byte_data)
+    print(f'Created input pins: {input_pins}')
+    print(f'Created output pins: {output_pins}')
     return True
 
 
-def update_output_pins(str_in, output_pins):
-    try:
-        float_list = [float(x) for x in str_in.strip('[]').split(', ')]
-    except ValueError as e:
-        print(f'Could not update output pins because of {e}.', 
-              f'Expected list of floats, but got: {str_in}')
-        float_list = []
-    assert len(float_list) == len(output_pins), \
-        'Number of values does not match number of output pins. '\
-        f'str_in: {str_in}, float_list: {float_list}, out_pins: {output_pins}'
-    for pin, value in zip(output_pins, float_list):
+def update_output_pins(output_data, output_pins):
+    for pin_name, value in output_data.items():
+        out_pin = output_pins.get(pin_name)
         try:
-            if isinstance(pin, digitalio.DigitalInOut):
-                pin.value = bool(value)
-            elif isinstance(pin, pwmio.PWMOut):
-                pin.duty_cycle = int(value * 65535)
+            if isinstance(out_pin, digitalio.DigitalInOut):
+                out_pin.value = bool(value)
+            elif isinstance(out_pin, pwmio.PWMOut):
+                out_pin.duty_cycle = int(value * 65535)
             else:
-                print(f'Cannot update pin {pin} with value {value}')
+                print(f'Cannot update pin out_pin: {pin_name} \
+                      because of unknown type.')
         except ValueError as e:
-            print(f'Failed update pin {pin} with value {value} because of {e}')
+            print(f'Failed update output pin {pin_name} because of {e}')
 
 
 def read(serial, input_pins, output_pins, led, is_setup):
-    res = is_setup
-    wait = serial.in_waiting
-    if wait > 0:
+    if serial.in_waiting > 0:
         led.value = True
         bytes_in = serial.readline()
-        str_in = bytes_in.decode()[:-1]
         serial.reset_input_buffer()
         # because we have timeout, str_in can be empty
-        if str_in and str_in[0] == '[' and is_setup:
-            update_output_pins(str_in, output_pins)
-        elif str_in and str_in[0] == '{':
-            res = setup(str_in, input_pins, output_pins)
+        read_dict = bytes_to_dict(bytes_in)
+        # if setup dict sent, this contains 'input_pins' or 'output_pins'
+        if 'input_pins' in read_dict or 'output_pins' in read_dict:
+            is_setup = setup(read_dict, input_pins, output_pins, store=True)
+        elif is_setup:
+            update_output_pins(read_dict, output_pins)
     else:
         led.value = False
-    return res
+    return is_setup
 
 
-def write(serial, input_pins):
+def write(serial, input_pins, write_dict):
     """ Return list if no error or return error as string"""
-    out_list = []
-    for p in input_pins:
-        if type(p) is digitalio.DigitalInOut:
-            out_list.append(p.value)
-        elif type(p) is pulseio.PulseIn:
-            plist = [p[i] for i in range(len(p))]
-            out_list.append(list(plist))
+    for name, pin in input_pins.items():
+        if type(pin) in (digitalio.DigitalInOut, analogio.AnalogIn):
+            write_dict[name] = pin.value
+        elif type(pin) is pulseio.PulseIn:
+            plist = [pin[i] for i in range(len(pin))]
+            write_dict[name] = list(plist)
 
-    out_string = str(out_list)
-    out_string += '\n' 
-    byte_out = out_string.encode()      
+    byte_out = dict_to_bytes(write_dict)
     n = serial.write(byte_out)
     return n
 
@@ -137,21 +163,33 @@ def main():
     led = digitalio.DigitalInOut(board.LED)
     led.direction = digitalio.Direction.OUTPUT
     led.value = False
+
+    input_pins = {}
+    output_pins = {}
+    # initialise input/output pins from nvm
+    setup_dict = read_dict_from_nvm()
+    is_setup = setup(setup_dict, input_pins, output_pins, store=False)
+    print(f'Successful setup from nvm: {is_setup}.')
+    write_dict = {}
     count = 0
-    is_setup = False
-    input_pins = []
-    output_pins = []
+    tic = time.monotonic()
+    toc = tic
+    total_time = 0
     try:
         while True:
             # reading input
             is_setup = read(serial, input_pins, output_pins, led, is_setup)
             # sending output, catching number of bytes written
             if is_setup:
-                n = write(serial, input_pins)
+                n = write(serial, input_pins, write_dict)
+            toc = time.monotonic()
+            total_time += toc - tic
+            tic = toc
             count += 1
+            if count % 1000 == 0:
+                print(f'Average loop time: {total_time/count*1000:.2f}ms')
     except KeyboardInterrupt:
-        led.value = False   
-
+        led.value = False
 
 if __name__ == '__main__':
     main()
