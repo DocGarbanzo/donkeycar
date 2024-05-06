@@ -107,6 +107,9 @@ class Pico:
         """
         Donkey parts interface
         """
+        # allow receiving no data and just returning the current state
+        if not inputs:
+            return self.receive_dict.values()
         assert len(inputs) == self.num_inputs, \
             f"Expected {self.num_inputs} inputs but received {len(inputs)}"
         for k in self.send_dict.keys():
