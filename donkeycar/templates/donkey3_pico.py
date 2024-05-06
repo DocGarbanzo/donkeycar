@@ -91,7 +91,7 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
                                  duty_max=cfg.PICO_STEERING_MAX_DUTY)
     car.add(pwm_steering, inputs=['user/angle'],
             outputs=['pico/write_steering_pwm'])
-    car.add(pico, inputs=['pico/write_steering_pwm'])
+    car.add(pico, inputs=['pico/write_steering_pwm'], threaded=True)
 
     # # add odometer -------------------------------------------------------------
     # odo = Odometer(gpio=cfg.ODOMETER_GPIO,
@@ -183,8 +183,9 @@ def led(cfg):
 if __name__ == '__main__':
     logger.info(f'Starting run of {__file__}')
     args = docopt(__doc__)
-    my_cfg = args.get('--my_cfg')
-    config = dk.load_config(myconfig=my_cfg)
+    # my_cfg = args.get('--my_cfg')
+    # config = dk.load_config(myconfig=my_cfg)
+    config = dk.load_config()
     if args['drive']:
         drive(cfg=config,
               use_pid=args['--pid'],
