@@ -116,6 +116,12 @@ class Pico:
             self.send_dict[k] = inputs[k]
         return self.receive_dict.values()
 
+    def run(self, *inputs):
+        """
+        Donkey parts interface. Allow adding as non-threaded for multiple use.
+        """
+        return self.run_threaded(*inputs)
+
     def shutdown(self):
         """
         Donkey parts interface

@@ -91,7 +91,7 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
                                  duty_max=cfg.PICO_STEERING_MAX_DUTY)
     car.add(pwm_steering, inputs=['user/angle'],
             outputs=['pico/write_steering_pwm'])
-    car.add(pico, inputs=['pico/write_steering_pwm'], threaded=True)
+    car.add(pico, inputs=['pico/write_steering_pwm'])
 
     # # add odometer -------------------------------------------------------------
     # odo = Odometer(gpio=cfg.ODOMETER_GPIO,
