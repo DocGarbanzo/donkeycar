@@ -71,10 +71,10 @@ class Pico:
         self.counter = 0
         self.running = True
         self.pin_configuration = pin_configuration
+        self.send_keys = pin_configuration.get('output_pins', {}).keys()
         self.send_dict = dict()
         self.receive_dict = dict()
         self.send_config = send_config
-        self.num_inputs = len(pin_configuration.get('input_pins', {}))
         logger.info(f"Pico added on port: {port}")
 
     def update(self):
@@ -107,20 +107,17 @@ class Pico:
         """
         Donkey parts interface
         """
+        n = len(self.receive_dict)
+        ret = list(self.receive_dict.values()) if n > 1 \
+            else list(self.receive_dict.values())[0] if n == 1 else None
         # allow receiving no data and just returning the current state
         if not inputs:
-            return self.receive_dict.values()
-        assert len(inputs) == self.num_inputs, \
-            f"Expected {self.num_inputs} inputs but received {len(inputs)}"
-        for k in self.send_dict.keys():
-            self.send_dict[k] = inputs[k]
-        return self.receive_dict.values()
-
-    def run(self, *inputs):
-        """
-        Donkey parts interface. Allow adding as non-threaded for multiple use.
-        """
-        return self.run_threaded(*inputs)
+            return ret
+        assert len(inputs) == len(self.send_keys), \
+            f"Expected {len(self.send_keys)} inputs but received {len(inputs)}"
+        for key, inp in zip(self.send_keys, inputs):
+            self.send_dict[key] = inp
+        return ret
 
     def shutdown(self):
         """
@@ -141,7 +138,8 @@ class PicoPWMOutput:
     to duty cycles between 6%-12%.
     """
 
-    def __init__(self, in_min=0.0, in_max=1.0, duty_min=0.06, duty_max=0.012):
+    def __init__(self, in_min=0.0, in_max=1.0, duty_min=0.06, duty_max=0.012,
+                 round_output_digits=3):
         """
         Initialize the PicoPWMOut part.
         :param in_min:      minimum input value
@@ -153,12 +151,15 @@ class PicoPWMOutput:
         self.in_max = in_max
         self.duty_min = duty_min
         self.duty_max = duty_max
-        logger.info(f"PicoPWMOut added")
+        self.round_output_digits = round_output_digits
+        logger.info(f"PicoPWMOut created with min:{in_min}, max:{in_max}, " 
+                    f"duty min:{duty_min}, duty max:{duty_max}, round digits: "
+                    f"{round_output_digits}")
 
     def run(self, x):
-        res = (self.in_min + (x - self.in_min)
+        res = (self.duty_min + (x - self.in_min)
                * (self.duty_max - self.duty_min) / (self.in_max - self.in_min))
-        return res
+        return round(res, self.round_output_digits)
 
     def shutdown(self):
         pass
@@ -188,7 +189,7 @@ class PicoPWMInput:
         self.duty_min = duty_min
         self.duty_max = duty_max
         logger.info(
-            f"PicoPWMInput added with min:{out_min} and max:{out_max} and "
+            f"PicoPWMInput created with min:{out_min} and max:{out_max} and "
             f"center:{self.out_center}")
 
     def run(self, pulse_in):
@@ -196,7 +197,6 @@ class PicoPWMInput:
         if pulse_in and len(pulse_in) > 2:
             duty = min(pulse_in[-2:]) / sum(pulse_in[-2:])
             duty_rel = (duty - self.duty_min) / (self.duty_max - self.duty_min)
-            res = (self.out_min + (duty_rel - self.out_min)
-                   * (self.out_max - self.out_min))
+            res = self.out_min + duty_rel * (self.out_max - self.out_min)
             return res
         return self.out_center
