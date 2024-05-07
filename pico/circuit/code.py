@@ -101,7 +101,7 @@ def setup(setup_dict, input_pins, output_pins, store=False):
             except Exception as e:
                 print(f'Setup failed because of {e}.')
                 return False
-    
+
     if store:
         byte_data = dict_to_bytes(setup_dict)
         write_bytes_to_nvm(byte_data)
@@ -186,12 +186,10 @@ def main():
             total_time += toc - tic
             tic = toc
             count += 1
-            if count % 1000 == 0:
-                print(f'Average loop time: {total_time/count*1000:.2f}ms')
     except KeyboardInterrupt:
         led.value = False
 
+
 if __name__ == '__main__':
     main()
-
 
