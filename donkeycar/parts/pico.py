@@ -1,6 +1,7 @@
 import serial
 import json
 import logging
+from threading import Lock
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,7 @@ class Pico:
         self.send_dict = dict()
         self.receive_dict = dict()
         self.send_config = send_config
+        self.lock = Lock()
         logger.info(f"Pico added on port: {port}")
 
     def update(self):
@@ -86,7 +88,9 @@ class Pico:
             pack = json.dumps(self.pin_configuration) + '\n'
             self.serial.write(pack.encode())
         while self.running:
+            self.lock.acquire()
             pack = json.dumps(self.send_dict) + '\n'
+            self.lock.release()
             self.serial.write(pack.encode())
             # only read if there is something to read
             if self.serial.in_waiting == 0:
@@ -97,7 +101,9 @@ class Pico:
                 logger.debug(f'Last received: {bytes_in.decode()[:-1]}')
             try:
                 received_dict = json.loads(str_in)
+                self.lock.acquire()
                 self.receive_dict.update(received_dict)
+                self.lock.release()
             except ValueError as e:
                 logger.error(f'Failed to load json because of {e}. Expected'
                              f' json, but got: +++{str_in}+++')
@@ -107,16 +113,19 @@ class Pico:
         """
         Donkey parts interface
         """
+        self.lock.acquire()
         n = len(self.receive_dict)
         ret = list(self.receive_dict.values()) if n > 1 \
             else list(self.receive_dict.values())[0] if n == 1 else None
         # allow receiving no data and just returning the current state
         if not inputs:
+            self.lock.release()
             return ret
         assert len(inputs) == len(self.send_keys), \
             f"Expected {len(self.send_keys)} inputs but received {len(inputs)}"
         for key, inp in zip(self.send_keys, inputs):
             self.send_dict[key] = inp
+        self.lock.release()
         return ret
 
     def run(self, *inputs):
