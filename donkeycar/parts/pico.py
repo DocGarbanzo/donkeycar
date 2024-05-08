@@ -1,3 +1,5 @@
+import time
+
 import serial
 import json
 import logging
@@ -107,6 +109,7 @@ class Pico:
             except ValueError as e:
                 logger.error(f'Failed to load json because of {e}. Expected'
                              f' json, but got: +++{str_in}+++')
+            time.sleep(0)
             self.counter += 1
 
     def run_threaded(self, *inputs):
