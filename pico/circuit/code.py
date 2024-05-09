@@ -40,6 +40,7 @@ def dict_to_bytes(dict_data):
 
 
 def read_dict_from_nvm():
+    # TODO: need to try/catch if rubbish in nvm so code doesn't fall over.
     lb = microcontroller.nvm[0:4]
     lsb = lb.decode()
     if not lsb.isdigit():
