@@ -90,13 +90,12 @@ class Pico:
             pack = json.dumps(self.pin_configuration) + '\n'
             self.serial.write(pack.encode())
         while self.running:
-            self.lock.acquire()
-            pack = json.dumps(self.send_dict) + '\n'
-            self.lock.release()
-            self.serial.write(pack.encode())
-            # only read if there is something to read
-            no_input = True
             try:
+                self.lock.acquire()
+                pack = json.dumps(self.send_dict) + '\n'
+                self.lock.release()
+                self.serial.write(pack.encode())
+                # only read if there is something to read
                 no_input = (self.serial.in_waiting == 0)
             except Exception as e:
                 logger.error(f'Problem with serial input {e}')
