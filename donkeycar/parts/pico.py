@@ -98,6 +98,7 @@ class Pico:
             if self.serial.in_waiting == 0:
                 continue
             bytes_in = self.serial.read_until()
+            self.serial.reset_input_buffer()
             str_in = bytes_in.decode()[:-1]
             if self.counter % 1000 == 0:
                 logger.debug(f'Last received: {bytes_in.decode()[:-1]}')
