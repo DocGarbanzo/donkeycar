@@ -107,8 +107,9 @@ class Pico:
                 self.receive_dict.update(received_dict)
                 self.lock.release()
             except ValueError as e:
-                logger.error(f'Failed to load json because of {e}. Expected'
-                             f' json, but got: +++{str_in}+++')
+                logger.error(f'Failed to load json in loop {self.counter} '
+                             f'because of {e}. Expected json, but got: '
+                             f'+++{str_in}+++')
             time.sleep(0)
             self.counter += 1
 
