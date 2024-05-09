@@ -95,7 +95,12 @@ class Pico:
             self.lock.release()
             self.serial.write(pack.encode())
             # only read if there is something to read
-            if self.serial.in_waiting == 0:
+            no_input = True
+            try:
+                no_input = (self.serial.in_waiting == 0)
+            except Exception as e:
+                logger.error(f'Problem with serial input {e}')
+            if no_input:
                 continue
             bytes_in = self.serial.read_until()
             self.serial.reset_input_buffer()
