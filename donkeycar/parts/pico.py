@@ -90,6 +90,7 @@ class Pico:
             pack = json.dumps(self.pin_configuration) + '\n'
             self.serial.write(pack.encode())
         while self.running:
+            no_input = True
             try:
                 self.lock.acquire()
                 pack = json.dumps(self.send_dict) + '\n'
