@@ -40,18 +40,20 @@ def dict_to_bytes(dict_data):
 
 
 def read_dict_from_nvm():
-    # TODO: need to try/catch if rubbish in nvm so code doesn't fall over.
-    lb = microcontroller.nvm[0:4]
-    lsb = lb.decode()
-    if not lsb.isdigit():
-        print(f'Failed to read length from nvm: {lsb}')
+    try:
+        lb = microcontroller.nvm[0:4]
+        lsb = lb.decode()
+        if not lsb.isdigit():
+            print(f'Failed to read length from nvm: {lsb}')
+            return {}
+        l = int(lsb)
+        byte_data = microcontroller.nvm[4:l+4]  # Read from NVM
+        dict_data = bytes_to_dict(byte_data)
+        print(f'Read setup dict from nvm: {dict_data}')
+        return dict_data
+    except Exception as e:
+        print(f'Failed to read setup dict from nvm: {e}')
         return {}
-    l = int(lsb)
-    byte_data = microcontroller.nvm[4:l+4]  # Read from NVM
-    dict_data = bytes_to_dict(byte_data)
-    print(f'Read setup dict from nvm: {dict_data}')
-    return dict_data
-
 
 def pin_from_dict(d):
     gpio = getattr(board, d['gpio'])
