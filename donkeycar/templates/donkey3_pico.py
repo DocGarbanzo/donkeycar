@@ -18,6 +18,7 @@ import os.path
 
 from docopt import docopt
 import logging
+import time
 import socket
 from random import random
 
@@ -65,6 +66,10 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     """
     from donkeycar.parts.pico import Pico, PicoPWMInput, PicoPWMOutput
 
+    class Plotter:
+        def run(self, odo):
+            print(f'Ts {time.time()} Odo: {odo}')
+
     if verbose:
         donkeycar.logger.setLevel(logging.DEBUG)
 
@@ -93,6 +98,9 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
             outputs=['pico/write_steering_pwm'])
     car.add(pico, inputs=['pico/write_steering_pwm'],
             outputs=['pico/read_steering_pwm'], threaded=True)
+
+    car.add(pico, outputs=['pico/read_odo'], threaded=True)
+    car.add(Plotter(), inputs=['pico/read_odo'])
 
     # # add odometer -------------------------------------------------------------
     # odo = Odometer(gpio=cfg.ODOMETER_GPIO,
