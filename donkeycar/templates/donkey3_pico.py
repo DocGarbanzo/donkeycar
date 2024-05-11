@@ -83,7 +83,8 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
         car.add(cam, outputs=[CAM_IMG], threaded=True)
 
     pico = Pico(pin_configuration=cfg.PICO_PIN_CONFIGURATION)
-    car.add(pico, outputs=['pico/read_steering_pwm'], threaded=True)
+    car.add(pico, outputs=['pico/read_steering_pwm', 'pico/read_odo'],
+            threaded=True)
 
     rc_steering = PicoPWMInput(out_min=-1, out_max=1,
                                duty_min=cfg.PICO_STEERING_MIN_DUTY,
@@ -97,7 +98,7 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     car.add(pwm_steering, inputs=['user/angle'],
             outputs=['pico/write_steering_pwm'])
     car.add(pico, inputs=['pico/write_steering_pwm'],
-            outputs=['pico/read_steering_pwm'], threaded=True)
+            outputs=['pico/read_steering_pwm', 'pico/read_odo'], threaded=True)
 
     car.add(pico, outputs=['pico/read_odo'], threaded=True)
     car.add(Plotter(), inputs=['pico/read_odo'])

@@ -73,6 +73,7 @@ PICO_PIN_CONFIGURATION = {
     'input_pins': {
         # 'pin_13': dict(gpio='GP13', mode='INPUT', pull_up=False),
         'pulse_in': dict(gpio='GP16', mode='PULSE_IN', maxlen=4),
+        'odo_in': dict(gpio='GP18', mode='PULSE_IN', maxlen=10),
         # 'an_in': dict(gpio='GP28', mode='ANALOG_IN'),
     },
     'output_pins': {
