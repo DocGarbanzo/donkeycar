@@ -55,6 +55,7 @@ def read_dict_from_nvm():
         print(f'Failed to read setup dict from nvm: {e}')
         return {}
 
+
 def pin_from_dict(d):
     gpio = getattr(board, d['gpio'])
     assert gpio != board.LED, 'Cannot use LED pin as input'
@@ -153,6 +154,7 @@ def write(serial, input_pins, write_dict):
         elif type(pin) is pulseio.PulseIn:
             plist = [pin[i] for i in range(len(pin))]
             write_dict[name] = list(plist)
+            pin.clear()
 
     byte_out = dict_to_bytes(write_dict)
     n = serial.write(byte_out)
@@ -176,7 +178,6 @@ def main():
     write_dict = {}
     count = 0
     tic = time.monotonic()
-    toc = tic
     total_time = 0
     try:
         while True:
