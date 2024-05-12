@@ -7,6 +7,7 @@ from pkg_resources import get_distribution
 __version__ = '5.1.dev1+DocGarbanzo'
 
 logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO').upper())
+logger = logging.getLogger(__name__)
 
 f = Figlet(font='speed')
 

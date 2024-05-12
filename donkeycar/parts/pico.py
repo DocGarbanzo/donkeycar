@@ -73,6 +73,7 @@ class Pico:
         """
         self.serial = serial.Serial(port, 115200)
         self.counter = 0
+        self.receive_counter = 0
         self.running = True
         self.pin_configuration = pin_configuration
         self.send_keys = pin_configuration.get('output_pins', {}).keys()
@@ -90,8 +91,9 @@ class Pico:
         if self.send_config:
             pack = json.dumps(self.pin_configuration) + '\n'
             self.serial.write(pack.encode())
+        # clear the input buffer
+        self.serial.reset_input_buffer()
         while self.running:
-            no_input = True
             try:
                 self.lock.acquire()
                 pack = json.dumps(self.send_dict) + '\n'
@@ -99,25 +101,25 @@ class Pico:
                 self.serial.write(pack.encode())
                 # only read if there is something to read
                 no_input = (self.serial.in_waiting == 0)
+                if self.counter % 1000 == 0:
+                    logger.debug(f'Last sent: {pack}')
             except Exception as e:
                 logger.error(f'Problem with serial input {e}')
-            if no_input:
-                continue
             bytes_in = self.serial.read_until()
-            self.serial.reset_input_buffer()
+            #self.serial.reset_input_buffer()
             str_in = bytes_in.decode()[:-1]
             if self.counter % 1000 == 0:
-                logger.debug(f'Last received: {bytes_in.decode()[:-1]}')
+                logger.debug(f'Last received: {str_in}')
             try:
                 received_dict = json.loads(str_in)
                 self.lock.acquire()
                 self.receive_dict.update(received_dict)
                 self.lock.release()
+                self.receive_counter += 1
             except ValueError as e:
                 logger.error(f'Failed to load json in loop {self.counter} '
                              f'because of {e}. Expected json, but got: '
                              f'+++{str_in}+++')
-            time.sleep(0)
             self.counter += 1
 
     def run_threaded(self, *inputs):
@@ -150,7 +152,8 @@ class Pico:
         Donkey parts interface
         """
         self.running = False
-        logger.info(f"Pico disconnected, ran {self.counter} loops")
+        logger.info(f"Pico disconnected, ran {self.counter} loops and "
+                    f"received {self.receive_counter} messages.")
 
 
 class PicoPWMOutput:
@@ -214,18 +217,19 @@ class PicoPWMInput:
         self.out_center = out_center or (out_max + out_min) / 2
         self.duty_min = duty_min
         self.duty_max = duty_max
+        self.last_out = self.out_center
         logger.info(
             f"PicoPWMInput created with min:{out_min} and max:{out_max} and "
             f"center:{self.out_center}")
 
     def run(self, pulse_in):
-        # most recent measurements will be in the last 2 entries
-        if pulse_in and len(pulse_in) > 2:
+        # most recent measurements will be in the last 2 entries, only update
+        # if we have a real measurement, i.e. >= 2 pulses
+        if pulse_in and len(pulse_in) > 1:
             duty = min(pulse_in[-2:]) / sum(pulse_in[-2:])
             duty_rel = (duty - self.duty_min) / (self.duty_max - self.duty_min)
-            res = self.out_min + duty_rel * (self.out_max - self.out_min)
-            return res
-        return self.out_center
+            self.last_out = self.out_min + duty_rel * (self.out_max - self.out_min)
+        return self.last_out
 
 
 class OdometerPico:

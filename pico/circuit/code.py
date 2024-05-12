@@ -19,7 +19,7 @@ def write_bytes_to_nvm(byte_data):
     print(f'Wrote {l} bytes to nvm.')
 
 
-def bytes_to_dict(byte_data):
+def bytes_to_dict(byte_data, count):
     if byte_data == b'':
         return {}
     str_in = byte_data.decode()[:-1]
@@ -29,7 +29,7 @@ def bytes_to_dict(byte_data):
         out_dict = json.loads(str_in)
         return out_dict
     except ValueError as e:
-        print(f'Failed to decode JSON because of {e}')
+        print(f'Failed to decode JSON because of {e} from {str_in} in loop {count}.')
     return {}
 
 
@@ -48,7 +48,7 @@ def read_dict_from_nvm():
             return {}
         l = int(lsb)
         byte_data = microcontroller.nvm[4:l+4]  # Read from NVM
-        dict_data = bytes_to_dict(byte_data)
+        dict_data = bytes_to_dict(byte_data, 0)
         print(f'Read setup dict from nvm: {dict_data}')
         return dict_data
     except Exception as e:
@@ -129,13 +129,13 @@ def update_output_pins(output_data, output_pins):
             print(f'Failed update output pin {pin_name} because of {e}')
 
 
-def read(serial, input_pins, output_pins, led, is_setup):
+def read(serial, input_pins, output_pins, led, is_setup, count):
     if serial.in_waiting > 0:
         led.value = True
         bytes_in = serial.readline()
-        serial.reset_input_buffer()
+        #serial.reset_input_buffer()
         # because we have timeout, str_in can be empty
-        read_dict = bytes_to_dict(bytes_in)
+        read_dict = bytes_to_dict(bytes_in, count)
         # if setup dict sent, this contains 'input_pins' or 'output_pins'
         if 'input_pins' in read_dict or 'output_pins' in read_dict:
             is_setup = setup(read_dict, input_pins, output_pins, store=True)
@@ -154,7 +154,6 @@ def write(serial, input_pins, write_dict):
         elif type(pin) is pulseio.PulseIn:
             plist = [pin[i] for i in range(len(pin))]
             write_dict[name] = list(plist)
-            pin.clear()
 
     byte_out = dict_to_bytes(write_dict)
     n = serial.write(byte_out)
@@ -182,7 +181,8 @@ def main():
     try:
         while True:
             # reading input
-            is_setup = read(serial, input_pins, output_pins, led, is_setup)
+            is_setup = read(serial, input_pins, output_pins, led,
+                            is_setup, count)
             # sending output, catching number of bytes written
             if is_setup:
                 n = write(serial, input_pins, write_dict)
@@ -190,6 +190,7 @@ def main():
             total_time += toc - tic
             tic = toc
             count += 1
+            time.sleep(0)
     except KeyboardInterrupt:
         led.value = False
 
