@@ -1,19 +1,29 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 Script to drive a donkey 2 car using the RC controller instead of the web
 controller. Also provide a calibration of the RC throttle and
 steering triggers.
 
 Usage:
-    manage.py (drive) [--pid] [--no_cam] [--model=<path_to_pilot>] [--web]\
-        [--fpv] [--no_tub] [--verbose] [--type=<model_type>] [--old]
-    manage.py (calibrate)
-    manage.py (led)
+    prog drive [--pid] [--no_cam] [--model=PATH_TO_PILOT] [--web]\
+        [--fpv] [--no_tub] [--verbose] [--type=MODEL_TYPE]
+    prog calibrate
+    prog led
 
 Options:
     -h --help               Show this screen.
     --my_cfg=myconfig.py    overwrite config file name [default: myconfig.py]
+    --pid                   use pid
+    --no_cam                don't use camera and don't try loading camera
+                            module
+    --model=PATH_TO_PILOT   path to the model to load
+    --web                   use web fpv
+    --fpv                   use standalone fpv
+    --no_tub                don't write to tub
+    --verbose               set logging level to debug
+    --type=MODEL_TYPE       type of the model to load [default: linear]
 """
+
 import os.path
 
 from docopt import docopt
