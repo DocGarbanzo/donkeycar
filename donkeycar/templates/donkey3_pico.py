@@ -64,7 +64,7 @@ CAM_IMG = 'cam/image_array'
 
 
 def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
-          web=False, fpv=False, no_tub=False, old=True, verbose=False):
+          web=False, fpv=False, no_tub=False, verbose=False):
     """
     Construct a working robotic vehicle from many parts. Each part runs as a job
     in the Vehicle loop, calling either its run or run_threaded method depending
@@ -214,8 +214,7 @@ if __name__ == '__main__':
               fpv=args['--fpv'],
               no_tub=args['--no_tub'],
               verbose=args['--verbose'],
-              model_type=args['--type'],
-              old=args['--old'])
+              model_type=args['--type'])
     elif args['calibrate']:
         calibrate(config)
     elif args['stream']:
