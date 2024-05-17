@@ -9,6 +9,23 @@ import json
 import microcontroller
 
 
+class PulseInResettable:
+    def __init__(self, gpio, maxlen=2, auto_clear=False, **kwargs):
+        self.pin = pulseio.PulseIn(pin=gpio, maxlen=maxlen, **kwargs)
+        self.auto_clear = auto_clear
+        self.pin.clear()
+
+    def get_readings(self):
+        l = len(self.pin)
+        res = list(self.pin[i] for i in range(l))
+        if self.auto_clear:
+            self.pin.clear()
+        return res
+
+    def deinit(self):
+        self.pin.deinit()
+
+
 def write_bytes_to_nvm(byte_data):
     # first clear the memory
     l = len(byte_data)
@@ -67,8 +84,10 @@ def pin_from_dict(d):
             else digitalio.Pull.DOWN
         print(f'Configured digital input pin, gpio: {gpio}, pull: {pin.pull}')
     elif d['mode'] == 'PULSE_IN':
-        pin = pulseio.PulseIn(gpio, maxlen=d.get('maxlen', 2))
-        print(f'Configured pulse-in pin, gpio: {gpio}, maxlen: {pin.maxlen}')
+        pin = PulseInResettable(gpio, maxlen=d.get('maxlen', 2),
+                                auto_clear=d.get('auto_clear', False))
+        print(f'Configured pulse-in pin, gpio: {gpio}, maxlen:',
+              f'{pin.pin.maxlen}, auto_clear: {pin.auto_clear}')
     elif d['mode'] == 'ANALOG_IN':
         pin = analogio.AnalogIn(gpio)
         print(f'Configured analog input pin, gpio: {gpio}')
@@ -151,9 +170,8 @@ def write(serial, input_pins, write_dict):
     for name, pin in input_pins.items():
         if type(pin) in (digitalio.DigitalInOut, analogio.AnalogIn):
             write_dict[name] = pin.value
-        elif type(pin) is pulseio.PulseIn:
-            plist = [pin[i] for i in range(len(pin))]
-            write_dict[name] = list(plist)
+        elif type(pin) is PulseInResettable:
+            write_dict[name] = pin.get_readings()
 
     byte_out = dict_to_bytes(write_dict)
     n = serial.write(byte_out)
@@ -161,6 +179,9 @@ def write(serial, input_pins, write_dict):
 
 
 def main():
+    microcontroller.cpu.frequency = 180000000
+    print(f'Current CPU frequency: {microcontroller.cpu.frequency}')
+
     serial = usb_cdc.data
     serial.timeout = 0.01
     serial.reset_input_buffer()

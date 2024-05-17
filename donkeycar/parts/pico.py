@@ -81,6 +81,7 @@ class Pico:
         self.receive_dict = dict()
         self.send_config = send_config
         self.lock = Lock()
+        self.start = None
         logger.info(f"Pico added on port: {port}")
 
     def update(self):
@@ -93,6 +94,7 @@ class Pico:
             self.serial.write(pack.encode())
         # clear the input buffer
         self.serial.reset_input_buffer()
+        self.start = time.time()
         while self.running:
             try:
                 self.lock.acquire()
@@ -100,13 +102,11 @@ class Pico:
                 self.lock.release()
                 self.serial.write(pack.encode())
                 # only read if there is something to read
-                no_input = (self.serial.in_waiting == 0)
                 if self.counter % 1000 == 0:
                     logger.debug(f'Last sent: {pack}')
             except Exception as e:
                 logger.error(f'Problem with serial input {e}')
             bytes_in = self.serial.read_until()
-            #self.serial.reset_input_buffer()
             str_in = bytes_in.decode()[:-1]
             if self.counter % 1000 == 0:
                 logger.debug(f'Last received: {str_in}')
@@ -152,8 +152,12 @@ class Pico:
         Donkey parts interface
         """
         self.running = False
-        logger.info(f"Pico disconnected, ran {self.counter} loops and "
-                    f"received {self.receive_counter} messages.")
+        time.sleep(0.1)
+        self.serial.close()
+        total_time = time.time() - self.start
+        logger.info(f"Pico part disconnected, ran {self.counter} loops, "
+                    f"each loop taking "
+                    f"{total_time * 1000 / self.counter:5.1f} ms.")
 
 
 class PicoPWMOutput:
