@@ -133,14 +133,29 @@ def setup(setup_dict, input_pins, output_pins, store=False):
     return True
 
 
-def update_output_pins(output_data, output_pins):
+def set_pwm_duty_cycle(value, input_pins, pwm_out_pin):
+    if isinstance(value, (float, int)):
+        pwm_out_pin.duty_cycle = int(value * 65535)
+    elif isinstance(value, str):
+        pulse_in = input_pins[value]
+        assert isinstance(pulse_in, PulseInResettable), \
+            (f'Straight-through routing requires pulse in to be',
+             f'PulseInResettable but not {type(pulse_in)}.')
+        assert not pulse_in.auto_clear, \
+            'Straight-through routing requires pulse in to be non-auto-clear'
+        r = pulse_in.get_readings()
+        if len(r) > 1:
+            pwm_out_pin.duty_cycle = int(min(r[-2:]) / sum(r[-2:]) * 65535)
+
+
+def update_output_pins(output_data, input_pins, output_pins):
     for pin_name, value in output_data.items():
         out_pin = output_pins.get(pin_name)
         try:
             if isinstance(out_pin, digitalio.DigitalInOut):
                 out_pin.value = bool(value)
             elif isinstance(out_pin, pwmio.PWMOut):
-                out_pin.duty_cycle = int(value * 65535)
+                set_pwm_duty_cycle(value, input_pins, out_pin)
             else:
                 print(f'Cannot update pin out_pin: {pin_name} \
                       because of unknown type.')
@@ -159,7 +174,7 @@ def read(serial, input_pins, output_pins, led, is_setup, count):
         if 'input_pins' in read_dict or 'output_pins' in read_dict:
             is_setup = setup(read_dict, input_pins, output_pins, store=True)
         elif is_setup:
-            update_output_pins(read_dict, output_pins)
+            update_output_pins(read_dict, input_pins, output_pins)
     else:
         led.value = False
     return is_setup
@@ -211,7 +226,6 @@ def main():
             total_time += toc - tic
             tic = toc
             count += 1
-            time.sleep(0)
     except KeyboardInterrupt:
         led.value = False
 

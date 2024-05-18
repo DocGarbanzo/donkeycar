@@ -77,8 +77,8 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     from donkeycar.parts.pico import Pico, PicoPWMInput, PicoPWMOutput
 
     class Plotter:
-        def run(self, odo):
-            print(f'Ts {time.time()} Odo: {odo}')
+        def run(self, steer, odo, ch_3):
+            print(f'Ts {time.time()} steering: {steer} odo: {odo} ch3: {ch_3}')
 
     if verbose:
         donkeycar.logger.setLevel(logging.DEBUG)
@@ -93,7 +93,8 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
         car.add(cam, outputs=[CAM_IMG], threaded=True)
 
     pico = Pico(pin_configuration=cfg.PICO_PIN_CONFIGURATION)
-    car.add(pico, outputs=['pico/read_steering_pwm', 'pico/read_odo'],
+    car.add(pico, outputs=['pico/read_steering_pwm', 'pico/read_odo',
+                           'pico/ch_3'],
             threaded=True)
 
     rc_steering = PicoPWMInput(out_min=-1, out_max=1,
@@ -102,15 +103,21 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     car.add(rc_steering, inputs=['pico/read_steering_pwm'],
             outputs=['user/angle'])
 
+    rc_ch_3 = PicoPWMInput(out_min=0, out_max=1,
+                           duty_min=cfg.PICO_STEERING_MIN_DUTY,
+                           duty_max=cfg.PICO_STEERING_MAX_DUTY)
+    car.add(rc_ch_3, inputs=['pico/ch_3'], outputs=['user/ch_3'])
+
     pwm_steering = PicoPWMOutput(in_min=-1, in_max=1,
                                  duty_min=cfg.PICO_STEERING_MIN_DUTY,
                                  duty_max=cfg.PICO_STEERING_MAX_DUTY)
-    car.add(pwm_steering, inputs=['user/angle'],
+    car.add(pwm_steering, inputs=['user/angle', 'user/ch_3'],
             outputs=['pico/write_steering_pwm'])
     car.add(pico, inputs=['pico/write_steering_pwm'],
             outputs=['pico/read_steering_pwm', 'pico/read_odo'], threaded=True)
 
-    car.add(Plotter(), inputs=['pico/read_odo'])
+    car.add(Plotter(), inputs=['pico/read_steering_pwm', 'pico/read_odo',
+                               'pico/ch_3'])
 
     # # add odometer -------------------------------------------------------------
     # odo = Odometer(gpio=cfg.ODOMETER_GPIO,

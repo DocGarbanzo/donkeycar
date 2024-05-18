@@ -73,12 +73,14 @@ class Pico:
         """
         self.serial = serial.Serial(port, 115200)
         self.counter = 0
-        self.receive_counter = 0
         self.running = True
         self.pin_configuration = pin_configuration
         self.send_keys = pin_configuration.get('output_pins', {}).keys()
+        self.receive_keys = pin_configuration.get('input_pins', {}).keys()
         self.send_dict = dict()
-        self.receive_dict = dict()
+        # need to guarantee dictionary order as we might receive the
+        # dictionary with a different order of keys after deserialisation
+        self.receive_dict = dict((k, None) for k in self.receive_keys)
         self.send_config = send_config
         self.lock = Lock()
         self.start = None
@@ -101,25 +103,21 @@ class Pico:
                 pack = json.dumps(self.send_dict) + '\n'
                 self.lock.release()
                 self.serial.write(pack.encode())
-                # only read if there is something to read
-                if self.counter % 1000 == 0:
-                    logger.debug(f'Last sent: {pack}')
-            except Exception as e:
-                logger.error(f'Problem with serial input {e}')
-            bytes_in = self.serial.read_until()
-            str_in = bytes_in.decode()[:-1]
-            if self.counter % 1000 == 0:
-                logger.debug(f'Last received: {str_in}')
-            try:
+                bytes_in = self.serial.read_until()
+                str_in = bytes_in.decode()[:-1]
                 received_dict = json.loads(str_in)
                 self.lock.acquire()
                 self.receive_dict.update(received_dict)
                 self.lock.release()
-                self.receive_counter += 1
+                if self.counter % 1000 == 0:
+                    logger.debug(f'Last sent: {pack}')
+                    logger.debug(f'Last received: {str_in}')
             except ValueError as e:
                 logger.error(f'Failed to load json in loop {self.counter} '
                              f'because of {e}. Expected json, but got: '
                              f'+++{str_in}+++')
+            except Exception as e:
+                logger.error(f'Problem with serial input {e}')
             self.counter += 1
 
     def run_threaded(self, *inputs):
@@ -189,7 +187,9 @@ class PicoPWMOutput:
                     f"duty min:{duty_min}, duty max:{duty_max}, round digits: "
                     f"{round_output_digits}")
 
-    def run(self, x):
+    def run(self, x, ch_3):
+        if ch_3 and ch_3> 0.5:
+            return 'pulse_in'
         res = (self.duty_min + (x - self.in_min)
                * (self.duty_max - self.duty_min) / (self.in_max - self.in_min))
         return round(res, self.round_output_digits)
