@@ -270,25 +270,6 @@ class OdometerPico:
         # pigpio callback mechanics
         logger.info(f"OdometerPico added with tick")
 
-    # def _cbf(self, gpio, level, tick):
-    #     """ Callback function for pigpio interrupt gpio. Signature is determined
-    #     by pigpiod library. This function is called every time the gpio changes
-    #     state as we specified EITHER_EDGE.
-    #     :param gpio: gpio to listen for state changes
-    #     :param level: rising/falling edge
-    #     :param tick: # of mu s since boot, 32 bit int
-    #     """
-    #     import pigpio
-    #     if self._last_tick is not None:
-    #         diff = pigpio.tickDiff(self._last_tick, tick)
-    #         self.inst = 0.5 * (diff + self.last_tick_diff)
-    #         self._avg += self._weight * (self.inst - self._avg)
-    #         self._distance += 1
-    #         if self._debug:
-    #             self._debug_data['tick'].append(diff)
-    #         self.last_tick_diff = diff
-    #     self._last_tick = tick
-
     def run(self, pulse_in):
         """
         Knowing the tick time in mu s and the ticks/m we calculate the speed. If

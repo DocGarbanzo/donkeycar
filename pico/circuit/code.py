@@ -26,6 +26,31 @@ class PulseInResettable:
         self.pin.deinit()
 
 
+class PWMOutStraightThrough:
+    def __init__(self, gpio, frequency=60, duty_cycle=0.09,
+                 straight_input_pin=None, **kwargs):
+        self.pin = pwmio.PWMOut(pin=gpio, frequency=frequency, **kwargs)
+        self.pin.duty_cycle = int(duty_cycle * 65535)
+        self.straight_input_pin = straight_input_pin
+        if self.straight_input_pin:
+            assert type(self.straight_input_pin) == PulseInResettable,\
+                f'Straight-through routing needs PulseInResettable pin'
+            assert not self.straight_input_pin.auto_clear, \
+                ('Straight-through routing requires pulse-in pin to be '
+                 'non-auto-clear')
+
+    def deinit(self):
+        self.pin.deinit()
+
+    def set_duty_cycle(self, value):
+        if isinstance(value, (float, int)):
+            self.pin.duty_cycle = int(value * 65535)
+        elif isinstance(value, str):
+            r = self.straight_input_pin.get_readings()
+            if len(r) > 1:
+                self.pin.duty_cycle = int(min(r[-2:]) / sum(r[-2:]) * 65535)
+
+
 def write_bytes_to_nvm(byte_data):
     # first clear the memory
     l = len(byte_data)
@@ -46,7 +71,8 @@ def bytes_to_dict(byte_data, count):
         out_dict = json.loads(str_in)
         return out_dict
     except ValueError as e:
-        print(f'Failed to decode JSON because of {e} from {str_in} in loop {count}.')
+        print(f'Failed to decode JSON because of {e}',
+              f'from {str_in} in loop {count}.')
     return {}
 
 
@@ -73,7 +99,7 @@ def read_dict_from_nvm():
         return {}
 
 
-def pin_from_dict(d):
+def pin_from_dict(d, input_pins):
     gpio = getattr(board, d['gpio'])
     assert gpio != board.LED, 'Cannot use LED pin as input'
     pin = None
@@ -100,11 +126,14 @@ def pin_from_dict(d):
     elif d['mode'] == 'PWM':
         duty_cycle_int = int(d.get('duty_cycle', 0.09) * 65535)
         freq = int(d.get('frequency', 60))
-        pin = pwmio.PWMOut(gpio, frequency=freq)
-        pin.duty_cycle = duty_cycle_int
+        straight = d.get('straight')
+        straight_input_pin = input_pins[straight] if straight else None
+        pin = PWMOutStraightThrough(gpio, frequency=freq,
+                                    straight_input_pin=straight_input_pin)
         print(f'Configured pwm output pin, gpio: {gpio},',
-              f'frequency: {pin.frequency},',
-              f'duty_cycle: {pin.duty_cycle/65535}')
+              f'frequency: {pin.pin.frequency},',
+              f'duty_cycle: {pin.pin.duty_cycle / 65535},',
+              f'pwm output: {pin.pin}, straight: {pin.straight_input_pin}')
     return pin
 
 
@@ -112,7 +141,10 @@ def setup(setup_dict, input_pins, output_pins, store=False):
     if not setup_dict:
         return False
     for pin in (input_pins | output_pins).values():
-        pin.deinit()
+        try:
+            pin.deinit()
+        except AttributeError as e:
+            print(f'Pin has no deinit method: {e}')
     input_pins.clear()
     output_pins.clear()
     print(f'Received setup dict: {setup_dict}')
@@ -120,7 +152,7 @@ def setup(setup_dict, input_pins, output_pins, store=False):
     for pins, pin_key in t_list:
         for pin_name, pin_dict in setup_dict.get(pin_key, {}).items():
             try:
-                pins[pin_name] = pin_from_dict(pin_dict)
+                pins[pin_name] = pin_from_dict(pin_dict, input_pins)
             except Exception as e:
                 print(f'Setup failed because of {e}.')
                 return False
@@ -133,32 +165,17 @@ def setup(setup_dict, input_pins, output_pins, store=False):
     return True
 
 
-def set_pwm_duty_cycle(value, input_pins, pwm_out_pin):
-    if isinstance(value, (float, int)):
-        pwm_out_pin.duty_cycle = int(value * 65535)
-    elif isinstance(value, str):
-        pulse_in = input_pins[value]
-        assert isinstance(pulse_in, PulseInResettable), \
-            (f'Straight-through routing requires pulse in to be',
-             f'PulseInResettable but not {type(pulse_in)}.')
-        assert not pulse_in.auto_clear, \
-            'Straight-through routing requires pulse in to be non-auto-clear'
-        r = pulse_in.get_readings()
-        if len(r) > 1:
-            pwm_out_pin.duty_cycle = int(min(r[-2:]) / sum(r[-2:]) * 65535)
-
-
 def update_output_pins(output_data, input_pins, output_pins):
     for pin_name, value in output_data.items():
         out_pin = output_pins.get(pin_name)
         try:
             if isinstance(out_pin, digitalio.DigitalInOut):
                 out_pin.value = bool(value)
-            elif isinstance(out_pin, pwmio.PWMOut):
-                set_pwm_duty_cycle(value, input_pins, out_pin)
+            elif isinstance(out_pin, PWMOutStraightThrough):
+                out_pin.set_duty_cycle(value)
             else:
                 print(f'Cannot update pin out_pin: {pin_name} \
-                      because of unknown type.')
+                      because of unknown type {type(out_pin)}.')
         except ValueError as e:
             print(f'Failed update output pin {pin_name} because of {e}')
 
@@ -168,7 +185,6 @@ def read(serial, input_pins, output_pins, led, is_setup, count):
         led.value = True
         bytes_in = serial.readline()
         #serial.reset_input_buffer()
-        # because we have timeout, str_in can be empty
         read_dict = bytes_to_dict(bytes_in, count)
         # if setup dict sent, this contains 'input_pins' or 'output_pins'
         if 'input_pins' in read_dict or 'output_pins' in read_dict:

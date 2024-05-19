@@ -80,7 +80,8 @@ PICO_PIN_CONFIGURATION = {
     'output_pins': {
         # 'pin_14': dict(gpio='GP14', mode='OUTPUT', value=0),
         'pwm_out': dict(gpio='GP15', mode='PWM',
-                        frequency=60, duty_cycle=0.09),
+                        frequency=60, duty_cycle=0.09,
+                        straight='pulse_in'),
     },
 }
 
