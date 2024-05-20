@@ -1,4 +1,5 @@
 import time
+from collections import deque
 from statistics import fmean
 
 import serial
@@ -22,13 +23,15 @@ class Pico:
     pin_configuration = {
         'input_pins': {
             'pin_13': dict(gpio='GP13', mode='INPUT', pull_up=False),
+            'odo_in': dict(gpio='GP18', mode='PULSE_IN',
+                           maxlen=8, auto_clear=True),
             'pulse_in': dict(gpio='GP16', mode='PULSE_IN', maxlen=4),
             'an_in': dict(gpio='GP28', mode='ANALOG_IN'),
         },
         'output_pins': {
             'pin_14': dict(gpio='GP14', mode='OUTPUT', value=0),
-            'pwm_out': dict(gpio='GP15', mode='PWM',
-                            frequency=60, duty_cycle=0.06),
+            'pwm_out': dict(gpio='GP15', mode='PWM', frequency=60,
+                            duty_cycle=0.06, straight='pulse_in'),
         },
     }
 
@@ -84,7 +87,7 @@ class Pico:
         self.send_config = send_config
         self.lock = Lock()
         self.start = None
-        logger.info(f"Pico added on port: {port}")
+        logger.info(f"Pico created on port: {port}")
 
     def update(self):
         """
@@ -242,55 +245,56 @@ class OdometerPico:
     magnets attached to the drive system. Based on Pico part that delivers a
     pulse-in list of high/lo state changes.
     """
-    def __init__(self, tick_per_meter=225, weight=0.5, debug=False):
+    def __init__(self, tick_per_meter=75, weight=0.5, maxlen=10, debug=False):
         """
         :param tick_per_meter: how many signals per meter
         :param weight: weighting of current measurement in average speed
                         calculation
         :param debug: if debug info should be printed
         """
-
         self._tick_per_meter = tick_per_meter
-        self._last_tick = None
-        self._last_tick_speed = None
-        # as this is a time diff in mu s, make it small so it doesn't give a
-        # too short average time in the first record
-        self.last_tick_diff = 10000.0
+        self.pulses = deque(maxlen=maxlen)
         self._weight = weight
-        # as this is a time diff in mu s, make it small so it doesn't give a
-        # too short average time in the first record
-        self._avg = 10000.0
-        self.inst = 0.0
         self._max_speed = 0.0
         self._distance = 0
         self._debug_data = dict(tick=[], time=[])
         self.scale = 1.0e6 / self._tick_per_meter
         self._debug = debug
+        logger.info(f"OdometerPico added with tick_per_meter: {tick_per_meter},"
+                    f" weight: {weight}, maxlen: {maxlen}")
 
-        # pigpio callback mechanics
-        logger.info(f"OdometerPico added with tick")
+    def _weighted_avg(self):
+        weighted_avg = self.pulses[0]
+        for i in range(1, len(self.pulses)):
+            weighted_avg = self._weight * self.pulses[i] \
+                            + (1.0 - self._weight) * weighted_avg
+        return weighted_avg
 
     def run(self, pulse_in):
         """
         Knowing the tick time in mu s and the ticks/m we calculate the speed. If
-        ticks haven't been update since the last call we assume speed is zero
+        ticks haven't been update since the last call we assume speed is
+        zero. Then we reset the pulse history.
         :param pulse_in: list of high/lo signals in mu s
         :return speed: in m / s
         """
+        self.pulses.extend(pulse_in)
         speed = 0.0
         inst_speed = 0.0
         if pulse_in:
-            # last reading has the most recent pulse data
+            # for distance just count number of pulses
             self._distance += len(pulse_in)
             inst_speed = self.scale / pulse_in[-1]
-            speed = self.scale / fmean(pulse_in)
+            speed = self.scale / self._weighted_avg()
             self._max_speed = max(self._max_speed, speed)
             if self._debug:
                 self._debug_data['time'].append(time.time())
                 self._debug_data['tick'].append(pulse_in)
+        else:
+            self.pulses.clear()
         distance = float(self._distance) / float(self._tick_per_meter)
-        # logger.debug(f"Speed: {speed} InstSpeed: {inst_speed} Distance: "
-        #              f"{distance}")
+        logger.debug(f"Speed: {speed} InstSpeed: {inst_speed} Distance: "
+                     f"{distance}")
         return speed, inst_speed, distance
 
     def shutdown(self):
@@ -298,7 +302,7 @@ class OdometerPico:
         Donkey parts interface
         """
         logger.info(f'Maximum speed {self._max_speed:4.2f}, total distance '
-                    f'{self._distance / float(self._tick_per_meter):4.2f}')
+                    f'{self._distance / self._tick_per_meter:4.2f}')
         if self._debug:
             from os import join, getcwd
             from json import dump
