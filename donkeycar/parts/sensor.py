@@ -116,9 +116,9 @@ class LapTimer:
                             lap counter increase
         :param min_time:    how many seconds are required between laps
         """
-        import pigpio
-        self.gpio = gpio
-        self.pi = pigpio.pi()
+        from gpiozero import Button
+        gpio = 'GPIO' + str(gpio)
+        self.pin = Button(gpio)
         self.last_time = time.time()
         self.lap_count = 0
         self.last_lap_count = 0
@@ -137,9 +137,9 @@ class LapTimer:
         Donkey parts interface
         """
         while self.running:
-            current_state = self.pi.read(self.gpio)
-            # Signal detected: if pin is lo
-            if current_state == 0:
+            current_state = self.pin.is_pressed
+            # Signal detected: if pin is lo which equals Button pressed
+            if current_state:
                 self.count_lo += 1
                 logger.debug(f'Lap timer signal low detected')
             # No signal: pin is high
@@ -163,8 +163,8 @@ class LapTimer:
                         self.lap_count += 1
                 # reset lo counter
                 self.count_lo = 0
-            # Sleep for 0.5 ms. At 5m/s car makes 5mm / 1ms. At that speed
-            # trigger determines how many cm the car has to be in the
+            # Sleep for 1 ms. At 5m/s car makes 5mm / 1ms. At that speed
+            # trigger determines how many 1/2cm the car has to be in the
             # absorption area of the IR signal (by default 5). This scales
             # down w/ the speed.
             time.sleep(0.001)
