@@ -270,7 +270,7 @@ class OdometerPico:
                             + (1.0 - self._weight) * weighted_avg
         return weighted_avg
 
-    def run(self, pulse_in):
+    def run(self, pulse_in=[]):
         """
         Knowing the tick time in mu s and the ticks/m we calculate the speed. If
         ticks haven't been update since the last call we assume speed is
