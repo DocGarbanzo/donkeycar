@@ -35,6 +35,7 @@ from random import random
 import donkeycar as dk
 import donkeycar.parts
 from donkeycar.parts.actuator import EStop
+from donkeycar.parts.pico import OdometerPico
 from donkeycar.parts.tub_v2 import TubWiper, TubWriter
 from donkeycar.parts.file_watcher import FileWatcher
 from donkeycar.parts.keras_2 import ModelLoader, ModelResetter
@@ -119,17 +120,16 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     car.add(Plotter(), inputs=['pico/read_steering_pwm', 'pico/read_odo',
                                'pico/ch_3'])
 
-    # # add odometer -------------------------------------------------------------
-    # odo = Odometer(gpio=cfg.ODOMETER_GPIO,
-    #                tick_per_meter=cfg.TICK_PER_M,
-    #                weight=0.025)
-    # car.add(odo, outputs=['car/speed', 'car/inst_speed', 'car/distance'])
+    # add odometer -------------------------------------------------------------
+    odo = OdometerPico(tick_per_meter=cfg.TICK_PER_M, weight=0.5)
+    car.add(odo, inputs=['pico/read_odo'],
+            outputs=['car/speed', 'car/inst_speed', 'car/distance'])
     #
-    # # add lap timer ------------------------------------------------------------
-    # lap = LapTimer(gpio=cfg.LAP_TIMER_GPIO, trigger=4)
-    # car.add(lap, inputs=['car/distance'],
-    #         outputs=['car/lap', 'car/m_in_lap', 'car/lap_updated'],
-    #         threaded=True)
+    # add lap timer ------------------------------------------------------------
+    lap = LapTimer(gpio=cfg.LAP_TIMER_GPIO, trigger=4)
+    car.add(lap, inputs=['car/distance'],
+            outputs=['car/lap', 'car/m_in_lap', 'car/lap_updated'],
+            threaded=True)
     #
     # # add mpu ------------------------------------------------------------------
     # mpu = Mpu6050Ada()
