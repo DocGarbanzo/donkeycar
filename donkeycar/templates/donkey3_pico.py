@@ -89,6 +89,7 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
 
     # add camera ---------------------------------------------------------------
     if not no_cam:
+        from donkeycar.parts.camera import PiCamera
         cam = PiCamera(image_w=cfg.IMAGE_W, image_h=cfg.IMAGE_H,
                        image_d=cfg.IMAGE_DEPTH)
         car.add(cam, outputs=[CAM_IMG], threaded=True)
