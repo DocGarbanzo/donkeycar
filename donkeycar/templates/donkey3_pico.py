@@ -118,7 +118,7 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     car.add(pico, inputs=['pico/write_steering_pwm'],
             outputs=['pico/read_steering_pwm', 'pico/read_odo'], threaded=True)
 
-    car.add(Plotter(), inputs=['pico/read_steering_pwm', 'pico/read_odo',
+    car.add(Plotter(), inputs=['user/angle', 'pico/read_odo',
                                'pico/ch_3'])
 
     # add odometer -------------------------------------------------------------
