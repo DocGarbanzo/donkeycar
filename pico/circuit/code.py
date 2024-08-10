@@ -145,6 +145,8 @@ def setup(setup_dict, input_pins, output_pins, store=False):
             pin.deinit()
         except AttributeError as e:
             print(f'Pin has no deinit method: {e}')
+        except Exception as e:
+            print(f'Pin deinit failed: {e}')
     input_pins.clear()
     output_pins.clear()
     print(f'Received setup dict: {setup_dict}')
