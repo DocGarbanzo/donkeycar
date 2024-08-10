@@ -72,9 +72,10 @@ GYRO_Z_INDEX = 2
 PICO_PIN_CONFIGURATION = {
     'input_pins': {
         # 'pin_13': dict(gpio='GP13', mode='INPUT', pull_up=False),
-        'pulse_in': dict(gpio='GP16', mode='PULSE_IN', maxlen=4),
-        'odo_in': dict(gpio='GP18', mode='PULSE_IN', maxlen=8, auto_clear=True),
-        'ch_3': dict(gpio='GP3', mode='PULSE_IN', maxlen=2),
+        'steering_pwm': dict(gpio='GP18', mode='PULSE_IN', maxlen=4),
+        'throttle_pwm': dict(gpio='GP19', mode='PULSE_IN', maxlen=4),
+        'ch_3': dict(gpio='GP20', mode='PULSE_IN', maxlen=2),
+        'odo_in': dict(gpio='GP21', mode='PULSE_IN', maxlen=8, auto_clear=True),
         # 'an_in': dict(gpio='GP28', mode='ANALOG_IN'),
     },
     'output_pins': {
