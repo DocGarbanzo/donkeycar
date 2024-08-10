@@ -82,7 +82,7 @@ PICO_PIN_CONFIGURATION = {
         # 'pin_14': dict(gpio='GP14', mode='OUTPUT', value=0),
         'steering_out': dict(gpio='GP15', mode='PWM',
                              frequency=60, duty_cycle=0.09,
-                             straight='steering_in'),
+                             straight='steering_pwm'),
     },
 }
 
