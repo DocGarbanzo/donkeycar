@@ -156,7 +156,7 @@ def setup(setup_dict, input_pins, output_pins, store=False):
             try:
                 pins[pin_name] = pin_from_dict(pin_dict, input_pins)
             except Exception as e:
-                print(f'Setup failed because of {e}.')
+                print(f'Setup of {pin_name} failed because of {e}.')
                 return False
 
     if store:
