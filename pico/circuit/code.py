@@ -124,11 +124,12 @@ def pin_from_dict(d, input_pins):
         print(f'Configured digital output pin, gpio: {gpio},',
               f'value: {pin.value}')
     elif d['mode'] == 'PWM':
-        duty_cycle_int = int(d.get('duty_cycle', 0.09) * 65535)
+        duty_cycle = d.get('duty_cycle', 0.09)
         freq = int(d.get('frequency', 60))
         straight = d.get('straight')
         straight_input_pin = input_pins[straight] if straight else None
         pin = PWMOutStraightThrough(gpio, frequency=freq,
+                                    duty_cycle=duty_cycle,
                                     straight_input_pin=straight_input_pin)
         print(f'Configured pwm output pin, gpio: {gpio},',
               f'frequency: {pin.pin.frequency},',
