@@ -190,9 +190,11 @@ class PicoPWMOutput:
                     f"duty min:{duty_min}, duty max:{duty_max}, round digits: "
                     f"{round_output_digits}")
 
-    def run(self, x, ch_3):
-        if ch_3 and ch_3> 0.5:
-            return 'pulse_in'
+    def run(self, x):
+        """ This returns a float value for the duty cycle. However, in order
+        to trigger straight through mode, we just return a string to be used as
+        dummy input in the Pico PWM generator part.
+        """
         res = (self.duty_min + (x - self.in_min)
                * (self.duty_max - self.duty_min) / (self.in_max - self.in_min))
         return round(res, self.round_output_digits)
