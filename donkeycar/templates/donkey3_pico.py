@@ -80,8 +80,8 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
 
     class Plotter:
         def run(self, steer, throttle, odo, ch_3):
-            print(f'Ts: {datetime.now().isoformat()} steering: {steer} '
-                  f'throttle {throttle} odo: {odo} ch3: {ch_3}')
+            print(f'Ts: {datetime.now().isoformat()} steering: {steer:5.4f} '
+                  f'throttle {throttle:5.4f} odo: {odo} ch3: {ch_3}')
 
     if verbose:
         donkeycar.logger.setLevel(logging.DEBUG)
