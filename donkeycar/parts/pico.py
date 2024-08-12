@@ -211,22 +211,27 @@ class PicoPWMInput:
 
     """
     def __init__(self, out_min=0.0, out_max=1.0, out_center=None,
-                 duty_min=0.06, duty_max=0.012):
+                 out_deadband=None, duty_min=0.06, duty_max=0.012,
+                 duty_center=None):
 
         """
         Initialize the PicoPWMInput part.
-        :param out_min:     minimum output value
-        :param out_max:     maximum output value
-        :param out_center:      center value
-        :param duty_min:    minimum duty cycle
-        :param duty_max:    maximum duty cycle
+        :param out_min:         minimum output value
+        :param out_max:         maximum output value
+        :param out_center:      center output value
+        :param out_deadband:    if the output is within this range of the center
+        :param duty_min:        minimum duty cycle
+        :param duty_max:        maximum duty cycle
+        :param duty_center:     center duty cycle
         """
         self.out_min = out_min
         self.out_max = out_max
         self.out_center = out_center or (out_max + out_min) / 2
         self.duty_min = duty_min
         self.duty_max = duty_max
+        self.duty_center = duty_center or (duty_max + duty_min) / 2
         self.last_out = self.out_center
+        self.out_deadband = out_deadband
         logger.info(
             f"PicoPWMInput created with min:{out_min} and max:{out_max} and "
             f"center:{self.out_center}")
@@ -234,10 +239,22 @@ class PicoPWMInput:
     def run(self, pulse_in):
         # most recent measurements will be in the last 2 entries, only update
         # if we have a real measurement, i.e. >= 2 pulses
-        if pulse_in and len(pulse_in) > 1:
-            duty = min(pulse_in[-2:]) / sum(pulse_in[-2:])
-            duty_rel = (duty - self.duty_min) / (self.duty_max - self.duty_min)
-            self.last_out = self.out_min + duty_rel * (self.out_max - self.out_min)
+        if not pulse_in or len(pulse_in) <= 1:
+            return self.last_out
+        duty = min(pulse_in[-2:]) / sum(pulse_in[-2:])
+        if duty < self.duty_center:
+            duty_rel = ((duty - self.duty_min)
+                        / (self.duty_center - self.duty_min))
+            self.last_out = (self.out_min + duty_rel
+                             * (self.out_center - self.out_min))
+        else:
+            duty_rel = ((duty - self.duty_center)
+                        / (self.duty_max - self.duty_center))
+            self.last_out = (self.out_center + duty_rel
+                             * (self.out_max - self.out_center))
+        if (self.out_deadband and
+                abs(self.last_out - self.out_center) < self.out_deadband):
+            self.last_out = self.out_center
         return self.last_out
 
 

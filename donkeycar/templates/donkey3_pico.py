@@ -103,7 +103,8 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
 
     rc_steering = PicoPWMInput(out_min=-1, out_max=1,
                                duty_min=cfg.PICO_STEERING_MIN_DUTY,
-                               duty_max=cfg.PICO_STEERING_MAX_DUTY)
+                               duty_max=cfg.PICO_STEERING_MAX_DUTY,
+                               duty_center=cfg.PICO_STEERING_CENTER_DUTY)
     car.add(rc_steering, inputs=['pico/read_steering_pwm'],
             outputs=['user/angle'])
 
