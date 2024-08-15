@@ -80,7 +80,7 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
 
     class Plotter:
         def run(self, steer, throttle, odo, ch_3, steer_freq):
-            print(f'Ts: {datetime.now().isoformat()} steering: {steer:+5.4f} '
+            print(f'Ts: {datetime.now().isoformat()} steer: {steer:+5.4f} '
                   f'throttle {throttle:+5.4f} odo: {odo} ch3: {ch_3:+5.4f} '
                   f'steering freq: {steer_freq:5.3f}')
 

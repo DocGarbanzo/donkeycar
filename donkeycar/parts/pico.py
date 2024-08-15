@@ -232,7 +232,7 @@ class PicoPWMInput:
         self.duty_center = duty_center or (duty_max + duty_min) / 2
         self.last_out = self.out_center
         self.last_freq = 0
-        self.last_duty = 0
+        self.last_duty = self.duty_center
         self.out_deadband = out_deadband
         logger.info(
             f"PicoPWMInput created with min:{out_min} and max:{out_max} and "
