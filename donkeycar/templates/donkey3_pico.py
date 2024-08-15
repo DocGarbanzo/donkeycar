@@ -8,6 +8,7 @@ Usage:
     prog drive [--pid] [--no_cam] [--model=PATH_TO_PILOT] [--web]\
         [--fpv] [--no_tub] [--verbose] [--type=MODEL_TYPE]
     prog calibrate
+    prog stream
     prog led
 
 Options:
