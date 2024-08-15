@@ -158,30 +158,64 @@ def calibrate(cfg):
     third channel on the remote we can use it for wiping bad data while
     recording, so we print its values here, too.
     """
-    from donkeycar.parts.actuator import RCReceiver
+    from donkeycar.parts.pico import Pico, PicoPWMInput, PicoPWMOutput
 
-    donkey_car = dk.vehicle.Vehicle()
-    # create the RC receiver
-    rc_steering = RCReceiver(cfg.STEERING_RC_GPIO, invert=True)
-    rc_throttle = RCReceiver(cfg.THROTTLE_RC_GPIO)
-    rc_wiper = RCReceiver(cfg.DATA_WIPER_RC_GPIO, jitter=0.05, no_action=0)
-    donkey_car.add(rc_steering, outputs=['user/angle', 'user/steering_on'])
-    donkey_car.add(rc_throttle, outputs=['user/throttle', 'user/throttle_on'])
-    donkey_car.add(rc_wiper, outputs=['user/wiper', 'user/wiper_on'])
-
-    # create plotter part for printing into the shell
     class Plotter:
-        def run(self, angle, steering_on, throttle, throttle_on, wiper, wiper_on):
-            print('angle=%+5.4f, steering_on=%1d, throttle=%+5.4f, '
-                  'throttle_on=%1d wiper=%+5.4f, wiper_on=%1d' %
-                  (angle, steering_on, throttle, throttle_on, wiper, wiper_on))
+        def run(self, steer, steer_duty, throttle, throttle_duty):
+            print(f'Ts: {datetime.now().isoformat()} angle: {steer:+4.3f} '
+                  f'steer duty: {steer_duty:+4.3f} throttle {throttle:+4.3f} '
+                  f'throttle duty {throttle_duty:+4.3f}')
 
-    # add plotter part
-    donkey_car.add(Plotter(), inputs=['user/angle', 'user/steering_on',
-                                      'user/throttle', 'user/throttle_on',
-                                      'user/wiper', 'user/wiper_on'])
-    # run the vehicle at 10Hz to keep network traffic down
-    donkey_car.start(rate_hz=10, max_loop_count=cfg.MAX_LOOPS)
+    car = dk.vehicle.Vehicle()
+    pico = Pico(pin_configuration=cfg.PICO_PIN_CONFIGURATION)
+    car.add(pico, outputs=['pico/read_steering_pwm', 'pico/read_throttle_pwm',
+                           'pico/read_ch_3', 'pico/read_odo'],
+            threaded=True)
+
+    rc_steering = PicoPWMInput(out_min=-1, out_max=1,
+                               duty_min=cfg.PICO_STEERING_MIN_DUTY,
+                               duty_max=cfg.PICO_STEERING_MAX_DUTY,
+                               duty_center=cfg.PICO_STEERING_CENTER_DUTY,
+                               out_deadband=0.01)
+    car.add(rc_steering, inputs=['pico/read_steering_pwm'],
+            outputs=['user/angle', 'rc/steering_duty', 'rc/steering_freq'])
+
+    rc_throttle = PicoPWMInput(out_min=-1, out_max=1,
+                               duty_min=cfg.PICO_THROTTLE_MIN_DUTY,
+                               duty_max=cfg.PICO_THROTTLE_MAX_DUTY,
+                               duty_center=cfg.PICO_THROTTLE_CENTER_DUTY,
+                               out_deadband=0.01)
+    car.add(rc_throttle, inputs=['pico/read_throttle_pwm'],
+            outputs=['user/throttle', 'rc/throttle_duty', 'rc/throttle_freq'])
+
+    rc_ch_3 = PicoPWMInput(out_min=0, out_max=1)
+    car.add(rc_ch_3, inputs=['pico/read_ch_3'],
+            outputs=['user/ch_3', 'rc/ch_3_duty', 'rc/ch_3_freq'])
+
+    pwm_steering = PicoPWMOutput(in_min=-1, in_max=1,
+                                 duty_min=cfg.PICO_STEERING_MIN_DUTY,
+                                 duty_max=cfg.PICO_STEERING_MAX_DUTY)
+    car.add(pwm_steering, inputs=['user/angle'],
+            outputs=['pico/write_steering_pwm'])
+
+    car.add(Plotter(), inputs=['user/angle', 'rc/steering_duty',
+                               'user/throttle', 'rc/throttle_duty'])
+
+    # add odometer -------------------------------------------------------------
+    # odo = OdometerPico(tick_per_meter=cfg.TICK_PER_M, weight=0.5)
+    # car.add(odo, inputs=['pico/read_odo'],
+    #         outputs=['car/speed', 'car/inst_speed', 'car/distance'])
+    #
+    # add lap timer ------------------------------------------------------------
+    # lap = LapTimer(gpio=cfg.LAP_TIMER_GPIO, trigger=4)
+    # car.add(lap, inputs=['car/distance'],
+    #         outputs=['car/lap', 'car/m_in_lap', 'car/lap_updated'],
+    #         threaded=True)
+    #
+    # # add mpu ------------------------------------------------------------------
+    # mpu = Mpu6050Ada()
+    # car.add(mpu, outputs=['car/accel', 'car/gyro'], threaded=True)
+    car.start(rate_hz=10, max_loop_count=cfg.MAX_LOOPS)
 
 
 def stream(cfg):
