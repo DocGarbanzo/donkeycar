@@ -107,17 +107,17 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
                                duty_max=cfg.PICO_STEERING_MAX_DUTY,
                                duty_center=cfg.PICO_STEERING_CENTER_DUTY)
     car.add(rc_steering, inputs=['pico/read_steering_pwm'],
-            outputs=['user/angle', 'rc/steering_freq'])
+            outputs=['user/angle', 'rc/steering_duty', 'rc/steering_freq'])
 
     rc_throttle = PicoPWMInput(out_min=-1, out_max=1,
                                duty_min=cfg.PICO_THROTTLE_MIN_DUTY,
                                duty_max=cfg.PICO_THROTTLE_MAX_DUTY)
     car.add(rc_throttle, inputs=['pico/read_throttle_pwm'],
-            outputs=['user/throttle', 'rc/throttle_freq'])
+            outputs=['user/throttle', 'rc/throttle_duty', 'rc/throttle_freq'])
 
     rc_ch_3 = PicoPWMInput(out_min=0, out_max=1)
-    car.add(rc_ch_3, inputs=['pico/read_ch_3'], outputs=['user/ch_3',
-                                                         'rc/ch_3_freq'])
+    car.add(rc_ch_3, inputs=['pico/read_ch_3'],
+            outputs=['user/ch_3', 'rc/ch_3_duty', 'rc/ch_3_freq'])
 
     pwm_steering = PicoPWMOutput(in_min=-1, in_max=1,
                                  duty_min=cfg.PICO_STEERING_MIN_DUTY,
@@ -125,7 +125,7 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     car.add(pwm_steering, inputs=['user/angle'],
             outputs=['pico/write_steering_pwm'])
 
-    car.add(Plotter(), inputs=['user/angle', 'user/throttle', 'pico/read_odo',
+    car.add(Plotter(), inputs=['user/angle', 'rc/steering_duty', 'pico/read_odo',
                                'user/ch_3', 'rc/steering_freq'])
 
     # add odometer -------------------------------------------------------------
