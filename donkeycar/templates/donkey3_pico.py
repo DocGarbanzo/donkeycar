@@ -162,12 +162,12 @@ def calibrate(cfg):
 
     class Plotter:
         def run(self, steer, steer_duty, throttle, throttle_duty,
-                ch_3, ch_3_duty):
-
+                ch_3, ch_3_duty, pulse_ch_3):
             print(f'Ts: {datetime.now().isoformat()} angle: {steer:+4.3f} '
                   f'steer duty: {steer_duty:+4.3f} throttle {throttle:+4.3f} '
-                  f'throttle duty {throttle_duty:+4.3f}'
-                  f' ch3: {ch_3:+4.3f} ch3 duty: {ch_3_duty:+4.3f}')
+                  f'throttle duty {throttle_duty:+4.3f} '
+                  f'ch3: {ch_3:+4.3f} ch3 duty: {ch_3_duty:+4.3f} '
+                  f'ch3 pulse{pulse_ch_3}')
 
     car = dk.vehicle.Vehicle()
     pico = Pico(pin_configuration=cfg.PICO_PIN_CONFIGURATION)
@@ -203,7 +203,7 @@ def calibrate(cfg):
 
     car.add(Plotter(), inputs=['user/angle', 'rc/steering_duty',
                                'user/throttle', 'rc/throttle_duty',
-                               'user/ch_3', 'rc/ch_3_duty'])
+                               'user/ch_3', 'rc/ch_3_duty', 'pico/read_ch_3'])
 
     # add odometer -------------------------------------------------------------
     # odo = OdometerPico(tick_per_meter=cfg.TICK_PER_M, weight=0.5)
