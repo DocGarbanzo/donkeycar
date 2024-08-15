@@ -242,7 +242,7 @@ class PicoPWMInput:
         # most recent measurements will be in the last 2 entries, only update
         # if we have a real measurement, i.e. >= 2 pulses
         if not pulse_in or len(pulse_in) <= 1:
-            return self.last_out, self.last_freq
+            return self.last_out, self.last_duty, self.last_freq
         cycle_time_us = sum(pulse_in[-2:])
         self.last_freq = 1.0e6 / cycle_time_us
         self.last_duty = min(pulse_in[-2:]) / cycle_time_us
