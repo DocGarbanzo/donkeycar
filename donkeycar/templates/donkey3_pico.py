@@ -191,7 +191,8 @@ def calibrate(cfg):
     car.add(rc_throttle, inputs=['pico/read_throttle_pwm'],
             outputs=['user/throttle', 'rc/throttle_duty', 'rc/throttle_freq'])
 
-    rc_ch_3 = PicoPWMInput(out_min=0, out_max=1)
+    rc_ch_3 = PicoPWMInput(out_min=0, out_max=1, duty_min=0.0625,
+                           duty_max=0.0125)
     car.add(rc_ch_3, inputs=['pico/read_ch_3'],
             outputs=['user/ch_3', 'rc/ch_3_duty', 'rc/ch_3_freq'])
 
