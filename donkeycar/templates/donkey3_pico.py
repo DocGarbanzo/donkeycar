@@ -116,7 +116,8 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
             outputs=['user/throttle', 'rc/throttle_freq'])
 
     rc_ch_3 = PicoPWMInput(out_min=0, out_max=1)
-    car.add(rc_ch_3, inputs=['pico/read_ch_3'], outputs=['user/ch_3'])
+    car.add(rc_ch_3, inputs=['pico/read_ch_3'], outputs=['user/ch_3',
+                                                         'rc/ch_3_freq'])
 
     pwm_steering = PicoPWMOutput(in_min=-1, in_max=1,
                                  duty_min=cfg.PICO_STEERING_MIN_DUTY,
