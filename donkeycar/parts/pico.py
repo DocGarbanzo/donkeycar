@@ -231,6 +231,7 @@ class PicoPWMInput:
         self.duty_max = duty_max
         self.duty_center = duty_center or (duty_max + duty_min) / 2
         self.last_out = self.out_center
+        self.last_freq = None
         self.out_deadband = out_deadband
         logger.info(
             f"PicoPWMInput created with min:{out_min} and max:{out_max} and "
@@ -241,7 +242,9 @@ class PicoPWMInput:
         # if we have a real measurement, i.e. >= 2 pulses
         if not pulse_in or len(pulse_in) <= 1:
             return self.last_out
-        duty = min(pulse_in[-2:]) / sum(pulse_in[-2:])
+        cycle_time_us = sum(pulse_in[-2:])
+        self.last_freq = 1.0e6 / cycle_time_us
+        duty = min(pulse_in[-2:]) / cycle_time_us
         if duty < self.duty_center:
             duty_rel = ((duty - self.duty_min)
                         / (self.duty_center - self.duty_min))
@@ -255,7 +258,7 @@ class PicoPWMInput:
         if (self.out_deadband and
                 abs(self.last_out - self.out_center) < self.out_deadband):
             self.last_out = self.out_center
-        return self.last_out
+        return self.last_out, self.last_freq
 
 
 class OdometerPico:

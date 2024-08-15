@@ -79,9 +79,10 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     from donkeycar.parts.pico import Pico, PicoPWMInput, PicoPWMOutput
 
     class Plotter:
-        def run(self, steer, throttle, odo, ch_3):
+        def run(self, steer, throttle, odo, ch_3, steer_freq):
             print(f'Ts: {datetime.now().isoformat()} steering: {steer:+5.4f} '
-                  f'throttle {throttle:+5.4f} odo: {odo} ch3: {ch_3:+5.4f}')
+                  f'throttle {throttle:+5.4f} odo: {odo} ch3: {ch_3:+5.4f} '
+                  f'steering freq: {steer_freq:5.3f}')
 
     if verbose:
         donkeycar.logger.setLevel(logging.DEBUG)
@@ -106,13 +107,13 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
                                duty_max=cfg.PICO_STEERING_MAX_DUTY,
                                duty_center=cfg.PICO_STEERING_CENTER_DUTY)
     car.add(rc_steering, inputs=['pico/read_steering_pwm'],
-            outputs=['user/angle'])
+            outputs=['user/angle', 'rc/steering_freq'])
 
     rc_throttle = PicoPWMInput(out_min=-1, out_max=1,
                                duty_min=cfg.PICO_THROTTLE_MIN_DUTY,
                                duty_max=cfg.PICO_THROTTLE_MAX_DUTY)
     car.add(rc_throttle, inputs=['pico/read_throttle_pwm'],
-            outputs=['user/throttle'])
+            outputs=['user/throttle', 'rc/throttle_freq'])
 
     rc_ch_3 = PicoPWMInput(out_min=0, out_max=1)
     car.add(rc_ch_3, inputs=['pico/read_ch_3'], outputs=['user/ch_3'])
@@ -123,8 +124,8 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     car.add(pwm_steering, inputs=['user/angle'],
             outputs=['pico/write_steering_pwm'])
 
-    car.add(Plotter(), inputs=['user/angle', 'user/throttle', 'pico/read_odo',
-                               'user/ch_3'])
+    car.add(Plotter(), inputs=['user/angle', 'user/throttle', 'pico/read_odo'
+                               'user/ch_3', 'rc/steering_freq'])
 
     # add odometer -------------------------------------------------------------
     odo = OdometerPico(tick_per_meter=cfg.TICK_PER_M, weight=0.5)
