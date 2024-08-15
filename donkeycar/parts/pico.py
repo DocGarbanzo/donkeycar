@@ -255,13 +255,13 @@ class PicoPWMInput:
                         / (self.duty_center - self.duty_min))
             self.last_out = (self.out_min + duty_rel
                              * (self.out_center - self.out_min))
-            self.last_duty = max(self.last_out, self.duty_min)
+            self.last_out = max(self.last_out, self.out_min)
         else:
             duty_rel = ((self.last_duty - self.duty_center)
                         / (self.duty_max - self.duty_center))
             self.last_out = (self.out_center + duty_rel
                              * (self.out_max - self.out_center))
-            self.last_duty = min(self.last_out, self.duty_max)
+            self.last_out = min(self.last_out, self.out_max)
         if (self.out_deadband and
                 abs(self.last_out - self.out_center) < self.out_deadband):
             self.last_out = self.out_center
