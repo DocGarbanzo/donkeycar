@@ -32,7 +32,6 @@ class Memory:
         self.d.update(new_d)
         
     def put(self, keys, inputs):
-        print(f'Writing to memory: {keys} / {inputs}')
         if len(keys) > 1:
             for i, key in enumerate(keys):
                 try:
