@@ -39,6 +39,9 @@ class Memory:
                 except IndexError as e:
                     error = str(e) + ' issue with keys: ' + str(key)
                     raise IndexError(error)
+                except Exception as e:
+                    error = str(e) + ' issue with keys: ' + str(key)
+                    raise RuntimeError(error)
         
         else:
             self.d[keys[0]] = inputs
