@@ -212,7 +212,7 @@ class PicoPWMInput:
     """
     def __init__(self, out_min=0.0, out_max=1.0, out_center=None,
                  out_deadband=None, duty_min=0.06, duty_max=0.012,
-                 duty_center=None):
+                 duty_center=None, round_digits=None):
 
         """
         Initialize the PicoPWMInput part.
@@ -234,6 +234,9 @@ class PicoPWMInput:
         self.last_freq = 0
         self.last_duty = self.duty_center
         self.out_deadband = out_deadband
+        self.round_digits = round_digits
+        if self.round_digits:
+            self.last_out = round(self.last_out, self.round_digits)
         logger.info(
             f"PicoPWMInput created with min:{out_min} and max:{out_max} and "
             f"center:{self.out_center}")
@@ -265,6 +268,8 @@ class PicoPWMInput:
         if (self.out_deadband and
                 abs(self.last_out - self.out_center) < self.out_deadband):
             self.last_out = self.out_center
+        if self.round_digits:
+            self.last_out = round(self.last_out, self.round_digits)
         return self.last_out, self.last_duty, self.last_freq
 
 
