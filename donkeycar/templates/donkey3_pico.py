@@ -230,8 +230,9 @@ def stream(cfg):
     cam = PiCamera(image_w=cfg.IMAGE_W, image_h=cfg.IMAGE_H,
                    image_d=cfg.IMAGE_DEPTH)
     car.add(cam, outputs=['cam/image_array'], threaded=True)
-    streamer = FrameStreamer(cfg.PC_HOSTNAME, cfg.FPV_PORT)
-    car.add(streamer, inputs=['cam/image_array'], threaded=True)
+    # streamer = FrameStreamer(cfg.PC_HOSTNAME, cfg.FPV_PORT)
+    # car.add(streamer, inputs=['cam/image_array'], threaded=True)
+    car.add(WebFpv(), inputs=['cam/image_array'], threaded=True)
     car.start(rate_hz=hz, max_loop_count=cfg.MAX_LOOPS)
 
 
