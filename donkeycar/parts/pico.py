@@ -239,6 +239,10 @@ class PicoPWMInput:
             f"center:{self.out_center}")
 
     def run(self, pulse_in):
+        """
+        Convert the pulse_in signal into a float output value. The pulse_in
+        signal is a list of integers containing hi, lo signals in microseconds.
+        """
         # most recent measurements will be in the last 2 entries, only update
         # if we have a real measurement, i.e. >= 2 pulses
         if not pulse_in or len(pulse_in) <= 1:
@@ -251,11 +255,13 @@ class PicoPWMInput:
                         / (self.duty_center - self.duty_min))
             self.last_out = (self.out_min + duty_rel
                              * (self.out_center - self.out_min))
+            self.last_duty = max(self.last_out, self.duty_min)
         else:
             duty_rel = ((self.last_duty - self.duty_center)
                         / (self.duty_max - self.duty_center))
             self.last_out = (self.out_center + duty_rel
                              * (self.out_max - self.out_center))
+            self.last_duty = min(self.last_out, self.duty_max)
         if (self.out_deadband and
                 abs(self.last_out - self.out_center) < self.out_deadband):
             self.last_out = self.out_center
