@@ -40,9 +40,8 @@ class Memory:
                     error = str(e) + ' issue with keys: ' + str(key)
                     raise IndexError(error)
                 except Exception as e:
-                    error = str(e) + ' issue with keys: ' + str(key)
+                    error = f'{e}: issue with keys: {keys} and inputs: {inputs}'
                     raise RuntimeError(error)
-        
         else:
             self.d[keys[0]] = inputs
             
