@@ -205,6 +205,8 @@ class DutyScaler:
         values in [y_min, y_c] and for x_c <= x <= x_max we return values in
         [y_c, y_max].
         """
+        if x is None:
+            return y_c
         if x < x_min:
             return y_min
         if x > x_max:
