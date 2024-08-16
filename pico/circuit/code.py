@@ -28,7 +28,7 @@ class PulseInResettable:
 
 class PWMIn(PulseInResettable):
     def __init__(self, gpio, duty=0.09, **kwargs):
-        super().__init__(gpio, maxlen=4, auto_clear=False, **kwargs)
+        super().__init__(gpio, maxlen=2, auto_clear=False, **kwargs)
         self.duty = duty
 
     def get_readings(self):
