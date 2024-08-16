@@ -233,6 +233,11 @@ class DutyScaler:
                 res = self.x_center
         if self.round_digits is not None:
             res = round(res, self.round_digits)
+        logger.debug(f"Input: {z} Output: {res} duty_min {self.duty_min} "
+                     f"duty_max {self.duty_max} duty_center "
+                     f"{self.duty_center} x_min {self.x_min} x_max "
+                     f"{self.x_max} x_center {self.x_center} deadband "
+                     f"{self.x_deadband}")
         return res
 
     def shutdown(self):
