@@ -36,14 +36,16 @@ class PWMIn(PulseInResettable):
         r = super().get_readings()
         if len(r) > 1:
             this_total_us = r[-2] + r[-1]
-            # Duty cycle is typically 6% - 12%. A more abrupt change than 2%
-            # is likely to be some form of corrupt signal and will be ignored
-            if abs(this_total_us - self.total_us) < 500:
-                this_duty = min(r[-2], r[-1]) / this_total_us
-                self.duty = this_duty
-                self.total_us = this_total_us
-            else:
-                print(f'PWMIn frequency change too abrupt, ignoring: {r}')
+            # Total cycle time should be around 1/62.5Hz and not vary much
+            # with duty cycle. As we occasionally see duplicated readings like [
+            # 1000, 1000] instead of [15000, 1000] we ignore those readings
+            # that change the total cycle time by an unexpected large amount,
+            # here 500us.
+            if abs(this_total_us - self.total_us) > 500:
+                return self.duty
+            this_duty = min(r[-2], r[-1]) / this_total_us
+            self.duty = this_duty
+            self.total_us = this_total_us
         return self.duty
 
 
