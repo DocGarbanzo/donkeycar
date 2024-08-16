@@ -127,6 +127,9 @@ class Pico:
         """
         Donkey parts interface
         """
+        # wait until threaded loop has at least run once
+        while self.counter == 0:
+            time.sleep(0.1)
         self.lock.acquire()
         n = len(self.receive_dict)
         ret = list(self.receive_dict.values()) if n > 1 \
