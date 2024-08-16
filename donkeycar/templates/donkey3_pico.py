@@ -189,7 +189,7 @@ def calibrate(cfg):
                              duty_min=cfg.PICO_THROTTLE_MIN_DUTY,
                              duty_max=cfg.PICO_THROTTLE_MAX_DUTY,
                              duty_center=cfg.PICO_THROTTLE_CENTER_DUTY,
-                             out_deadband=0.01, to_duty=False)
+                             x_deadband=0.01, to_duty=False)
     car.add(rc_throttle, inputs=['pico/read_throttle_duty'],
             outputs=['user/throttle'])
 
