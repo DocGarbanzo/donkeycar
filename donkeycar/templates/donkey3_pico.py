@@ -77,7 +77,7 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     framework handles passing named outputs to parts requesting the same named
     input.
     """
-    from donkeycar.parts.pico import Pico, PicoPWMInput, PicoPWMOutput
+    from donkeycar.parts.pico import Pico, DutyScaler
 
     class Plotter:
         def run(self, angle, steer, throttle, gas, odo, ch_3,):
@@ -99,35 +99,37 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
         car.add(cam, outputs=[CAM_IMG], threaded=True)
 
     pico = Pico(pin_configuration=cfg.PICO_PIN_CONFIGURATION)
-    car.add(pico, outputs=['pico/read_steering_pwm', 'pico/read_throttle_pwm',
-                           'pico/read_ch_3', 'pico/read_odo'],
+    car.add(pico, outputs=['pico/read_steering_duty', 'pico/read_throttle_duty',
+                           'pico/read_ch_3_duty', 'pico/read_odo'],
             threaded=True)
 
-    rc_steering = PicoPWMInput(out_min=-1, out_max=1,
-                               duty_min=cfg.PICO_STEERING_MIN_DUTY,
-                               duty_max=cfg.PICO_STEERING_MAX_DUTY,
-                               duty_center=cfg.PICO_STEERING_CENTER_DUTY,
-                               out_deadband=0.01)
-    car.add(rc_steering, inputs=['pico/read_steering_pwm'],
-            outputs=['user/angle', 'rc/steering_duty'])
+    rc_steering = DutyScaler(x_min=-1, x_max=1,
+                             duty_min=cfg.PICO_STEERING_MIN_DUTY,
+                             duty_max=cfg.PICO_STEERING_MAX_DUTY,
+                             duty_center=cfg.PICO_STEERING_CENTER_DUTY,
+                             x_deadband=0.01,
+                             to_duty=False)
+    car.add(rc_steering, inputs=['pico/read_steering_duty'],
+            outputs=['user/angle'])
 
-    rc_throttle = PicoPWMInput(out_min=-1, out_max=1,
-                               duty_min=cfg.PICO_THROTTLE_MIN_DUTY,
-                               duty_max=cfg.PICO_THROTTLE_MAX_DUTY,
-                               duty_center=cfg.PICO_THROTTLE_CENTER_DUTY,
-                               out_deadband=0.01)
-    car.add(rc_throttle, inputs=['pico/read_throttle_pwm'],
-            outputs=['user/throttle', 'rc/throttle_duty'])
+    rc_throttle = DutyScaler(x_min=-1, x_max=1,
+                             duty_min=cfg.PICO_THROTTLE_MIN_DUTY,
+                             duty_max=cfg.PICO_THROTTLE_MAX_DUTY,
+                             duty_center=cfg.PICO_THROTTLE_CENTER_DUTY,
+                             x_deadband=0.01)
+    car.add(rc_throttle, inputs=['pico/read_throttle_duty'],
+            outputs=['user/throttle'])
 
-    rc_ch_3 = PicoPWMInput(out_min=0, out_max=1)
-    car.add(rc_ch_3, inputs=['pico/read_ch_3'],
-            outputs=['user/ch_3', 'rc/ch_3_duty'])
+    rc_ch_3 = DutyScaler(x_min=0, x_max=1, to_duty=False, round_digits=0)
+    car.add(rc_ch_3, inputs=['pico/read_ch_3_duty'], outputs=['user/ch_3'])
 
-    pwm_steering = PicoPWMOutput(in_min=-1, in_max=1,
-                                 duty_min=cfg.PICO_STEERING_MIN_DUTY,
-                                 duty_max=cfg.PICO_STEERING_MAX_DUTY)
+    pwm_steering = DutyScaler(x_min=-1, x_max=1,
+                              duty_min=cfg.PICO_STEERING_MIN_DUTY,
+                              duty_max=cfg.PICO_STEERING_MAX_DUTY,
+                              duty_center=cfg.PICO_STEERING_CENTER_DUTY,
+                              to_duty=True)
     car.add(pwm_steering, inputs=['user/angle'],
-            outputs=['pico/write_steering_pwm'])
+            outputs=['pico/write_steering_duty'])
 
     car.add(Plotter(), inputs=['user/angle', 'rc/steering_duty',
                                'user/throttle', 'rc/throttle_duty',
@@ -159,7 +161,7 @@ def calibrate(cfg):
     third channel on the remote we can use it for wiping bad data while
     recording, so we print its values here, too.
     """
-    from donkeycar.parts.pico import Pico, PicoPWMInput, PicoPWMOutput
+    from donkeycar.parts.pico import Pico, PicoPWMInput, DutyScaler
 
     class Plotter:
         def run(self, steer, steer_duty, throttle, throttle_duty,
@@ -171,40 +173,43 @@ def calibrate(cfg):
 
     car = dk.vehicle.Vehicle()
     pico = Pico(pin_configuration=cfg.PICO_PIN_CONFIGURATION)
-    car.add(pico, outputs=['pico/read_steering_pwm', 'pico/read_throttle_pwm',
-                           'pico/read_ch_3', 'pico/read_odo'],
+    car.add(pico, outputs=['pico/read_steering_duty', 'pico/read_throttle_duty',
+                           'pico/read_ch_3_duty', 'pico/read_odo'],
             threaded=True)
 
-    rc_steering = PicoPWMInput(out_min=-1, out_max=1,
-                               duty_min=cfg.PICO_STEERING_MIN_DUTY,
-                               duty_max=cfg.PICO_STEERING_MAX_DUTY,
-                               duty_center=cfg.PICO_STEERING_CENTER_DUTY,
-                               out_deadband=0.01)
-    car.add(rc_steering, inputs=['pico/read_steering_pwm'],
-            outputs=['user/angle', 'rc/steering_duty'])
+    rc_steering = DutyScaler(x_min=-1, x_max=1,
+                             duty_min=cfg.PICO_STEERING_MIN_DUTY,
+                             duty_max=cfg.PICO_STEERING_MAX_DUTY,
+                             duty_center=cfg.PICO_STEERING_CENTER_DUTY,
+                             x_deadband=0.01, to_duty=False)
+    car.add(rc_steering, inputs=['pico/read_steering_duty'],
+            outputs=['user/angle'])
 
-    rc_throttle = PicoPWMInput(out_min=-1, out_max=1,
-                               duty_min=cfg.PICO_THROTTLE_MIN_DUTY,
-                               duty_max=cfg.PICO_THROTTLE_MAX_DUTY,
-                               duty_center=cfg.PICO_THROTTLE_CENTER_DUTY,
-                               out_deadband=0.01)
-    car.add(rc_throttle, inputs=['pico/read_throttle_pwm'],
-            outputs=['user/throttle', 'rc/throttle_duty'])
+    rc_throttle = DutyScaler(x_min=-1, x_max=1,
+                             duty_min=cfg.PICO_THROTTLE_MIN_DUTY,
+                             duty_max=cfg.PICO_THROTTLE_MAX_DUTY,
+                             duty_center=cfg.PICO_THROTTLE_CENTER_DUTY,
+                             out_deadband=0.01, to_duty=False)
+    car.add(rc_throttle, inputs=['pico/read_throttle_duty'],
+            outputs=['user/throttle'])
 
-    rc_ch_3 = PicoPWMInput(out_min=0, out_max=1, duty_min=0.0625,
-                           duty_max=0.125, round_digits=0)
-    car.add(rc_ch_3, inputs=['pico/read_ch_3'],
-            outputs=['user/ch_3', 'rc/ch_3_duty'])
+    rc_ch_3 = DutyScaler(x_min=0, x_max=1,
+                         duty_min=cfg.PICO_STEERING_MIN_DUTY,
+                         duty_max=cfg.PICO_STEERING_MAX_DUTY, round_digits=0,
+                         to_duty=False)
+    car.add(rc_ch_3, inputs=['pico/read_ch_3_duty'], outputs=['user/ch_3'])
 
-    pwm_steering = PicoPWMOutput(in_min=-1, in_max=1,
-                                 duty_min=cfg.PICO_STEERING_MIN_DUTY,
-                                 duty_max=cfg.PICO_STEERING_MAX_DUTY)
+    pwm_steering = DutyScaler(x_min=-1, x_max=1,
+                              duty_min=cfg.PICO_STEERING_MIN_DUTY,
+                              duty_max=cfg.PICO_STEERING_MAX_DUTY,
+                              duty_center=cfg.PICO_STEERING_CENTER_DUTY,
+                              to_duty=True)
     car.add(pwm_steering, inputs=['user/angle'],
-            outputs=['pico/write_steering_pwm'])
+            outputs=['pico/write_steering_duty'])
 
-    car.add(Plotter(), inputs=['user/angle', 'rc/steering_duty',
-                               'user/throttle', 'rc/throttle_duty',
-                               'user/ch_3', 'rc/ch_3_duty'])
+    car.add(Plotter(), inputs=['user/angle', 'pico/read_steering_duty',
+                               'user/throttle', 'pico/read_throttle_duty',
+                               'user/ch_3', 'pico/read_ch_3_duty'])
 
     # add odometer -------------------------------------------------------------
     # odo = OdometerPico(tick_per_meter=cfg.TICK_PER_M, weight=0.5)

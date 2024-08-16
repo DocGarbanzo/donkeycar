@@ -161,7 +161,7 @@ class Pico:
                     f"{total_time * 1000 / self.counter:5.1f} ms.")
 
 
-class PicoPWMOutput:
+class DutyScaler:
     """
     Donkey part to convert an input float number into a pwm duty cycle output
     for the Pico's PWMOut pins. The input is a float in [in_min, in_max]
@@ -172,8 +172,9 @@ class PicoPWMOutput:
     to duty cycles between 6%-12%.
     """
 
-    def __init__(self, in_min=0.0, in_max=1.0, duty_min=0.06, duty_max=0.012,
-                 round_output_digits=3):
+    def __init__(self, x_min=0.0, x_max=1.0, x_center=None, x_deadband=None,
+                 duty_min=0.06, duty_max=0.012, duty_center=None,
+                 round_digits=3, to_duty=False):
         """
         Initialize the PicoPWMOut part.
         :param in_min:      minimum input value
@@ -181,23 +182,56 @@ class PicoPWMOutput:
         :param duty_min:    minimum duty cycle
         :param duty_max:    maximum duty cycle
         """
-        self.in_min = in_min
-        self.in_max = in_max
+        self.x_min = x_min
+        self.x_max = x_max
+        self.x_center = x_center or (x_max + x_min) / 2
+        self.x_deadband = x_deadband
         self.duty_min = duty_min
         self.duty_max = duty_max
-        self.round_output_digits = round_output_digits
-        logger.info(f"PicoPWMOut created with min:{in_min}, max:{in_max}, " 
-                    f"duty min:{duty_min}, duty max:{duty_max}, round digits: "
-                    f"{round_output_digits}")
+        self.duty_center = duty_center or (duty_max + duty_min) / 2
+        self.round_digits = round_digits
+        self.to_duty = to_duty
+        logger.info(f"DutyScaler "
+                    f"{'to_duty' if to_duty else 'from_duty'} created with min"
+                    f":{x_min}, max:{x_max}, duty min:{duty_min}, "
+                    f"duty max:{duty_max}, round digits: {round_digits} and "
+                    f"deadband: {x_deadband}")
 
-    def run(self, x):
-        """ This returns a float value for the duty cycle. However, in order
-        to trigger straight through mode, we just return a string to be used as
-        dummy input in the Pico PWM generator part.
+    @staticmethod
+    def bilinear_interpolate(x, x_min, x_max, x_c, y_min, y_max, y_c):
         """
-        res = (self.duty_min + (x - self.in_min)
-               * (self.duty_max - self.duty_min) / (self.in_max - self.in_min))
-        return round(res, self.round_output_digits)
+        Bilinear interpolation for a point x between two points (x_min, y_min)
+        and a center point x_c, such that for x_min <= x <= x_c we return
+        values in [y_min, y_c] and for x_c <= x <= x_max we return values in
+        [y_c, y_max].
+        """
+        if x < x_min:
+            return y_min
+        if x > x_max:
+            return y_max
+        if x < x_c:
+            return y_min + (x - x_min) * (y_c - y_min) / (x_c - x_min)
+        return y_c + (x - x_c) * (y_max - y_c) / (x_max - x_c)
+
+    def run(self, z):
+        """
+        Convert the input value z into a duty cycle value between duty_min
+        and duty_max, if to_duty is True, otherwise convert the duty cycle into
+        a value between x_min and x_max.
+        """
+        if self.to_duty:
+            res = self.bilinear_interpolate(z, self.x_min, self.x_max,
+                                            self.x_center, self.duty_min,
+                                            self.duty_max, self.duty_center)
+        else:
+            res = self.bilinear_interpolate(z, self.duty_min, self.duty_max,
+                                            self.duty_center, self.x_min,
+                                            self.x_max, self.x_center)
+            if self.x_deadband and abs(res - self.x_center) < self.x_deadband:
+                res = self.x_center
+        if self.round_digits is not None:
+            res = round(res, self.round_digits)
+        return res
 
     def shutdown(self):
         pass
