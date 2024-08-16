@@ -109,7 +109,7 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
                                duty_center=cfg.PICO_STEERING_CENTER_DUTY,
                                out_deadband=0.01)
     car.add(rc_steering, inputs=['pico/read_steering_pwm'],
-            outputs=['user/angle', 'rc/steering_duty', 'rc/steering_freq'])
+            outputs=['user/angle', 'rc/steering_duty'])
 
     rc_throttle = PicoPWMInput(out_min=-1, out_max=1,
                                duty_min=cfg.PICO_THROTTLE_MIN_DUTY,
@@ -117,11 +117,11 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
                                duty_center=cfg.PICO_THROTTLE_CENTER_DUTY,
                                out_deadband=0.01)
     car.add(rc_throttle, inputs=['pico/read_throttle_pwm'],
-            outputs=['user/throttle', 'rc/throttle_duty', 'rc/throttle_freq'])
+            outputs=['user/throttle', 'rc/throttle_duty'])
 
     rc_ch_3 = PicoPWMInput(out_min=0, out_max=1)
     car.add(rc_ch_3, inputs=['pico/read_ch_3'],
-            outputs=['user/ch_3', 'rc/ch_3_duty', 'rc/ch_3_freq'])
+            outputs=['user/ch_3', 'rc/ch_3_duty'])
 
     pwm_steering = PicoPWMOutput(in_min=-1, in_max=1,
                                  duty_min=cfg.PICO_STEERING_MIN_DUTY,
@@ -163,12 +163,11 @@ def calibrate(cfg):
 
     class Plotter:
         def run(self, steer, steer_duty, throttle, throttle_duty,
-                ch_3, ch_3_duty, pulse_ch_3):
+                ch_3, ch_3_duty):
             print(f'Ts: {datetime.now().isoformat()} angle: {steer:+4.3f} '
                   f'steer duty: {steer_duty:+4.3f} throttle {throttle:+4.3f} '
                   f'throttle duty {throttle_duty:+4.3f} '
-                  f'ch3: {ch_3:+4.3f} ch3 duty: {ch_3_duty:+4.3f} '
-                  f'ch3 pulse{pulse_ch_3}')
+                  f'ch3: {ch_3:+4.3f} ch3 duty: {ch_3_duty:+4.3f}')
 
     car = dk.vehicle.Vehicle()
     pico = Pico(pin_configuration=cfg.PICO_PIN_CONFIGURATION)
@@ -182,7 +181,7 @@ def calibrate(cfg):
                                duty_center=cfg.PICO_STEERING_CENTER_DUTY,
                                out_deadband=0.01)
     car.add(rc_steering, inputs=['pico/read_steering_pwm'],
-            outputs=['user/angle', 'rc/steering_duty', 'rc/steering_freq'])
+            outputs=['user/angle', 'rc/steering_duty'])
 
     rc_throttle = PicoPWMInput(out_min=-1, out_max=1,
                                duty_min=cfg.PICO_THROTTLE_MIN_DUTY,
@@ -190,12 +189,12 @@ def calibrate(cfg):
                                duty_center=cfg.PICO_THROTTLE_CENTER_DUTY,
                                out_deadband=0.01)
     car.add(rc_throttle, inputs=['pico/read_throttle_pwm'],
-            outputs=['user/throttle', 'rc/throttle_duty', 'rc/throttle_freq'])
+            outputs=['user/throttle', 'rc/throttle_duty'])
 
     rc_ch_3 = PicoPWMInput(out_min=0, out_max=1, duty_min=0.0625,
                            duty_max=0.125, round_digits=0)
     car.add(rc_ch_3, inputs=['pico/read_ch_3'],
-            outputs=['user/ch_3', 'rc/ch_3_duty', 'rc/ch_3_freq'])
+            outputs=['user/ch_3', 'rc/ch_3_duty'])
 
     pwm_steering = PicoPWMOutput(in_min=-1, in_max=1,
                                  duty_min=cfg.PICO_STEERING_MIN_DUTY,

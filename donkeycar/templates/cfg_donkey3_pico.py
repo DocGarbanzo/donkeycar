@@ -69,12 +69,23 @@ IMU_GYRO_NORM = 250
 GYRO_Z_INDEX = 2
 
 # PICO
+
+PICO_STEERING_MIN_DUTY = 0.0625
+PICO_STEERING_MAX_DUTY = 0.1256
+PICO_STEERING_CENTER_DUTY = 0.0940
+PICO_THROTTLE_MIN_DUTY = 0.0619
+PICO_THROTTLE_MAX_DUTY = 0.1247
+PICO_THROTTLE_CENTER_DUTY = 0.0930
+
+
 PICO_PIN_CONFIGURATION = {
     'input_pins': {
         # 'pin_13': dict(gpio='GP13', mode='INPUT', pull_up=False),
-        'steering_pwm': dict(gpio='GP18', mode='PULSE_IN', maxlen=4),
-        'throttle_pwm': dict(gpio='GP19', mode='PULSE_IN', maxlen=4),
-        'ch_3': dict(gpio='GP20', mode='PULSE_IN', maxlen=2),
+        'steering_pwm': dict(gpio='GP18', mode='PWM_IN',
+                             duty_center=PICO_STEERING_CENTER_DUTY),
+        'throttle_pwm': dict(gpio='GP19', mode='PWM_IN',
+                             duty_center=PICO_THROTTLE_CENTER_DUTY),
+        'ch_3': dict(gpio='GP20', mode='PWM_IN'),
         'odo_in': dict(gpio='GP21', mode='PULSE_IN', maxlen=8, auto_clear=True),
         # 'an_in': dict(gpio='GP28', mode='ANALOG_IN'),
     },
@@ -86,12 +97,6 @@ PICO_PIN_CONFIGURATION = {
     },
 }
 
-PICO_STEERING_MIN_DUTY = 0.0625
-PICO_STEERING_MAX_DUTY = 0.1256
-PICO_STEERING_CENTER_DUTY = 0.094
-PICO_THROTTLE_MIN_DUTY = 0.0619
-PICO_THROTTLE_MAX_DUTY = 0.1247
-PICO_THROTTLE_CENTER_DUTY = 0.0930
 
 
 

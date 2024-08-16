@@ -231,7 +231,6 @@ class PicoPWMInput:
         self.duty_max = duty_max
         self.duty_center = duty_center or (duty_max + duty_min) / 2
         self.last_out = self.out_center
-        self.last_freq = 0
         self.last_duty = self.duty_center
         self.out_deadband = out_deadband
         self.round_digits = round_digits
@@ -241,18 +240,13 @@ class PicoPWMInput:
             f"PicoPWMInput created with min:{out_min} and max:{out_max} and "
             f"center:{self.out_center}")
 
-    def run(self, pulse_in):
+    def run(self, duty_in):
         """
-        Convert the pulse_in signal into a float output value. The pulse_in
-        signal is a list of integers containing hi, lo signals in microseconds.
+        Convert the duty_in value into a float output value between out_min
+        and out_max.
         """
-        # most recent measurements will be in the last 2 entries, only update
-        # if we have a real measurement, i.e. >= 2 pulses
-        if not pulse_in or len(pulse_in) <= 1:
-            return self.last_out, self.last_duty, self.last_freq
-        cycle_time_us = sum(pulse_in[-2:])
-        self.last_freq = 1.0e6 / cycle_time_us
-        self.last_duty = min(pulse_in[-2:]) / cycle_time_us
+        if duty_in is not None:
+            self.last_duty = duty_in
         if self.last_duty < self.duty_center:
             duty_rel = ((self.last_duty - self.duty_min)
                         / (self.duty_center - self.duty_min))
@@ -270,7 +264,7 @@ class PicoPWMInput:
             self.last_out = self.out_center
         if self.round_digits is not None:
             self.last_out = round(self.last_out, self.round_digits)
-        return self.last_out, self.last_duty, self.last_freq
+        return self.last_out, self.last_duty
 
 
 class OdometerPico:

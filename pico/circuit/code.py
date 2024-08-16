@@ -26,6 +26,18 @@ class PulseInResettable:
         self.pin.deinit()
 
 
+class PWMIn(PulseInResettable):
+    def __init__(self, gpio, duty=0.09, **kwargs):
+        super().__init__(gpio, maxlen=4, auto_clear=False, **kwargs)
+        self.duty = duty
+
+    def get_readings(self):
+        r = super().get_readings()
+        if len(r) > 1:
+            self.duty = int(min(r[-2:]) / sum(r[-2:]) * 65535)
+        return self.duty
+
+
 class PWMOutStraightThrough:
     def __init__(self, gpio, frequency=60, duty_cycle=0.09,
                  straight_input_pin=None, **kwargs):
@@ -33,22 +45,19 @@ class PWMOutStraightThrough:
         self.pin.duty_cycle = int(duty_cycle * 65535)
         self.straight_input_pin = straight_input_pin
         if self.straight_input_pin:
-            assert type(self.straight_input_pin) == PulseInResettable,\
-                f'Straight-through routing needs PulseInResettable pin'
-            assert not self.straight_input_pin.auto_clear, \
-                ('Straight-through routing requires pulse-in pin to be '
-                 'non-auto-clear')
+            assert type(self.straight_input_pin) == PWMIn,\
+                f'Straight-through routing needs PWMIn pin'
 
     def deinit(self):
         self.pin.deinit()
 
     def set_duty_cycle(self, value):
-        if isinstance(value, (float, int)):
-            self.pin.duty_cycle = int(value * 65535)
-        elif isinstance(value, str):
-            r = self.straight_input_pin.get_readings()
-            if len(r) > 1:
-                self.pin.duty_cycle = int(min(r[-2:]) / sum(r[-2:]) * 65535)
+        """ Set the duty cycle of the PWM output
+        If value is positive, set the duty cycle to that value,
+        otherwise use the straight input pin to set the duty cycle.
+        """
+        v = value if value > 0 else self.straight_input_pin.get_readings()
+        self.pin.duty_cycle = int(value * 65535)
 
 
 def write_bytes_to_nvm(byte_data):
@@ -114,6 +123,9 @@ def pin_from_dict(d, input_pins):
                                 auto_clear=d.get('auto_clear', False))
         print(f'Configured pulse-in pin, gpio: {gpio}, maxlen:',
               f'{pin.pin.maxlen}, auto_clear: {pin.auto_clear}')
+    elif d['mode'] == 'PWM_IN':
+        pin = PWMIn(gpio, duty=d.get('duty_center', 0.09))
+        print(f'Configured pwm-in pin, gpio: {gpio}, duty_center: {pin.duty}')
     elif d['mode'] == 'ANALOG_IN':
         pin = analogio.AnalogIn(gpio)
         print(f'Configured analog input pin, gpio: {gpio}')
