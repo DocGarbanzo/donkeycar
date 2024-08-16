@@ -34,7 +34,7 @@ class PWMIn(PulseInResettable):
     def get_readings(self):
         r = super().get_readings()
         if len(r) > 1:
-            self.duty = int(min(r[-2:]) / sum(r[-2:]) * 65535)
+            self.duty = min(r[-2:]) / sum(r[-2:])
         return self.duty
 
 
@@ -156,6 +156,7 @@ def setup(setup_dict, input_pins, output_pins, store=False):
     for pin in (input_pins | output_pins).values():
         try:
             pin.deinit()
+            print(f'De-initialise pin: {pin}')
         except AttributeError as e:
             print(f'Pin has no deinit method: {e}')
         except Exception as e:
