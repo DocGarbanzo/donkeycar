@@ -143,7 +143,7 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
 
     # car.add(Plotter(), inputs=['user/angle', 'rc/steering_duty',
     #                            'user/throttle', 'rc/throttle_duty',
-    #                            'pico/read_odo', 'user/ch_3',])
+    #                            'pico/read_odo', 'user/ch_3'])
 
     # add odometer -------------------------------------------------------------
     odo = OdometerPico(tick_per_meter=cfg.TICK_PER_M, weight=0.5)
@@ -176,7 +176,7 @@ def calibrate(cfg):
     class Plotter:
         def run(self, steer, steer_duty=0, throttle=0, throttle_duty=0,
                 ch_3=0, ch_3_duty=0):
-            print(f'Ts: {datetime.now().isoformat()} angle: {steer} '
+            print(f'Calibration - angle: {steer:+4.3f} '
                   f'steer duty: {steer_duty:+4.3f} throttle {throttle:+4.3f} '
                   f'throttle duty {throttle_duty:+4.3f} '
                   f'ch3: {ch_3:+4.3f} ch3 duty: {ch_3_duty:+4.3f}')
@@ -217,7 +217,7 @@ def calibrate(cfg):
     car.add(pwm_steering, inputs=['user/angle'],
             outputs=['pico/write_steering_duty'])
 
-    car.add(Plotter(), inputs=['user/angle', 'pico/read_steering_duty'
+    car.add(Plotter(), inputs=['user/angle', 'pico/read_steering_duty',
                                'user/throttle', 'pico/read_throttle_duty',
                                'user/ch_3', 'pico/read_ch_3_duty'])
 
