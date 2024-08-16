@@ -204,7 +204,7 @@ def calibrate(cfg):
 
     car.add(Plotter(), inputs=['user/angle', 'rc/steering_duty',
                                'user/throttle', 'rc/throttle_duty',
-                               'user/ch_3', 'rc/ch_3_duty', 'pico/read_ch_3'])
+                               'user/ch_3', 'rc/ch_3_duty'])
 
     # add odometer -------------------------------------------------------------
     # odo = OdometerPico(tick_per_meter=cfg.TICK_PER_M, weight=0.5)
