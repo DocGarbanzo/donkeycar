@@ -164,8 +164,8 @@ def calibrate(cfg):
     from donkeycar.parts.pico import Pico, PicoPWMInput, DutyScaler
 
     class Plotter:
-        def run(self, steer, steer_duty, throttle, throttle_duty,
-                ch_3, ch_3_duty):
+        def run(self, steer, steer_duty=0, throttle=0, throttle_duty=0,
+                ch_3=0, ch_3_duty=0):
             print(f'Ts: {datetime.now().isoformat()} angle: {steer:+4.3f} '
                   f'steer duty: {steer_duty:+4.3f} throttle {throttle:+4.3f} '
                   f'throttle duty {throttle_duty:+4.3f} '
@@ -207,9 +207,9 @@ def calibrate(cfg):
     car.add(pwm_steering, inputs=['user/angle'],
             outputs=['pico/write_steering_duty'])
 
-    car.add(Plotter(), inputs=['user/angle', 'pico/read_steering_duty',
-                               'user/throttle', 'pico/read_throttle_duty',
-                               'user/ch_3', 'pico/read_ch_3_duty'])
+    car.add(Plotter(), inputs=['user/angle']) #, 'pico/read_steering_duty',
+                               # 'user/throttle', 'pico/read_throttle_duty',
+                               # 'user/ch_3', 'pico/read_ch_3_duty'])
 
     # add odometer -------------------------------------------------------------
     # odo = OdometerPico(tick_per_meter=cfg.TICK_PER_M, weight=0.5)
