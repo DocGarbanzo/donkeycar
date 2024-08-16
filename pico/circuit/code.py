@@ -218,7 +218,7 @@ def write(serial, input_pins, write_dict):
     for name, pin in input_pins.items():
         if type(pin) in (digitalio.DigitalInOut, analogio.AnalogIn):
             write_dict[name] = pin.value
-        elif type(pin) is PulseInResettable:
+        elif type(pin) in (PulseInResettable, PWMIn):
             write_dict[name] = pin.get_readings()
 
     byte_out = dict_to_bytes(write_dict)
