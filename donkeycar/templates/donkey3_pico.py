@@ -141,9 +141,9 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     car.add(pwm_throttle, inputs=['user/throttle'],
             outputs=['pico/write_throttle_duty'])
 
-    car.add(Plotter(), inputs=['user/angle', 'rc/steering_duty',
-                               'user/throttle', 'rc/throttle_duty',
-                               'pico/read_odo', 'user/ch_3',])
+    # car.add(Plotter(), inputs=['user/angle', 'rc/steering_duty',
+    #                            'user/throttle', 'rc/throttle_duty',
+    #                            'pico/read_odo', 'user/ch_3',])
 
     # add odometer -------------------------------------------------------------
     odo = OdometerPico(tick_per_meter=cfg.TICK_PER_M, weight=0.5)
