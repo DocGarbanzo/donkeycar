@@ -227,6 +227,7 @@ def write(serial, input_pins, write_dict):
 
 
 def main():
+    print('\n************ Starting pi pico ************')
     microcontroller.cpu.frequency = 180000000
     print(f'Current CPU frequency: {microcontroller.cpu.frequency}')
 
