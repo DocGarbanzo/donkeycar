@@ -79,11 +79,12 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     """
     from donkeycar.parts.pico import Pico, DutyScaler
 
-    class Plotter:
-        def run(self, angle, steer, throttle, gas, odo, ch_3,):
-            print(f'Ts: {datetime.now().isoformat()} angle: {angle:+5.4f} '
-                  f'steer duty: {steer:+5.4f} throttle {throttle:+5.4f} '
-                  f'throttle duty {gas:+5.4f} odo: {odo} ch3: {ch_3:+5.4f} ')
+    class StraighThroughSwitch:
+        def run(self, angle_duty, throttle_duty, ch3):
+            if ch3 > 0.5:
+                return angle_duty, throttle_duty
+            else:
+                return -1, -1
 
     if verbose:
         donkeycar.logger.setLevel(logging.DEBUG)
@@ -141,9 +142,11 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     car.add(pwm_throttle, inputs=['user/throttle'],
             outputs=['pico/write_throttle_duty'])
 
-    # car.add(Plotter(), inputs=['user/angle', 'rc/steering_duty',
-    #                            'user/throttle', 'rc/throttle_duty',
-    #                            'pico/read_odo', 'user/ch_3'])
+    car.add(StraighThroughSwitch(),
+            inputs=['pico/write_steering_duty', 'pico/write_throttle_duty',
+                    'user/ch_3'],
+            outputs=['pico/write_steering_duty', 'pico/write_throttle_duty'])
+
 
     # add odometer -------------------------------------------------------------
     odo = OdometerPico(tick_per_meter=cfg.TICK_PER_M, weight=0.5)
