@@ -207,7 +207,7 @@ def calibrate(cfg):
     car.add(pwm_steering, inputs=['user/angle'],
             outputs=['pico/write_steering_duty'])
 
-    car.add(Plotter(), inputs=['user/angle']) #, 'pico/read_steering_duty',
+    car.add(Plotter(), inputs=['user/angle', 'pico/read_steering_duty'])
                                # 'user/throttle', 'pico/read_throttle_duty',
                                # 'user/ch_3', 'pico/read_ch_3_duty'])
 
