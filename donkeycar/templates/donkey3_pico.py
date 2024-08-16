@@ -167,7 +167,7 @@ def calibrate(cfg):
         def run(self, steer, steer_duty=0, throttle=0, throttle_duty=0,
                 ch_3=0, ch_3_duty=0):
             print(f'Ts: {datetime.now().isoformat()} angle: {steer:+4.3f} '
-                  f'steer duty: {steer_duty:+4.3f} throttle {throttle:+4.3f} '
+                  f'steer duty: {steer_duty} throttle {throttle:+4.3f} '
                   f'throttle duty {throttle_duty:+4.3f} '
                   f'ch3: {ch_3:+4.3f} ch3 duty: {ch_3_duty:+4.3f}')
 
