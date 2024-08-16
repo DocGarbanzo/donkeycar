@@ -40,7 +40,7 @@ class PWMIn(PulseInResettable):
             if abs(this_duty - self.duty) < 0.02:
                 self.duty = this_duty
             else:
-                print(f'PWMIn duty change too abrupt, '
+                print(f'PWMIn duty change too abrupt, ',
                       f'this duty {this_duty}, last duty {self.duty}',
                       f'pulse readings {r}')
         return self.duty
