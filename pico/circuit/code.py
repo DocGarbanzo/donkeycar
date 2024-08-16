@@ -30,19 +30,20 @@ class PWMIn(PulseInResettable):
     def __init__(self, gpio, duty=0.09, **kwargs):
         super().__init__(gpio, maxlen=2, auto_clear=False, **kwargs)
         self.duty = duty
+        self.total_us = 16000
 
     def get_readings(self):
         r = super().get_readings()
         if len(r) > 1:
-            this_duty = min(r[-2], r[-1]) / (r[-2] + r[-1])
+            this_total_us = r[-2] + r[-1]
             # Duty cycle is typically 6% - 12%. A more abrupt change than 2%
             # is likely to be some form of corrupt signal and will be ignored
-            if abs(this_duty - self.duty) < 0.02:
+            if abs(this_total_us - self.total_us) < 500:
+                this_duty = min(r[-2], r[-1]) / this_total_us
                 self.duty = this_duty
+                self.total_us = this_total_us
             else:
-                print(f'PWMIn duty change too abrupt, ',
-                      f'this duty {this_duty}, last duty {self.duty}',
-                      f'pulse readings {r}')
+                print(f'PWMIn frequency change too abrupt, ignoring: {r}')
         return self.duty
 
 
