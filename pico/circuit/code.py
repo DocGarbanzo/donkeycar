@@ -47,8 +47,7 @@ class PWMOutStraightThrough:
         if self.straight_input_pin:
             s_type = type(self.straight_input_pin)
             assert s_type == PWMIn, \
-                (f'Straight-through output pin needs PWMIn pin but found type'
-                 f' {s_type}')
+                (f'Straight-through output pin needs PWMIn pin but found type {s_type}')
 
     def deinit(self):
         self.pin.deinit()
