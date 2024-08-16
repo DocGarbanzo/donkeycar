@@ -34,7 +34,7 @@ class PWMIn(PulseInResettable):
     def get_readings(self):
         r = super().get_readings()
         if len(r) > 1:
-            self.duty = min(r[-2:]) / sum(r[-2:])
+            self.duty = min(r[-2], r[-1]) / (r[-2] + r[-1])
         return self.duty
 
 
