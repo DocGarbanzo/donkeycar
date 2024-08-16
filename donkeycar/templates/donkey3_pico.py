@@ -99,8 +99,10 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
         car.add(cam, outputs=[CAM_IMG], threaded=True)
 
     pico = Pico(pin_configuration=cfg.PICO_PIN_CONFIGURATION)
-    car.add(pico, outputs=['pico/read_steering_duty', 'pico/read_throttle_duty',
-                           'pico/read_ch_3_duty', 'pico/read_odo'],
+    car.add(pico,
+            inputs=['pico/write_steering_duty', 'pico/write_throttle_duty'],
+            outputs=['pico/read_steering_duty', 'pico/read_throttle_duty',
+                     'pico/read_ch_3_duty', 'pico/read_odo'],
             threaded=True)
 
     rc_steering = DutyScaler(x_min=-1, x_max=1,
@@ -130,6 +132,14 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
                               to_duty=True)
     car.add(pwm_steering, inputs=['user/angle'],
             outputs=['pico/write_steering_duty'])
+
+    pwm_throttle = DutyScaler(x_min=-1, x_max=1,
+                              duty_min=cfg.PICO_THROTTLE_MIN_DUTY,
+                              duty_max=cfg.PICO_THROTTLE_MAX_DUTY,
+                              duty_center=cfg.PICO_THROTTLE_CENTER_DUTY,
+                              to_duty=True)
+    car.add(pwm_throttle, inputs=['user/throttle'],
+            outputs=['pico/write_throttle_duty'])
 
     car.add(Plotter(), inputs=['user/angle', 'rc/steering_duty',
                                'user/throttle', 'rc/throttle_duty',
@@ -207,24 +217,10 @@ def calibrate(cfg):
     car.add(pwm_steering, inputs=['user/angle'],
             outputs=['pico/write_steering_duty'])
 
-    car.add(Plotter(), inputs=['user/angle', 'pico/read_steering_duty'])
-                               # 'user/throttle', 'pico/read_throttle_duty',
-                               # 'user/ch_3', 'pico/read_ch_3_duty'])
+    car.add(Plotter(), inputs=['user/angle', 'pico/read_steering_duty'
+                               'user/throttle', 'pico/read_throttle_duty',
+                               'user/ch_3', 'pico/read_ch_3_duty'])
 
-    # add odometer -------------------------------------------------------------
-    # odo = OdometerPico(tick_per_meter=cfg.TICK_PER_M, weight=0.5)
-    # car.add(odo, inputs=['pico/read_odo'],
-    #         outputs=['car/speed', 'car/inst_speed', 'car/distance'])
-    #
-    # add lap timer ------------------------------------------------------------
-    # lap = LapTimer(gpio=cfg.LAP_TIMER_GPIO, trigger=4)
-    # car.add(lap, inputs=['car/distance'],
-    #         outputs=['car/lap', 'car/m_in_lap', 'car/lap_updated'],
-    #         threaded=True)
-    #
-    # # add mpu ------------------------------------------------------------------
-    # mpu = Mpu6050Ada()
-    # car.add(mpu, outputs=['car/accel', 'car/gyro'], threaded=True)
     car.start(rate_hz=10, max_loop_count=cfg.MAX_LOOPS)
 
 
