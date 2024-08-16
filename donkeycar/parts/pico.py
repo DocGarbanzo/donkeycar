@@ -99,6 +99,7 @@ class Pico:
             self.serial.write(pack.encode())
         # clear the input buffer
         self.serial.reset_input_buffer()
+        time.sleep(1.0)
         self.start = time.time()
         while self.running:
             try:
