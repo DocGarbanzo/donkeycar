@@ -34,7 +34,13 @@ class PWMIn(PulseInResettable):
     def get_readings(self):
         r = super().get_readings()
         if len(r) > 1:
-            self.duty = min(r[-2], r[-1]) / (r[-2] + r[-1])
+            this_duty = min(r[-2], r[-1]) / (r[-2] + r[-1])
+            # Duty cycle is typically 6% - 12%. A more abrupt change than 2%
+            # is likely to be some form of corrupt signal and will be ignored
+            if abs(this_duty - self.duty) < 0.02:
+                self.duty = this_duty
+            else:
+                print(f'PWMIn duty change too abrupt: {this_duty-self.duty}')
         return self.duty
 
 
