@@ -91,12 +91,14 @@ PICO_PIN_CONFIGURATION = {
     },
     'output_pins': {
         # 'pin_14': dict(gpio='GP14', mode='OUTPUT', value=0),
-        'steering_out': dict(gpio='GP15', mode='PWM',
-                             frequency=60, duty_cycle=0.09,
+        'steering_out': dict(gpio='GP16', mode='PWM',
+                             frequency=60, duty_cycle=PICO_STEERING_CENTER_DUTY,
                              straight='steering_pwm'),
+        'throttle_out': dict(gpio='GP17', mode='PWM',
+                             frequency=60, duty_cycle=PICO_THROTTLE_CENTER_DUTY,
+                             straight='throttle_pwm'),
     },
 }
-
 
 
 

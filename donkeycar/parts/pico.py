@@ -127,7 +127,8 @@ class Pico:
         """
         Donkey parts interface
         """
-        # wait until threaded loop has at least run once
+        # Wait until threaded loop has at least run once, so we don't have to
+        # process None values. This blocks until the first data is received.
         while self.counter == 0:
             time.sleep(0.1)
         self.lock.acquire()
