@@ -79,11 +79,18 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     """
     from donkeycar.parts.pico import Pico, DutyScaler
 
-    class StraighThroughSwitch:
+    class StraightThroughSwitch:
+        last_ch3 = 0
         def run(self, angle_duty, throttle_duty, ch3):
-            if ch3 > 0.5:
+            if ch3 < 0.5:
+                if self.last_ch3 != ch3:
+                    self.last_ch3 = ch3
+                    print(f'Switching to translated pwm mode')
                 return angle_duty, throttle_duty
             else:
+                if self.last_ch3 != ch3:
+                    self.last_ch3 = ch3
+                    print(f'Switching to straight through mode')
                 return -1, -1
 
     if verbose:
@@ -142,7 +149,7 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     car.add(pwm_throttle, inputs=['user/throttle'],
             outputs=['pico/write_throttle_duty'])
 
-    car.add(StraighThroughSwitch(),
+    car.add(StraightThroughSwitch(),
             inputs=['pico/write_steering_duty', 'pico/write_throttle_duty',
                     'user/ch_3'],
             outputs=['pico/write_steering_duty', 'pico/write_throttle_duty'])
