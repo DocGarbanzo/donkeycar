@@ -69,7 +69,7 @@ class PWMOutStraightThrough:
         otherwise use the straight input pin to set the duty cycle.
         """
         v = value if value > 0 else self.straight_input_pin.get_readings()
-        self.pin.duty_cycle = int(value * 65535)
+        self.pin.duty_cycle = int(v * 65535)
 
 
 def write_bytes_to_nvm(byte_data):
