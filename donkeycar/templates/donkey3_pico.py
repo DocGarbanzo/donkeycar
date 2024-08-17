@@ -130,7 +130,10 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     car.add(rc_throttle, inputs=['pico/read_throttle_duty'],
             outputs=['user/throttle'])
 
-    rc_ch_3 = DutyScaler(x_min=0, x_max=1, to_duty=False, round_digits=0)
+    rc_ch_3 = DutyScaler(x_min=0, x_max=1,
+                         duty_min=cfg.PICO_STEERING_MIN_DUTY,
+                         duty_max=cfg.PICO_STEERING_MAX_DUTY, round_digits=0,
+                         to_duty=False)
     car.add(rc_ch_3, inputs=['pico/read_ch_3_duty'], outputs=['user/ch_3'])
 
     pwm_steering = DutyScaler(x_min=-1, x_max=1,
