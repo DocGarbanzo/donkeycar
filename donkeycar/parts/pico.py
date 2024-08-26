@@ -292,7 +292,7 @@ class Pico:
         with (self.lock):
             if gpio not in self.receive_dict:
                 msg = (f"Pin {gpio} not in receive_dict. Known pins: "
-                       f"{self.receive_dict.keys()}")
+                       f"{', '.join(self.receive_dict.keys())}")
                 logger.error(msg)
                 raise RuntimeError(msg)
             return self.receive_dict[gpio]
@@ -325,6 +325,7 @@ class Pico:
             # send the setup dictionary
             pack = json.dumps(setup_dict) + '\n'
             self.serial.write(pack.encode())
+        self.receive_dict[gpio] = None
 
 
 instance = Pico()
