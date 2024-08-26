@@ -232,7 +232,7 @@ class Pico:
 
     def __del__(self):
         logging.info("Deleting Pico object.")
-        self.stop()
+        # self.stop()
 
     def loop(self):
         """
@@ -289,8 +289,12 @@ class Pico:
         # process None values. This blocks until the first data is received.
         while self.counter == 0:
             time.sleep(0.1)
-        assert gpio in self.receive_dict, f"Pin {gpio} not in receive_dict."
-        with self.lock:
+        with (self.lock):
+            if gpio not in self.receive_dict:
+                msg = (f"Pin {gpio} not in receive_dict. Known pins: "
+                       f"{self.receive_dict.keys()}")
+                logger.error(msg)
+                raise RuntimeError(msg)
             return self.receive_dict[gpio]
 
     def stop(self):
