@@ -305,7 +305,7 @@ class Pico:
         :param kwargs:  additional arguments for the mode
         """
         logger.info(f"Setting up input pin {gpio} in mode {mode} with {kwargs}")
-        assert mode in ['INPUT', 'PULSE_IN', 'ANALOG_IN'], \
+        assert mode in ['INPUT', 'PULSE_IN', 'ANALOG_IN', 'PWM_IN'], \
             f"Mode {mode} not supported for input pins."
         setup_dict = dict(input_pins=dict(gpio=dict(mode=mode, **kwargs)))
         with self.lock:
