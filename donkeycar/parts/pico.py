@@ -231,6 +231,7 @@ class Pico:
         self.t.start()
 
     def __del__(self):
+        logging.info("Deleting Pico object.")
         self.stop()
 
     def loop(self):
