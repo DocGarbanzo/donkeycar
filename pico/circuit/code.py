@@ -93,9 +93,9 @@ def dict_to_bytes(dict_data):
     return byte_out
 
 
-def pin_from_dict(d, input_pins):
+def pin_from_dict(pin_name, d, input_pins):
     print(f'Creating pin from dict: {d}')
-    gpio = getattr(board, d['gpio'])
+    gpio = getattr(board, pin_name)
     print('gpio:', gpio)
     assert gpio != board.LED, 'Cannot use LED pin as input'
     pin = None
@@ -177,7 +177,7 @@ def setup(setup_dict, input_pins, output_pins):
                 print(f'Overwriting {pin_name}')
                 deinit_pin(pins[pin_name])
             try:
-                pins[pin_name] = pin_from_dict(pin_dict, input_pins)
+                pins[pin_name] = pin_from_dict(pin_name, pin_dict, input_pins)
             except Exception as e:
                 print(f'Setup of {pin_name} failed because of {e}.')
                 return False
