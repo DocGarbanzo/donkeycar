@@ -162,7 +162,7 @@ def setup(setup_dict, input_pins, output_pins):
         return False
     # if both input_pins and output_pins are empty, we are clearing all pins
     print(f'Received setup dict: {setup_dict}')
-    if input_pins.empty() and output_pins.empty():
+    if len(input_pins) == 0 and len(output_pins) == 0:
         reset_all_pins(input_pins, output_pins)
     # merge pins from setup dict into input_pins and output_pins
     t_list = zip([input_pins, output_pins], ['input_pins', 'output_pins'])
