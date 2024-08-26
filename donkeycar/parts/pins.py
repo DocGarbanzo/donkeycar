@@ -1289,7 +1289,7 @@ if __name__ == '__main__':
                     ttl_out_pin.output(PinState.LOW)
                     time.sleep(1 / args.hertz * (1 - args.duty))
             elif pwm_in_pin is not None:
-                print(f'Pwm in duty cycle {pwm_in_pin.duty_cycle()}:5.4f')
+                print(f'Pwm in duty cycle {pwm_in_pin.duty_cycle():5.4f}')
                 time.sleep(1/args.hertz)
             else:
                 # yield time to background threads
@@ -1299,6 +1299,7 @@ if __name__ == '__main__':
                 else:
                     time.sleep(0)  # yield time to other threads
             start_time = time.time()
+        print('Finished loop')
 
     except KeyboardInterrupt:
         print('Stopping early.')
