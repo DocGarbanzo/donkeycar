@@ -27,25 +27,30 @@ class PulseInResettable:
 
 
 class PWMIn(PulseInResettable):
-    def __init__(self, gpio, duty=0.09, **kwargs):
+    def __init__(self, gpio, frequency=60, duty=0.09, min_us=1000,
+                 max_us=2000, **kwargs):
         super().__init__(gpio, maxlen=2, auto_clear=False, **kwargs)
         self.duty = duty
-        self.total_us = 16000
+        self.min_us = min_us
+        self.max_us = max_us
+        self.frequency = frequency
 
     def get_readings(self):
+        """
+        Get the duty cycle from the last two readings. Assuming min and max
+        us are 1000 and 2000, respectively,
+        """
         r = super().get_readings()
         if len(r) > 1:
-            this_total_us = r[-2] + r[-1]
-            # Total cycle time should be around 1/62.5Hz and not vary much
-            # with duty cycle. As we occasionally see duplicated readings like [
-            # 1000, 1000] instead of [15000, 1000] we ignore those readings
-            # that change the total cycle time by an unexpected large amount,
-            # here 500us.
-            if abs(this_total_us - self.total_us) > 500:
+            duty_us = min(r[-2], r[-1])
+            # High signals should be between min_us and max_us. As we
+            # occasionally see duplicated readings like [1000, 1000] instead
+            # of [15666, 1000] we ignore readings which are out by more than
+            # 10% of the min_us or max_us.
+
+            if duty_us < 0.9 * self.min_us or duty_us > 1.1 * self.max_us:
                 return self.duty
-            this_duty = min(r[-2], r[-1]) / this_total_us
-            self.duty = this_duty
-            self.total_us = this_total_us
+            self.duty = duty_us * self.frequency * 1e-6
         return self.duty
 
 
