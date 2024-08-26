@@ -232,7 +232,7 @@ class Pico:
 
     def __del__(self):
         logging.info("Deleting Pico object.")
-        # self.stop()
+        self.stop()
 
     def loop(self):
         """
