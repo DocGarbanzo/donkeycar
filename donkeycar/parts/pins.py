@@ -1128,6 +1128,7 @@ class InputPwmPinPico(InputPwmPin):
         logger.info(f"InputPin 'PICO.{self.pin_number}' started.")
 
     def stop(self) -> None:
+        logger.info(f"InputPin 'PICO.{self.pin_number}' stopped.")
         self._state = PinState.NOT_STARTED
 
     def state(self) -> float:
