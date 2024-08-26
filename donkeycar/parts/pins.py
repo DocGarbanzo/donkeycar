@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 pins.py - high level ttl an pwm pin abstraction.
 This is designed to allow drivers that use ttl and pwm
