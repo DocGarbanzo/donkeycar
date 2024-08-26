@@ -95,6 +95,7 @@ def dict_to_bytes(dict_data):
 
 def pin_from_dict(pin_name, d, input_pins):
     print(f'Creating pin from dict: {d}')
+    # convert from pin_name string to board pin object
     gpio = getattr(board, pin_name)
     print('gpio:', gpio)
     assert gpio != board.LED, 'Cannot use LED pin as input'
@@ -115,7 +116,6 @@ def pin_from_dict(pin_name, d, input_pins):
         print(f'Configured pulse-in pin, gpio: {gpio}, maxlen:',
               f'{pin.pin.maxlen}, auto_clear: {pin.auto_clear}')
     elif d['mode'] == 'PWM_IN':
-        print('Creating PWMIn pin')
         pin = PWMIn(gpio, duty=d.get('duty_center', 0.09))
         print(f'Configured pwm-in pin, gpio: {gpio}, duty_center: {pin.duty}')
     elif d['mode'] == 'ANALOG_IN':

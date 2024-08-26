@@ -228,6 +228,7 @@ class Pico:
         self.start = None
         logger.info(f"Pico created on port: {port}")
         self.t = Thread(target=self.loop, args=())
+        self.t.start()
 
     def loop(self):
         """
