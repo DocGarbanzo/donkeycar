@@ -1125,6 +1125,7 @@ class InputPwmPinPico(InputPwmPin):
         self.pico.setup_input_pin(self.pin_number, mode='PWM_IN',
                                   duty=self.duty)
         self._state = self.duty
+        logger.info(f"InputPin 'PICO.{self.pin_number}' started.")
 
     def stop(self) -> None:
         self._state = PinState.NOT_STARTED

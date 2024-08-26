@@ -162,12 +162,14 @@ def setup(setup_dict, input_pins, output_pins):
         return False
     # if both input_pins and output_pins are empty, we are clearing all pins
     print(f'Received setup dict: {setup_dict}')
-    if len(input_pins) == 0 and len(output_pins) == 0:
+    in_dict, out_dict = tuple(setup_dict.get(key, {})
+                              for key in ['input_pins', 'output_pins'])
+    if len(in_dict) == 0 and len(out_dict) == 0:
         reset_all_pins(input_pins, output_pins)
     # merge pins from setup dict into input_pins and output_pins
-    t_list = zip([input_pins, output_pins], ['input_pins', 'output_pins'])
-    for pins, pin_key in t_list:
-        for pin_name, pin_dict in setup_dict.get(pin_key, {}).items():
+    t_list = zip((in_dict, out_dict), (input_pins, output_pins))
+    for setup_io_dict, pins in t_list:
+        for pin_name, pin_dict in setup_io_dict.items():
             if pin_name in pins:
                 print(f'Overwriting {pin_name}')
                 deinit_pin(pins[pin_name])
@@ -182,7 +184,7 @@ def setup(setup_dict, input_pins, output_pins):
     return True
 
 
-def update_output_pins(output_data, input_pins, output_pins):
+def update_output_pins(output_data, output_pins):
     for pin_name, value in output_data.items():
         out_pin = output_pins.get(pin_name)
         try:
@@ -207,7 +209,7 @@ def read(serial, input_pins, output_pins, led, is_setup, count):
         if 'input_pins' in read_dict or 'output_pins' in read_dict:
             is_setup = setup(read_dict, input_pins, output_pins)
         elif is_setup:
-            update_output_pins(read_dict, input_pins, output_pins)
+            update_output_pins(read_dict, output_pins)
     else:
         led.value = False
     return is_setup
