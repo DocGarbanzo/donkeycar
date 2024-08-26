@@ -325,7 +325,7 @@ class Pico:
             # send the setup dictionary
             pack = json.dumps(setup_dict) + '\n'
             self.serial.write(pack.encode())
-        self.receive_dict[gpio] = None
+        self.receive_dict[gpio] = 0
 
 
 instance = Pico()
