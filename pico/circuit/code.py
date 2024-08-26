@@ -72,16 +72,6 @@ class PWMOutStraightThrough:
         self.pin.duty_cycle = int(v * 65535)
 
 
-def write_bytes_to_nvm(byte_data):
-    # first clear the memory
-    l = len(byte_data)
-    if l >= 10000:
-        print(f'Cannot write {l} bytes to nvm, too large.')
-    bytes_to_save = f'{l:04}'.encode() + byte_data
-    microcontroller.nvm[0:l+4] = bytes_to_save
-    print(f'Wrote {l} bytes to nvm.')
-
-
 def bytes_to_dict(byte_data, count):
     if byte_data == b'':
         return {}
@@ -103,23 +93,6 @@ def dict_to_bytes(dict_data):
     return byte_out
 
 
-def read_dict_from_nvm():
-    try:
-        lb = microcontroller.nvm[0:4]
-        lsb = lb.decode()
-        if not lsb.isdigit():
-            print(f'Failed to read length from nvm: {lsb}')
-            return {}
-        l = int(lsb)
-        byte_data = microcontroller.nvm[4:l+4]  # Read from NVM
-        dict_data = bytes_to_dict(byte_data, 0)
-        print(f'Read setup dict from nvm: {dict_data}')
-        return dict_data
-    except Exception as e:
-        print(f'Failed to read setup dict from nvm: {e}')
-        return {}
-
-
 def pin_from_dict(d, input_pins):
     gpio = getattr(board, d['gpio'])
     assert gpio != board.LED, 'Cannot use LED pin as input'
@@ -127,8 +100,12 @@ def pin_from_dict(d, input_pins):
     if d['mode'] == 'INPUT':
         pin = digitalio.DigitalInOut(gpio)
         pin.direction = digitalio.Direction.INPUT
-        pin.pull = digitalio.Pull.UP if d.get('pull_up', False) \
-            else digitalio.Pull.DOWN
+        pull = d.get('pull')  # None will work here otherwise map
+        if pull == 1:
+            pull = digitalio.Pull.UP
+        elif pull == 2:
+            pull = digitalio.Pull.DOWN
+        pin.pull = pull
         print(f'Configured digital input pin, gpio: {gpio}, pull: {pin.pull}')
     elif d['mode'] == 'PULSE_IN':
         pin = PulseInResettable(gpio, maxlen=d.get('maxlen', 2),
@@ -162,34 +139,46 @@ def pin_from_dict(d, input_pins):
     return pin
 
 
-def setup(setup_dict, input_pins, output_pins, store=False):
-    if not setup_dict:
-        return False
+def deinit_pin(pin):
+    try:
+        pin.deinit()
+        print(f'De-initialise pin: {pin}')
+    except AttributeError as e:
+        print(f'Pin has no deinit method: {e}')
+    except Exception as e:
+        print(f'Pin deinit failed: {e}')
+
+
+def reset_all_pins(input_pins, output_pins):
     for pin in (input_pins | output_pins).values():
-        try:
-            pin.deinit()
-            print(f'De-initialise pin: {pin}')
-        except AttributeError as e:
-            print(f'Pin has no deinit method: {e}')
-        except Exception as e:
-            print(f'Pin deinit failed: {e}')
+        deinit_pin(pin)
     input_pins.clear()
     output_pins.clear()
+    print(f'Reset all pins.')
+
+
+def setup(setup_dict, input_pins, output_pins):
+    if not setup_dict:
+        return False
+    # if both input_pins and output_pins are empty, we are clearing all pins
     print(f'Received setup dict: {setup_dict}')
+    if input_pins.empty() and output_pins.empty():
+        reset_all_pins(input_pins, output_pins)
+    # merge pins from setup dict into input_pins and output_pins
     t_list = zip([input_pins, output_pins], ['input_pins', 'output_pins'])
     for pins, pin_key in t_list:
         for pin_name, pin_dict in setup_dict.get(pin_key, {}).items():
+            if pin_name in pins:
+                print(f'Overwriting {pin_name}')
+                deinit_pin(pins[pin_name])
             try:
                 pins[pin_name] = pin_from_dict(pin_dict, input_pins)
             except Exception as e:
                 print(f'Setup of {pin_name} failed because of {e}.')
                 return False
 
-    if store:
-        byte_data = dict_to_bytes(setup_dict)
-        write_bytes_to_nvm(byte_data)
-    print(f'Created input pins: {input_pins}')
-    print(f'Created output pins: {output_pins}')
+    print(f'Updated input pins: {input_pins}')
+    print(f'Updated output pins: {output_pins}')
     return True
 
 
@@ -216,7 +205,7 @@ def read(serial, input_pins, output_pins, led, is_setup, count):
         read_dict = bytes_to_dict(bytes_in, count)
         # if setup dict sent, this contains 'input_pins' or 'output_pins'
         if 'input_pins' in read_dict or 'output_pins' in read_dict:
-            is_setup = setup(read_dict, input_pins, output_pins, store=True)
+            is_setup = setup(read_dict, input_pins, output_pins)
         elif is_setup:
             update_output_pins(read_dict, input_pins, output_pins)
     else:
@@ -251,11 +240,8 @@ def main():
 
     input_pins = {}
     output_pins = {}
-    # initialise input/output pins from nvm
-    setup_dict = {} #read_dict_from_nvm()
-    is_setup = setup(setup_dict, input_pins, output_pins, store=False)
-    print(f'Successful setup from nvm: {is_setup}.')
     write_dict = {}
+    is_setup = False
     count = 0
     tic = time.monotonic()
     total_time = 0

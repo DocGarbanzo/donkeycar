@@ -27,8 +27,11 @@ Use PCA9685 on bus 0 at address 0x40, channel 7
 """
 from abc import ABC, abstractmethod
 from typing import Any, Callable
+from enum import Enum
 import logging
 
+import donkeycar.parts.pico
+from donkeycar.parts.pico import Pico
 
 logger = logging.getLogger(__name__)
 
@@ -46,15 +49,16 @@ class PinEdge:
 
 
 class PinPull:
-    PULL_NONE: int = 1
-    PULL_UP: int = 2
-    PULL_DOWN: int = 3
+    PULL_NONE: int = 0
+    PULL_UP: int = 1
+    PULL_DOWN: int = 2
 
 
 class PinProvider:
     RPI_GPIO = "RPI_GPIO"
     PCA9685 = "PCA9685"
     PIGPIO = "PIGPIO"
+    PICO = "PICO"
 
 
 class PinScheme:
@@ -198,6 +202,49 @@ class PwmPin(ABC):
         pass  # subclasses must override
 
 
+class InputPwmPin(ABC):
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    @abstractmethod
+    def start(self) -> None:
+        """
+        Start the pin in input mode and with given starting state.
+        This raises and RuntimeError if the pin is already started.
+        You can check to see if the pin is started by calling
+        state() and checking for PinState.NOT_STARTED
+        """
+        pass  # subclasses should override this
+
+    @abstractmethod
+    def stop(self) -> None:
+        """
+        Stop the pin and return it to PinState.NOT_STARTED
+        """
+        pass  # subclasses should override this
+
+    @abstractmethod
+    def state(self) -> float:
+        """
+        Return most recent output state.  This does not re-read the pin,
+        It just returns that last value set by the output() method.
+        If the pin is not started or has been stopped,
+        this will return PinState:NOT_STARTED
+        :return: most recent output duty_cycle
+        """
+        return PinState.NOT_STARTED  # subclasses must override
+
+    @abstractmethod
+    def duty_cycle(self) -> float:
+        """
+        Get the input duty cycle of the pin
+        in range 0 to 1.0 (0% to 100%)
+        :return: duty cycle in range 0 to 1
+        :except: RuntimeError is pin is not started
+        """
+        pass  # subclasses must override
+
 #
 # ####### Factory Methods
 #
@@ -305,6 +352,26 @@ def input_pin_by_id(pin_id: str, pull: int = PinPull.PULL_NONE) -> InputPin:
     raise ValueError(f"Unknown pin provider {parts[0]}")
 
 
+def input_pwm_pin_by_id(pin_id: str) -> InputPwmPin:
+    """
+    Select a ttl input pin given a pin id.
+    """
+    parts = pin_id.split(".")
+    if parts[0] in (PinProvider.PCA9685, PinProvider.RPI_GPIO):
+        raise RuntimeError("PinProvider.PCA9685 and RPI_GPIO do not "
+                           "implement PWMInputPin")
+
+    if parts[0] == PinProvider.PIGPIO:
+        pin_provider = parts[0]
+        if PinScheme.BCM != parts[1]:
+            raise ValueError("Pin scheme must be BCM for PIGPIO")
+        pin_number = int(parts[2])
+        return input_pwm_pin(pin_provider, pin_number,
+                             pin_scheme=PinScheme.BCM)
+
+    raise ValueError(f"Unknown pin provider {parts[0]}")
+
+
 def input_pin(
         pin_provider: str,
         pin_number: int,
@@ -388,6 +455,32 @@ def pwm_pin(
             raise ValueError("Pin scheme must be PinScheme.BCM for PIGPIO")
         return PwmPinPigpio(pin_number, frequency_hz)
     raise RuntimeError(f"UnknownPinProvider ({pin_provider})")
+
+
+def input_pwm_pin(
+        pin_provider: str,
+        pin_number: int,
+        pin_scheme: str = PinScheme.BOARD,
+        duty=0.09) -> InputPwmPin:
+    """
+    construct a PwmPin using the given pin provider
+    :param pin_provider: PinProvider string
+    :param pin_number: zero based pin number
+    :param pin_scheme: PinScheme string
+    :param i2c_bus: I2C bus number for I2C devices
+    :param i2c_address: I2C address for I2C devices
+    :param frequency_hz: duty cycle frequence in hertz
+    :return: PwmPin
+    :except: RuntimeError if pin_provider is not valid.
+    """
+    if pin_scheme != PinScheme.BCM:
+        raise ValueError("Pin scheme must be PinScheme.BCM for input pwm pin")
+    if pin_provider not in (PinProvider.PIGPIO, PinProvider.PICO):
+        raise ValueError("Pin provider must be PIGPIO or PICO")
+    if pin_provider == PinProvider.PIGPIO:
+        return InputPwmPinPigpio(pin_number)
+    if pin_provider == PinProvider.PICO:
+        return InputPwmPinPico(f'GP{pin_number}', duty=duty)
 
 
 #
@@ -925,46 +1018,196 @@ class PwmPinPigpio(PwmPin):
             self._state = duty
 
 
+class InputPwmPinPigpio(InputPwmPin):
+    def __init__(self, pin_number: int, duty=0.09, pgpio=None) -> None:
+        super().__init__()
+        self.pgpio = pgpio
+        self.pin_number = pin_number
+        self.duty = duty
+        self._state: int = PinState.NOT_STARTED
+
+    def start(self) -> None:
+        """
+        Start pin with given duty cycle.
+        :param duty: duty cycle in range 0 to 1
+        :except: RuntimeError if pin is already started.
+        """
+        if self.state() != PinState.NOT_STARTED:
+            raise RuntimeError(f"Attempt to start InputPWMPinPigpio"
+                               f"({self.pin_number}) that is already started.")
+        if self.duty < 0 or self.duty > 1:
+            raise ValueError("duty_cycle must be in range 0 to 1")
+        self.pgpio = self.pgpio or pigpio.pi()
+        self.pgpio.set_mode(self.pin_number, pigpio.INPUT)
+        # self.pgpio.set_PWM_frequency(self.pin_number, self.frequency)
+        # self.pgpio.set_PWM_range(self.pin_number, 4095)  # 12 bits, same as PCA9685
+        # self.pgpio.set_PWM_dutycycle(self.pin_number, int(duty * 4095))  # set initial state
+        # self._state = duty
+        raise RuntimeError("InputPwmPinPigpio not implemented")
+
+
+#
+# ----- PICO implementation -----
+#
+
+
+class InputPinPico(InputPin):
+    def __init__(self, pin_number: str, pull: PinPull = PinPull.PULL_NONE) ->\
+            None:
+        """
+        Input pin ttl HIGH/LOW using pico connection
+        :param pin_number: GPIO.BCM pin number, like 'GP2' or 'GP15'.
+        :param pull: enable a pull up or down resistor on pin.  Default is
+                        PinPull.PULL_NONE
+        """
+        super().__init__()
+        self.pin_number = pin_number
+        self.pull = pull
+        self.pico = donkeycar.parts.pico.instance
+        self._state = PinState.NOT_STARTED
+
+    def __del__(self):
+        self.stop()
+
+    def start(self, on_input=None, edge=None) -> None:
+        """
+        Start the input pin, arguments cannot be passed.
+        :param on_input: must be None because we don't have callbacks on Pico
+        :param edge: type of edge(s) that trigger on_input; default is PinEdge.RISING
+        """
+        if self.state() != PinState.NOT_STARTED:
+            raise RuntimeError(f"Attempt to start InputPinPico("
+                               f"{self.pin_number}) that is already started.")
+        assert (on_input is None and edge is None), \
+            "Pico pin does not support callbacks"
+        self.pico.setup_input_pin(self.pin_number, mode='INPUT', pull=self.pull)
+        self._state = self.pico.read(self.pin_number)  # read initial state
+
+    def stop(self) -> None:
+        if self.state() != PinState.NOT_STARTED:
+            self._state = PinState.NOT_STARTED
+
+    def state(self) -> int:
+        """
+        Return last input() value.  This does NOT read the input again;
+        it returns that last value that input() returned.
+        :return: PinState.LOW/HIGH OR PinState.NOT_STARTED if not started
+        """
+        return self._state
+
+    def input(self) -> int:
+        """
+        Read the input pins state.
+        :return: PinState.LOW/HIGH OR PinState.NOT_STARTED if not started
+        """
+        if self.state() != PinState.NOT_STARTED:
+            self._state = self.pico.read(self.pin_number)
+        return self._state
+
+
+class InputPwmPinPico(InputPwmPin):
+    """
+    PWM input pin using Pi Pico
+    """
+    def __init__(self, pin_number: str, duty: float = 0.9) \
+            -> None:
+        super().__init__()
+        self.pico = donkeycar.parts.pico.instance
+        self.pin_number = pin_number
+        self.duty = duty
+        self._state = PinState.NOT_STARTED
+
+    def start(self) -> None:
+        """
+        Start pin with given duty cycle.
+        :param duty: duty cycle in range 0 to 1
+        :except: RuntimeError if pin is already started.
+        """
+        if self.state() != PinState.NOT_STARTED:
+            raise RuntimeError(f"Attempt to start InputPico"
+                               f"({self.pin_number}) that is already started.")
+
+        self.pico.setup_input_pin(self.pin_number, mode='PWM_IN',
+                                  duty=self.duty)
+        self._state = self.duty
+
+    def stop(self) -> None:
+        self._state = PinState.NOT_STARTED
+
+    def state(self) -> float:
+        """
+        This returns the last set duty cycle.
+        :return: duty cycle in range 0 to 1 OR PinState.NOT_STARTED if not
+        started
+        """
+        return self._state
+
+    def duty_cycle(self) -> float:
+        if self.state() != PinState.NOT_STARTED:
+            self._state = self.pico.read(self.pin_number)
+        return self._state
+
+
 if __name__ == '__main__':
     import argparse
     import sys
     import time
 
     #
-    # output 50% duty cycle on Rpi board pin 33 (equivalent to BCM.13) for 10 seconds
+    # output 50% duty cycle on Rpi board pin 33 (equivalent to BCM.13) for
+    # 10 seconds
     # python pins.py --pwm-pin=RPI_GPIO.BOARD.33 --duty=0.5 --time=10
     #
     # input on Rpi board pin 35 (equivalend to BCM.19) for 10 seconds
     # python pins.py --in-pin=RPI_GPIO.BOARD.35 --time=10
     #
-    # output 50% duty cycle on Rpi board pin 33, input on Rpi board pin 35 using interrupt handler
-    # python pins.py --pwm-pin=RPI_GPIO.BOARD.33 --duty=0.5 --in-pin=RPI_GPIO.BOARD.35 -int=rising --time=10
+    # output 50% duty cycle on Rpi board pin 33, input on Rpi board pin 35
+    # using interrupt handler
+    # python pins.py --pwm-pin=RPI_GPIO.BOARD.33 --duty=0.5 \
+    # --in-pin=RPI_GPIO.BOARD.35 -int=rising --time=10
     #
-    # output on Rpi board pin 33, input on Rpi board pin 35 using interrupt handler
-    # python pins.py --out-pin=RPI_GPIO.BOARD.33 --duty=0.5 --in-pin=RPI_GPIO.BOARD.35 -int=rising --time=10
+    # output on Rpi board pin 33, input on Rpi board pin 35 using
+    # interrupt handler
+    # python pins.py --out-pin=RPI_GPIO.BOARD.33 --duty=0.5 \
+    # --in-pin=RPI_GPIO.BOARD.35 -int=rising --time=10
     #
     #
     # parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", "--pwm-pin", type=str, default=None,
-                        help="pwm pin id, like 'PCA9685:1:60.13' or 'RPI_GPIO.BCM.13")
+                        help="pwm pin id, like 'PCA9685:1:60.13' "
+                             "or 'RPI_GPIO.BCM.13")
+
+    parser.add_argument("-w", "--pwm-in-pin", type=str,
+                        default=None,
+                        help="pwm input pin id, like 'PICO.13' "
+                             "or 'PIGPIO.BCM.13")
     parser.add_argument("-hz", "--hertz", type=int, default=60,
-                        help="PWM signal frequence in hertz.  Default is 60hz")
-    parser.add_argument("-d", "--duty", type=float, default=0.5,
-                        help="duty cycle in range 0 to 1.  Default is 0.5")
+                        help="PWM signal frequency in hertz.  Default is 60hz")
+    parser.add_argument("-d", "--duty", type=float, default=0.09,
+                        help="duty cycle in range 0 to 1.  Default is 0.09")
 
     parser.add_argument("-o", "--out-pin", type=str, default=None,
-                        help="ttl output pin id, like 'PCA9685:1:60.13' or 'RPI_GPIO.BOARD.35' or 'RPI_GPIO.BCM.13'")
+                        help="ttl output pin id, like 'PCA9685:1:60.13' or "
+                             "'RPI_GPIO.BOARD.35' or 'RPI_GPIO.BCM.13'")
 
     parser.add_argument("-i", "--in-pin", type=str, default=None,
-                        help="ttl input pin id, like 'RPI_GPIO.BOARD.35' or 'RPI_GPIO.BCM.19'")
-    parser.add_argument("-pu", "--pull", type=str, choices=['up', 'down', 'none'], default='none',
+                        help="ttl input pin id, like 'RPI_GPIO.BOARD.35' "
+                             "or 'RPI_GPIO.BCM.19'")
+    parser.add_argument("-pu", "--pull", type=str,
+                        choices=['up', 'down', 'none'], default='none',
                         help="input pin pullup, one of 'up', 'down', 'none'")
-    parser.add_argument("-int", "--interrupt", type=str, choices=['falling', 'rising', 'both', 'none'], default='none',
-                        help="use interrupt routine on in-pin with given edge; 'falling', 'rising' or 'both'")
-    parser.add_argument("-tm", "--time", type=float, default=1, help="duration test in seconds")
-    parser.add_argument("-db", "--debug", action='store_true', help="show debug output")
-    parser.add_argument("-th", "--threaded", action='store_true', help="run in threaded mode")
+    parser.add_argument("-int", "--interrupt", type=str,
+                        choices=['falling', 'rising', 'both', 'none'],
+                        default='none',
+                        help="use interrupt routine on in-pin with given edge; "
+                             "'falling', 'rising' or 'both'")
+    parser.add_argument("-tm", "--time", type=float, default=1,
+                        help="duration test in seconds")
+    parser.add_argument("-db", "--debug", action='store_true',
+                        help="show debug output")
+    parser.add_argument("-th", "--threaded", action='store_true',
+                        help="run in threaded mode")
 
     # Read arguments from command line
     args = parser.parse_args()
@@ -976,13 +1219,15 @@ if __name__ == '__main__':
     if args.duty < 0 or args.duty > 1:
         help.append("-d/--duty: must be in range 0 to 1")
 
-    if args.pwm_pin is None and args.out_pin is None and args.in_pin is None:
-        help.append("must have one of -o/--out-pin or -p/--pwm-pin or -i/--in-pin")
+    if (args.pwm_pin is None and args.out_pin is None and args.in_pin is None
+            and args.pwm_in_pin is None):
+        help.append("must have one of -o/--out-pin or -p/--pwm-pin "
+                    "or -i/--in-pin or -w/--pwm-in-pin")
 
     if args.pwm_pin is not None and args.out_pin is not None:
         help.append("must have only one of -o/--out-pin or -p/--pwn-pin")
 
-    if args.time < 1:
+    if args.time < 0:
         help.append("-tm/--time: must be > 0.")
 
     if len(help) > 0:
@@ -1011,6 +1256,7 @@ if __name__ == '__main__':
             print("-", ttl_in_pin.pin_number, time.time()*1000)
 
     pwm_out_pin: PwmPin = None
+    pwm_in_pin: InputPwmPin = None
     ttl_out_pin: OutputPin = None
     ttl_in_pin: InputPin = None
     try:
@@ -1032,6 +1278,10 @@ if __name__ == '__main__':
             ttl_out_pin = output_pin_by_id(args.out_pin, args.hertz)
             ttl_out_pin.start(PinState.LOW)
 
+        if args.pwm_in_pin is not None:
+            pwm_in_pin = input_pwm_pin_by_id(args.pwm_in_pin)
+            pwm_in_pin.start()
+
         start_time = time.time()
         end_time = start_time + args.time
         while start_time < end_time:
@@ -1042,6 +1292,9 @@ if __name__ == '__main__':
                 if args.duty < 1:
                     ttl_out_pin.output(PinState.LOW)
                     time.sleep(1 / args.hertz * (1 - args.duty))
+            elif pwm_in_pin is not None:
+                print(f'Pwm in duty cycle {pwm_in_pin.duty_cycle()}:5.4f')
+                time.sleep(1/args.hertz)
             else:
                 # yield time to background threads
                 sleep_time = 1/args.hertz - (time.time() - start_time)
@@ -1059,6 +1312,8 @@ if __name__ == '__main__':
     finally:
         if pwm_out_pin is not None:
             pwm_out_pin.stop()
+        if pwm_in_pin is not None:
+            pwm_in_pin.stop()
         if ttl_out_pin is not None:
             ttl_out_pin.stop()
         if ttl_in_pin is not None:
