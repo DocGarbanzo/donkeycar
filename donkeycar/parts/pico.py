@@ -230,6 +230,9 @@ class Pico:
         self.t = Thread(target=self.loop, args=())
         self.t.start()
 
+    def __del__(self):
+        self.stop()
+
     def loop(self):
         """
         Donkey parts interface. We are sending newline delimited json strings

@@ -97,7 +97,6 @@ def pin_from_dict(pin_name, d, input_pins):
     print(f'Creating pin from dict: {d}')
     # convert from pin_name string to board pin object
     gpio = getattr(board, pin_name)
-    print('gpio:', gpio)
     assert gpio != board.LED, 'Cannot use LED pin as input'
     pin = None
     if d['mode'] == 'INPUT':
