@@ -294,7 +294,7 @@ def output_pin_by_id(pin_id: str, frequency_hz: int = 60) -> OutputPin:
         pin_number = int(parts[2])
         return output_pin(pin_provider, pin_number, pin_scheme=PinScheme.BCM)
 
-    raise ValueError(f"Unknown pin provider {parts[0]}")
+    raise ValueError(f"Unknown pin provider {parts[0]} for output pin")
 
 
 def pwm_pin_by_id(pin_id: str, frequency_hz: int = 60) -> PwmPin:
@@ -326,7 +326,7 @@ def pwm_pin_by_id(pin_id: str, frequency_hz: int = 60) -> PwmPin:
         pin_number = int(parts[2])
         return pwm_pin(pin_provider, pin_number, pin_scheme=PinScheme.BCM, frequency_hz=frequency_hz)
 
-    raise ValueError(f"Unknown pin provider {parts[0]}")
+    raise ValueError(f"Unknown pin provider {parts[0]} for input pin")
 
 
 def input_pin_by_id(pin_id: str, pull: int = PinPull.PULL_NONE) -> InputPin:
@@ -350,7 +350,7 @@ def input_pin_by_id(pin_id: str, pull: int = PinPull.PULL_NONE) -> InputPin:
         pin_number = int(parts[2])
         return input_pin(pin_provider, pin_number, pin_scheme=PinScheme.BCM, pull=pull)
 
-    raise ValueError(f"Unknown pin provider {parts[0]}")
+    raise ValueError(f"Unknown pin provider {parts[0]} for input pin")
 
 
 def input_pwm_pin_by_id(pin_id: str) -> InputPwmPin:
@@ -361,16 +361,10 @@ def input_pwm_pin_by_id(pin_id: str) -> InputPwmPin:
     if parts[0] in (PinProvider.PCA9685, PinProvider.RPI_GPIO):
         raise RuntimeError("PinProvider.PCA9685 and RPI_GPIO do not "
                            "implement PWMInputPin")
+    pin_provider = parts[0]
+    pin_number = int(parts[2])
+    return input_pwm_pin(pin_provider, pin_number, pin_scheme=PinScheme.BCM)
 
-    if parts[0] == PinProvider.PIGPIO:
-        pin_provider = parts[0]
-        if PinScheme.BCM != parts[1]:
-            raise ValueError("Pin scheme must be BCM for PIGPIO")
-        pin_number = int(parts[2])
-        return input_pwm_pin(pin_provider, pin_number,
-                             pin_scheme=PinScheme.BCM)
-
-    raise ValueError(f"Unknown pin provider {parts[0]}")
 
 
 def input_pin(
@@ -479,7 +473,7 @@ def input_pwm_pin(
     if pin_provider not in (PinProvider.PIGPIO, PinProvider.PICO):
         raise ValueError("Pin provider must be PIGPIO or PICO")
     if pin_provider == PinProvider.PIGPIO:
-        return InputPwmPinPigpio(pin_number)
+        return InputPwmPinPigpio(pin_number, duty=duty)
     if pin_provider == PinProvider.PICO:
         return InputPwmPinPico(f'GP{pin_number}', duty=duty)
 
