@@ -1308,7 +1308,6 @@ if __name__ == '__main__':
         print(e)
         exit(1)
     finally:
-        # donkeycar.parts.pico.instance.stop()
         if pwm_out_pin is not None:
             pwm_out_pin.stop()
         if pwm_in_pin is not None:
@@ -1317,3 +1316,4 @@ if __name__ == '__main__':
             ttl_out_pin.stop()
         if ttl_in_pin is not None:
             ttl_in_pin.stop()
+        donkeycar.parts.pico.instance.stop()

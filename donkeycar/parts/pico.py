@@ -266,6 +266,7 @@ class Pico:
             except Exception as e:
                 logger.error(f'Problem with serial input {e}')
             self.counter += 1
+        logger.info('Pico loop stopped.')
 
     def write(self, gpio: str, value: float or int) -> None:
         """
