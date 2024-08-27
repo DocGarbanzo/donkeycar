@@ -302,7 +302,7 @@ class Pico:
         logger.info("Stopping Pico communication.")
         self.running = False
         time.sleep(0.1)
-        self.t.join()
+        # self.t.join()
         logger.info("Pico communication stopped.")
         self.serial.close()
         total_time = time.time() - self.start
