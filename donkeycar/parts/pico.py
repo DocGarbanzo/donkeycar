@@ -227,8 +227,7 @@ class Pico:
         self.lock = Lock()
         self.start = None
         logger.info(f"Pico created on port: {port}")
-        self.t = Thread(target=self.loop, args=())
-        self.t.daemon = True
+        self.t = Thread(target=self.loop, args=(), daemon=True)
         self.t.start()
 
     def __del__(self):
@@ -303,7 +302,7 @@ class Pico:
         logger.info("Stopping Pico communication.")
         self.running = False
         time.sleep(0.1)
-        # self.t.join()
+        self.t.join()
         logger.info("Pico communication stopped.")
         self.serial.close()
         total_time = time.time() - self.start
