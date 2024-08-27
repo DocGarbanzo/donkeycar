@@ -1317,4 +1317,5 @@ if __name__ == '__main__':
         if ttl_in_pin is not None:
             ttl_in_pin.stop()
     print('end of script')
+    exit(0)
         # donkeycar.parts.pico.instance.stop()
