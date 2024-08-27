@@ -228,6 +228,7 @@ class Pico:
         self.start = None
         logger.info(f"Pico created on port: {port}")
         self.t = Thread(target=self.loop, args=())
+        self.t.daemon = True
         self.t.start()
 
     def __del__(self):
