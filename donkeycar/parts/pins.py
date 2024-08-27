@@ -1316,4 +1316,4 @@ if __name__ == '__main__':
             ttl_out_pin.stop()
         if ttl_in_pin is not None:
             ttl_in_pin.stop()
-        donkeycar.parts.pico.instance.stop()
+        # donkeycar.parts.pico.instance.stop()
