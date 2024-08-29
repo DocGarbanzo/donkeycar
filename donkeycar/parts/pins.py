@@ -1152,10 +1152,10 @@ class PwmPinPico(PwmPin):
     """
     PWM output pin using Pico
     """
-    def __init__(self, pin_number: int, frequency_hz: float = 60) \
+    def __init__(self, pin_number: int, frequency_hz: int = 60) \
             -> None:
         self.pin_number: str = f'GP{pin_number}'
-        self.frequency = frequency_hz
+        self.frequency: int = frequency_hz
         self.pico = donkeycar.parts.pico.instance
         self._state: int = PinState.NOT_STARTED
 

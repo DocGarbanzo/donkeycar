@@ -54,27 +54,17 @@ class PWMIn(PulseInResettable):
         return self.duty
 
 
-class PWMOutStraightThrough:
-    def __init__(self, gpio, frequency=60, duty_cycle=0.09,
-                 straight_input_pin=None, **kwargs):
+class PWMOut:
+    def __init__(self, gpio, frequency=60, duty_cycle=0.09, **kwargs):
         self.pin = pwmio.PWMOut(pin=gpio, frequency=frequency, **kwargs)
         self.pin.duty_cycle = int(duty_cycle * 65535)
-        self.straight_input_pin = straight_input_pin
-        if self.straight_input_pin:
-            s_type = type(self.straight_input_pin)
-            assert s_type == PWMIn, \
-                (f'Straight-through output pin needs PWMIn pin but found type {s_type}')
 
     def deinit(self):
         self.pin.deinit()
 
     def set_duty_cycle(self, value):
-        """ Set the duty cycle of the PWM output
-        If value is positive, set the duty cycle to that value,
-        otherwise use the straight input pin to set the duty cycle.
-        """
-        v = value if value > 0 else self.straight_input_pin.get_readings()
-        self.pin.duty_cycle = int(v * 65535)
+        """ Set the duty cycle of the PWM output. """
+        self.pin.duty_cycle = int(value * 65535)
 
 
 def bytes_to_dict(byte_data, count):
@@ -98,7 +88,7 @@ def dict_to_bytes(dict_data):
     return byte_out
 
 
-def pin_from_dict(pin_name, d, input_pins):
+def pin_from_dict(pin_name, d):
     print(f'Creating pin from dict: {d}')
     # convert from pin_name string to board pin object
     gpio = getattr(board, pin_name)
@@ -134,15 +124,11 @@ def pin_from_dict(pin_name, d, input_pins):
     elif d['mode'] == 'PWM':
         duty_cycle = d.get('duty_cycle', 0.09)
         freq = int(d.get('frequency', 60))
-        straight = d.get('straight')
-        straight_input_pin = input_pins[straight] if straight else None
-        pin = PWMOutStraightThrough(gpio, frequency=freq,
-                                    duty_cycle=duty_cycle,
-                                    straight_input_pin=straight_input_pin)
+        pin = PWMOut(gpio, frequency=freq, duty_cycle=duty_cycle)
         print(f'Configured pwm output pin, gpio: {gpio},',
               f'frequency: {pin.pin.frequency},',
               f'duty_cycle: {pin.pin.duty_cycle / 65535},',
-              f'pwm output: {pin.pin}, straight: {pin.straight_input_pin}')
+              f'pwm output: {pin.pin}')
     return pin
 
 
@@ -181,7 +167,7 @@ def setup(setup_dict, input_pins, output_pins):
                 print(f'Overwriting {pin_name}')
                 deinit_pin(pins[pin_name])
             try:
-                pins[pin_name] = pin_from_dict(pin_name, pin_dict, input_pins)
+                pins[pin_name] = pin_from_dict(pin_name, pin_dict)
             except Exception as e:
                 print(f'Setup of {pin_name} failed because of {e}.')
                 return False
@@ -197,7 +183,7 @@ def update_output_pins(output_data, output_pins):
         try:
             if isinstance(out_pin, digitalio.DigitalInOut):
                 out_pin.value = bool(value)
-            elif isinstance(out_pin, PWMOutStraightThrough):
+            elif isinstance(out_pin, PWMOut):
                 out_pin.set_duty_cycle(value)
             else:
                 print(f'Cannot update pin out_pin: {pin_name} \
@@ -215,6 +201,7 @@ def read(serial, input_pins, output_pins, led, is_setup, count):
         # if setup dict sent, this contains 'input_pins' or 'output_pins'
         if 'input_pins' in read_dict or 'output_pins' in read_dict:
             is_setup = setup(read_dict, input_pins, output_pins)
+        # only call update_output_pins if setup has been done
         elif is_setup:
             update_output_pins(read_dict, output_pins)
     else:
