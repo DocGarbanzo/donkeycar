@@ -475,7 +475,7 @@ def input_pwm_pin(
     if pin_provider == PinProvider.PIGPIO:
         return InputPwmPinPigpio(pin_number, duty=duty)
     if pin_provider == PinProvider.PICO:
-        return InputPwmPinPico(f'GP{pin_number}', duty=duty)
+        return InputPwmPinPico(pin_number, duty=duty)
 
 
 #
@@ -963,7 +963,8 @@ class PwmPinPigpio(PwmPin):
     """
     PWM output pin using Rpi.GPIO/Jetson.GPIO
     """
-    def __init__(self, pin_number: int, frequency_hz: float = 50, pgpio=None) -> None:
+    def __init__(self, pin_number: int, frequency_hz: float = 50, pgpio=None) \
+            -> None:
         self.pgpio = pgpio
         self.pin_number: int = pin_number
         self.frequency: int = int(frequency_hz)
@@ -976,14 +977,17 @@ class PwmPinPigpio(PwmPin):
         :except: RuntimeError if pin is already started.
         """
         if self.state() != PinState.NOT_STARTED:
-            raise RuntimeError(f"Attempt to start InputPinPigpio({self.pin_number}) that is already started.")
+            raise RuntimeError(f"Attempt to start InputPinPigpio("
+                               f"{self.pin_number})  that is already started.")
         if duty < 0 or duty > 1:
             raise ValueError("duty_cycle must be in range 0 to 1")
         self.pgpio = self.pgpio or pigpio.pi()
         self.pgpio.set_mode(self.pin_number, pigpio.OUTPUT)
         self.pgpio.set_PWM_frequency(self.pin_number, self.frequency)
-        self.pgpio.set_PWM_range(self.pin_number, 4095)  # 12 bits, same as PCA9685
-        self.pgpio.set_PWM_dutycycle(self.pin_number, int(duty * 4095))  # set initial state
+        # 12 bits, same as PCA9685
+        self.pgpio.set_PWM_range(self.pin_number, 4095)
+        self.pgpio.set_PWM_dutycycle(self.pin_number, int(duty * 4095))
+        # set initial state
         self._state = duty
 
     def stop(self) -> None:
@@ -1051,7 +1055,7 @@ class InputPinPico(InputPin):
             None:
         """
         Input pin ttl HIGH/LOW using pico connection
-        :param pin_number: GPIO.BCM pin number, like 'GP2' or 'GP15'.
+        :param pin_number: PICO.BCM pin number, like 'GP2' or 'GP15'.
         :param pull: enable a pull up or down resistor on pin.  Default is
                         PinPull.PULL_NONE
         """
@@ -1068,7 +1072,7 @@ class InputPinPico(InputPin):
         """
         Start the input pin, arguments cannot be passed.
         :param on_input: must be None because we don't have callbacks on Pico
-        :param edge: type of edge(s) that trigger on_input; default is PinEdge.RISING
+        :param edge: must be None because we don't have callbacks on Pico
         """
         if self.state() != PinState.NOT_STARTED:
             raise RuntimeError(f"Attempt to start InputPinPico("
@@ -1104,18 +1108,17 @@ class InputPwmPinPico(InputPwmPin):
     """
     PWM input pin using Pi Pico
     """
-    def __init__(self, pin_number: str, duty: float = 0.9) \
+    def __init__(self, pin_number: int, duty: float = 0.09) \
             -> None:
         super().__init__()
         self.pico = donkeycar.parts.pico.instance
-        self.pin_number = pin_number
+        self.pin_number = f'GP{pin_number}'
         self.duty = duty
         self._state = PinState.NOT_STARTED
 
     def start(self) -> None:
         """
         Start pin with given duty cycle.
-        :param duty: duty cycle in range 0 to 1
         :except: RuntimeError if pin is already started.
         """
         if self.state() != PinState.NOT_STARTED:
@@ -1143,6 +1146,56 @@ class InputPwmPinPico(InputPwmPin):
         if self.state() != PinState.NOT_STARTED:
             self._state = self.pico.read(self.pin_number)
         return self._state
+
+
+class PwmPinPico(PwmPin):
+    """
+    PWM output pin using Pico
+    """
+    def __init__(self, pin_number: int, frequency_hz: float = 60) \
+            -> None:
+        self.pin_number: str = f'GP{pin_number}'
+        self.frequency = frequency_hz
+        self.pico = donkeycar.parts.pico.instance
+        self._state: int = PinState.NOT_STARTED
+
+    def start(self, duty=0.09) -> None:
+        """
+        Start pin with given duty cycle.
+        :except: RuntimeError if pin is already started.
+        """
+        if self.state() != PinState.NOT_STARTED:
+            raise RuntimeError(f"Attempt to start InputPinPico("
+                               f"{self.pin_number})  that is already started.")
+        if duty < 0 or duty > 1:
+            raise ValueError("duty_cycle must be in range 0 to 1")
+        self.pico.setup_input_pin(self.pin_number, mode='PWM_OUT',
+                                  duty_cycle=duty,
+                                  frequency=self.frequency)
+        self._state = PinState.HIGH
+
+    def stop(self) -> None:
+        if self.state() != PinState.NOT_STARTED:
+            pass
+        self._state = PinState.NOT_STARTED
+
+    def state(self) -> float:
+        """
+        This returns the last set duty cycle.
+        :return: PinState.NOT_STARTED or PinState.HIGH
+        """
+        return self._state
+
+    def duty_cycle(self, duty: float) -> None:
+        """
+        Write a duty cycle to the output pin
+        :param duty: duty cycle in range 0 to 1
+        :except: RuntimeError if not started
+        """
+        if duty < 0 or duty > 1:
+            raise ValueError("duty_cycle must be in range 0 to 1")
+        if self.state() != PinState.NOT_STARTED:
+            self.pico.write(self.pin_number, duty)
 
 
 if __name__ == '__main__':

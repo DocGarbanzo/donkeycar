@@ -290,7 +290,7 @@ class Pico:
         # process None values. This blocks until the first data is received.
         while self.counter == 0:
             time.sleep(0.1)
-        with (self.lock):
+        with self.lock:
             if gpio not in self.receive_dict:
                 msg = (f"Pin {gpio} not in receive_dict. Known pins: "
                        f"{', '.join(self.receive_dict.keys())}")
@@ -316,9 +316,9 @@ class Pico:
         :param mode:    the mode of the pin
         :param kwargs:  additional arguments for the mode
         """
-
-        assert mode in ['INPUT', 'PULSE_IN', 'ANALOG_IN', 'PWM_IN'], \
+        assert mode in ('INPUT', 'PULSE_IN', 'ANALOG_IN', 'PWM_IN'), \
             f"Mode {mode} not supported for input pins."
+
         setup_dict = dict(input_pins={gpio: dict(mode=mode, **kwargs)})
         logger.info(f"Setting up input pin {gpio} in mode {mode} using "
                     f"setup dict {setup_dict}")
@@ -327,6 +327,24 @@ class Pico:
             pack = json.dumps(setup_dict) + '\n'
             self.serial.write(pack.encode())
         self.receive_dict[gpio] = 0
+
+    def setup_output_pin(self, gpio: str, mode: str, **kwargs) -> None:
+        """
+        :param gpio:    the gpio pin to set up
+        :param mode:    the mode of the pin
+        :param kwargs:  additional arguments for the mode
+        """
+
+        assert mode in ['OUTPUT', 'PWM'], \
+            f"Mode {mode} not supported for output pins on Pico"
+        setup_dict = dict(input_pins={gpio: dict(mode=mode, **kwargs)})
+        logger.info(f"Setting up input pin {gpio} in mode {mode} using "
+                    f"setup dict {setup_dict}")
+        with self.lock:
+            # send the setup dictionary
+            pack = json.dumps(setup_dict) + '\n'
+            self.serial.write(pack.encode())
+        # self.send_dict[gpio] = 0
 
 
 instance = Pico()
