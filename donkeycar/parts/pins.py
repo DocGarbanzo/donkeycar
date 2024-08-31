@@ -1115,6 +1115,7 @@ class OutputPinPico(OutputPin):
                                f"{self.pin_number}) that is already started.")
         self.pico.setup_output_pin(self.pin_number, mode='OUTPUT')
         self.pico.write(self.pin_number, state)  # write initial state
+        self._state = state
 
     def stop(self) -> None:
         if self.state() != PinState.NOT_STARTED:
@@ -1134,6 +1135,7 @@ class OutputPinPico(OutputPin):
         :param state: PinState.LOW or PinState.HIGH
         """
         if self.state() != PinState.NOT_STARTED:
+            self._state = state
             self.pico.write(self.pin_number, self._state)
 
 
