@@ -153,6 +153,7 @@ def setup(setup_dict, input_pins, output_pins):
     if not setup_dict:
         return False
     # if both input_pins and output_pins are empty, we are clearing all pins
+    print(f'Starting setup -------->')
     print(f'Received setup dict: {setup_dict}')
     in_dict, out_dict = tuple(setup_dict.get(key, {})
                               for key in ['input_pins', 'output_pins'])
@@ -174,10 +175,12 @@ def setup(setup_dict, input_pins, output_pins):
                 pins[pin_name] = pin_from_dict(pin_name, pin_dict)
             except Exception as e:
                 print(f'Setup of {pin_name} failed because of {e}.')
+                print(f'Finished setup unexpectedly <--------')
                 return False
 
     print(f'Updated input pins: {input_pins}')
     print(f'Updated output pins: {output_pins}')
+    print(f'Finished setup <--------')
     return True
 
 
