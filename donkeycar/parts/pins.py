@@ -1041,7 +1041,7 @@ class InputPinPico(InputPin):
             None:
         """
         Input pin ttl HIGH/LOW using pico connection
-        :param pin_number: PICO.BCM pin number, like 2 or '5.
+        :param pin_number: PICO.BCM pin number, like 2 or 5.
         :param pull: enable a pull up or down resistor on pin.  Default is
                         PinPull.PULL_NONE
         """
@@ -1071,6 +1071,7 @@ class InputPinPico(InputPin):
     def stop(self) -> None:
         if self.state() != PinState.NOT_STARTED:
             self._state = PinState.NOT_STARTED
+            self.pico.remove_pin(self.pin_number)
 
     def state(self) -> int:
         """
@@ -1120,6 +1121,7 @@ class OutputPinPico(OutputPin):
     def stop(self) -> None:
         if self.state() != PinState.NOT_STARTED:
             self._state = PinState.NOT_STARTED
+            self.pico.remove_pin(self.pin_number)
 
     def state(self) -> int:
         """
@@ -1162,11 +1164,11 @@ class InputPwmPinPico(InputPwmPin):
         self.pico.setup_input_pin(self.pin_number, mode='PWM_IN',
                                   duty=self.duty)
         self._state = self.duty
-        logger.info(f"InputPin 'PICO.{self.pin_number}' started.")
 
     def stop(self) -> None:
-        logger.info(f"InputPin 'PICO.{self.pin_number}' stopped.")
-        self._state = PinState.NOT_STARTED
+        if self.state() != PinState.NOT_STARTED:
+            self._state = PinState.NOT_STARTED
+            self.pico.remove_pin(self.pin_number)
 
     def state(self) -> float:
         """
@@ -1210,8 +1212,8 @@ class PwmPinPico(PwmPin):
 
     def stop(self) -> None:
         if self.state() != PinState.NOT_STARTED:
-            pass
-        self._state = PinState.NOT_STARTED
+            self._state = PinState.NOT_STARTED
+            self.pico.remove_pin(self.pin_number)
 
     def state(self) -> float:
         """

@@ -346,6 +346,21 @@ class Pico:
             self.serial.write(pack.encode())
         self.send_dict[gpio] = 0 if mode == 'OUTPUT' else kwargs['duty']
 
+    def remove_pin(self, gpio: str) -> None:
+        """
+        :param gpio:    the gpio pin to remove
+        """
+        setup_dict = dict()
+        logger.info(f"Removing pin {gpio}")
+        with self.lock:
+            # send the setup dictionary
+            pack = json.dumps(setup_dict) + '\n'
+            self.serial.write(pack.encode())
+        if gpio in self.receive_dict:
+            del self.receive_dict[gpio]
+        if gpio in self.send_dict:
+            del self.send_dict[gpio]
+
 
 instance = Pico()
 
