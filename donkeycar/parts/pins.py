@@ -1113,7 +1113,7 @@ class OutputPinPico(OutputPin):
         if self.state() != PinState.NOT_STARTED:
             raise RuntimeError(f"Attempt to start InputPinPico("
                                f"{self.pin_number}) that is already started.")
-        self.pico.setup_ouput_pin(self.pin_number, mode='OUTPUT')
+        self.pico.setup_output_pin(self.pin_number, mode='OUTPUT')
         self.pico.write(self.pin_number, state)  # write initial state
 
     def stop(self) -> None:
