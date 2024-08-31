@@ -352,14 +352,19 @@ class Pico:
         """
         setup_dict = dict()
         logger.info(f"Removing pin {gpio}")
+        if gpio in self.receive_dict:
+            setup_dict['input_pins'] = {gpio: {}}
+            del self.receive_dict[gpio]
+        elif gpio in self.send_dict:
+            setup_dict['output_pins'] = {gpio: {}}
+            del self.send_dict[gpio]
+        else:
+            logger.warning(f"Pin {gpio} not in send or receive dict.")
+            return
         with self.lock:
             # send the setup dictionary
             pack = json.dumps(setup_dict) + '\n'
             self.serial.write(pack.encode())
-        if gpio in self.receive_dict:
-            del self.receive_dict[gpio]
-        if gpio in self.send_dict:
-            del self.send_dict[gpio]
 
 
 instance = Pico()
