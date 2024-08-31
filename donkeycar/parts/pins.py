@@ -267,66 +267,47 @@ class InputPwmPin(ABC):
 def output_pin_by_id(pin_id: str, frequency_hz: int = 60) -> OutputPin:
     """
     Select a ttl output pin given a pin id.
-    :param pin_id: pin specifier string
-    :param frequency_hz: duty cycle frequency in hertz (only necessary for PCA9685)
+    :param pin_id:          pin specifier string
+    :param frequency_hz:    duty cycle frequency in hertz (only necessary
+                            for PCA9685)
     :return: OutputPin
     """
     parts = pin_id.split(".")
-    if parts[0] == PinProvider.PCA9685:
-        pin_provider = parts[0]
-        i2c_bus, i2c_address = parts[1].split(":")
+    pin_provider = parts[0]
+    pin_scheme = parts[1]
+    pin_number = int(parts[2])
+    if pin_provider == PinProvider.PCA9685:
+        i2c_bus, i2c_address = pin_scheme.split(":")
         i2c_bus = int(i2c_bus)
         i2c_address = int(i2c_address, base=16)
         frequency_hz = int(frequency_hz)
-        pin_number = int(parts[2])
-        return output_pin(pin_provider, pin_number, i2c_bus=i2c_bus, i2c_address=i2c_address, frequency_hz=frequency_hz)
+        return output_pin(pin_provider, pin_number, i2c_bus=i2c_bus,
+                          i2c_address=i2c_address, frequency_hz=frequency_hz)
 
-    if parts[0] == PinProvider.RPI_GPIO:
-        pin_provider = parts[0]
-        pin_scheme = parts[1]
-        pin_number = int(parts[2])
+    else:
         return output_pin(pin_provider, pin_number, pin_scheme=pin_scheme)
-
-    if parts[0] == PinProvider.PIGPIO:
-        pin_provider = parts[0]
-        if PinScheme.BCM != parts[1]:
-            raise ValueError("Pin scheme must be BCM for PIGPIO")
-        pin_number = int(parts[2])
-        return output_pin(pin_provider, pin_number, pin_scheme=PinScheme.BCM)
-
-    raise ValueError(f"Unknown pin provider {parts[0]} for output pin")
 
 
 def pwm_pin_by_id(pin_id: str, frequency_hz: int = 60) -> PwmPin:
     """
     Select a pwm output pin given a pin id.
-    :param pin_id: pin specifier string
-    :param frequency_hz: duty cycle frequency in hertz
-    :return: PwmPin
+    :param pin_id:          pin specifier string
+    :param frequency_hz:    duty cycle frequency in hertz
+    :return:                PwmPin
     """
     parts = pin_id.split(".")
-    if parts[0] == PinProvider.PCA9685:
-        pin_provider = parts[0]
-        i2c_bus, i2c_address = parts[1].split(":")
+    pin_provider = parts[0]
+    pin_scheme = parts[1]
+    pin_number = int(parts[2])
+    if pin_provider == PinProvider.PCA9685:
+        i2c_bus, i2c_address = pin_scheme.split(":")
         i2c_bus = int(i2c_bus)
         i2c_address = int(i2c_address, base=16)
-        pin_number = int(parts[2])
-        return pwm_pin(pin_provider, pin_number, i2c_bus=i2c_bus, i2c_address=i2c_address, frequency_hz=frequency_hz)
-
-    if parts[0] == PinProvider.RPI_GPIO:
-        pin_provider = parts[0]
-        pin_scheme = parts[1]
-        pin_number = int(parts[2])
-        return pwm_pin(pin_provider, pin_number, pin_scheme=pin_scheme, frequency_hz=frequency_hz)
-
-    if parts[0] == PinProvider.PIGPIO:
-        pin_provider = parts[0]
-        if PinScheme.BCM != parts[1]:
-            raise ValueError("Pin scheme must be BCM for PIGPIO")
-        pin_number = int(parts[2])
-        return pwm_pin(pin_provider, pin_number, pin_scheme=PinScheme.BCM, frequency_hz=frequency_hz)
-
-    raise ValueError(f"Unknown pin provider {parts[0]} for input pin")
+        return pwm_pin(pin_provider, pin_number, i2c_bus=i2c_bus,
+                       i2c_address=i2c_address, frequency_hz=frequency_hz)
+    else:
+        return pwm_pin(pin_provider, pin_number, pin_scheme=pin_scheme,
+                       frequency_hz=frequency_hz)
 
 
 def input_pin_by_id(pin_id: str, pull: int = PinPull.PULL_NONE) -> InputPin:
@@ -334,23 +315,10 @@ def input_pin_by_id(pin_id: str, pull: int = PinPull.PULL_NONE) -> InputPin:
     Select a ttl input pin given a pin id.
     """
     parts = pin_id.split(".")
-    if parts[0] == PinProvider.PCA9685:
-        raise RuntimeError("PinProvider.PCA9685 does not implement InputPin")
-
-    if parts[0] == PinProvider.RPI_GPIO:
-        pin_provider = parts[0]
-        pin_scheme = parts[1]
-        pin_number = int(parts[2])
-        return input_pin(pin_provider, pin_number, pin_scheme=pin_scheme, pull=pull)
-
-    if parts[0] == PinProvider.PIGPIO:
-        pin_provider = parts[0]
-        if PinScheme.BCM != parts[1]:
-            raise ValueError("Pin scheme must be BCM for PIGPIO")
-        pin_number = int(parts[2])
-        return input_pin(pin_provider, pin_number, pin_scheme=PinScheme.BCM, pull=pull)
-
-    raise ValueError(f"Unknown pin provider {parts[0]} for input pin")
+    pin_provider = parts[0]
+    pin_scheme = parts[1]
+    pin_number = int(parts[2])
+    return input_pin(pin_provider, pin_number, pin_scheme=pin_scheme, pull=pull)
 
 
 def input_pwm_pin_by_id(pin_id: str) -> InputPwmPin:
@@ -358,10 +326,10 @@ def input_pwm_pin_by_id(pin_id: str) -> InputPwmPin:
     Select a ttl input pin given a pin id.
     """
     parts = pin_id.split(".")
-    if parts[0] in (PinProvider.PCA9685, PinProvider.RPI_GPIO):
+    pin_provider = parts[0]
+    if pin_provider in (PinProvider.PCA9685, PinProvider.RPI_GPIO):
         raise RuntimeError("PinProvider.PCA9685 and RPI_GPIO do not "
                            "implement PWMInputPin")
-    pin_provider = parts[0]
     pin_number = int(parts[2])
     return input_pwm_pin(pin_provider, pin_number, pin_scheme=PinScheme.BCM)
 
@@ -386,12 +354,8 @@ def input_pin(
     if pin_provider == PinProvider.PCA9685:
         raise RuntimeError("PinProvider.PCA9685 does not implement InputPin")
     if pin_provider == PinProvider.PIGPIO:
-        if pin_scheme != PinScheme.BCM:
-            raise ValueError(f"Pin scheme must be {PinScheme.BCM} for PIGPIO")
         return InputPinPigpio(pin_number, pull)
     if pin_provider == PinProvider.PICO:
-        if pin_scheme != PinScheme.BCM:
-            raise ValueError(f"Pin scheme must be {PinScheme.BCM} for PICO")
         return InputPinPico(pin_number, pull)
     raise RuntimeError(f"UnknownPinProvider ({pin_provider})")
 
@@ -418,7 +382,8 @@ def output_pin(
     if pin_provider == PinProvider.RPI_GPIO:
         return OutputPinGpio(pin_number, pin_scheme)
     if pin_provider == PinProvider.PCA9685:
-        return OutputPinPCA9685(pin_number, pca9685(i2c_bus, i2c_address, frequency_hz))
+        return OutputPinPCA9685(pin_number,
+                                pca9685(i2c_bus, i2c_address, frequency_hz))
     if pin_provider == PinProvider.PIGPIO:
         if pin_scheme != PinScheme.BCM:
             raise ValueError("Pin scheme must be PinScheme.BCM for PIGPIO")
@@ -444,34 +409,37 @@ def pwm_pin(
     :param pin_scheme: PinScheme string
     :param i2c_bus: I2C bus number for I2C devices
     :param i2c_address: I2C address for I2C devices
-    :param frequency_hz: duty cycle frequence in hertz
+    :param frequency_hz: duty cycle frequency in hertz
     :return: PwmPin
     :except: RuntimeError if pin_provider is not valid.
     """
     if pin_provider == PinProvider.RPI_GPIO:
         return PwmPinGpio(pin_number, pin_scheme, frequency_hz)
     if pin_provider == PinProvider.PCA9685:
-        return PwmPinPCA9685(pin_number, pca9685(i2c_bus, i2c_address, frequency_hz))
+        return PwmPinPCA9685(pin_number,
+                             pca9685(i2c_bus, i2c_address, frequency_hz))
     if pin_provider == PinProvider.PIGPIO:
         if pin_scheme != PinScheme.BCM:
             raise ValueError("Pin scheme must be PinScheme.BCM for PIGPIO")
         return PwmPinPigpio(pin_number, frequency_hz)
+    if pin_provider == PinProvider.PICO:
+        if pin_scheme != PinScheme.BCM:
+            raise ValueError("Pin scheme must be PinScheme.BCM for PICO")
+        return PwmPinPico(pin_number, frequency_hz)
     raise RuntimeError(f"UnknownPinProvider ({pin_provider})")
 
 
 def input_pwm_pin(
         pin_provider: str,
         pin_number: int,
-        pin_scheme: str = PinScheme.BOARD,
-        duty=0.09) -> InputPwmPin:
+        pin_scheme: str = PinScheme.BCM,
+        duty: float = 0.09) -> InputPwmPin:
     """
     construct a PwmPin using the given pin provider
     :param pin_provider: PinProvider string
     :param pin_number: zero based pin number
     :param pin_scheme: PinScheme string
-    :param i2c_bus: I2C bus number for I2C devices
-    :param i2c_address: I2C address for I2C devices
-    :param frequency_hz: duty cycle frequence in hertz
+    :param duty: duty cycle in range 0 to 1
     :return: PwmPin
     :except: RuntimeError if pin_provider is not valid.
     """
@@ -483,6 +451,8 @@ def input_pwm_pin(
         return InputPwmPinPigpio(pin_number, duty=duty)
     if pin_provider == PinProvider.PICO:
         return InputPwmPinPico(pin_number, duty=duty)
+    else:
+        raise RuntimeError(f"UnknownPinProvider ({pin_provider})")
 
 
 #
@@ -735,11 +705,12 @@ def pca9685(busnum: int, address: int, frequency: int = 60):
     return pca
 
 
-class OutputPinPCA9685(ABC):
+class OutputPinPCA9685(OutputPin):
     """
     Output pin ttl HIGH/LOW using PCA9685
     """
     def __init__(self, pin_number: int, pca9685: PCA9685) -> None:
+        super().__init__()
         self.pin_number = pin_number
         self.pca9685 = pca9685
         self._state = PinState.NOT_STARTED
@@ -754,7 +725,8 @@ class OutputPinPCA9685(ABC):
         :except: RuntimeError if pin is already started.
         """
         if self.state() != PinState.NOT_STARTED:
-            raise RuntimeError(f"Attempt to start pin ({self.pin_number}) that is already started")
+            raise RuntimeError(f"Attempt to start pin ({self.pin_number}) "
+                               f"that is already started")
         self._state = 0  # hack to allow first output to work
         self.output(state)
 
@@ -781,7 +753,8 @@ class OutputPinPCA9685(ABC):
         :param state: PinState.LOW or PinState.HIGH
         """
         if self.state() == PinState.NOT_STARTED:
-            raise RuntimeError(f"Attempt to use pin ({self.pin_number}) that is not started")
+            raise RuntimeError(f"Attempt to use pin ({self.pin_number}) "
+                               f"that is not started")
         if state == PinState.HIGH:
             self.pca9685.set_high(self.pin_number)
         else:
@@ -805,7 +778,8 @@ class PwmPinPCA9685(PwmPin):
         :except: RuntimeError if pin is already started.
         """
         if self.state() != PinState.NOT_STARTED:
-            raise RuntimeError(f"Attempt to start pin ({self.pin_number}) that is already started")
+            raise RuntimeError(f"Attempt to start pin ({self.pin_number}) "
+                               f"that is already started")
         if duty < 0 or duty > 1:
             raise ValueError("duty_cycle must be in range 0 to 1")
         self._state = 0  # hack to allow first duty_cycle to work
@@ -820,7 +794,8 @@ class PwmPinPCA9685(PwmPin):
     def state(self) -> float:
         """
         This returns the last set duty cycle.
-        :return: duty cycle in range 0 to 1 OR PinState.NOT_STARTED in not started
+        :return:    duty cycle in range 0 to 1 OR PinState.NOT_STARTED if not
+                    started
         """
         return self._state
 
@@ -831,7 +806,8 @@ class PwmPinPCA9685(PwmPin):
         :except: RuntimeError if not started
         """
         if self.state() == PinState.NOT_STARTED:
-            raise RuntimeError(f"Attempt to use pin ({self.pin_number}) that is not started")
+            raise RuntimeError(f"Attempt to use pin ({self.pin_number}) "
+                               f"that is not started")
         if duty < 0 or duty > 1:
             raise ValueError("duty_cycle must be in range 0 to 1")
         self.pca9685.set_duty_cycle(self.pin_number, duty)
@@ -1061,7 +1037,7 @@ class InputPinPico(InputPin):
     def input(self) -> int:
         pass
 
-    def __init__(self, pin_number: int, pull: PinPull = PinPull.PULL_NONE) ->\
+    def __init__(self, pin_number: int, pull: int = PinPull.PULL_NONE) ->\
             None:
         """
         Input pin ttl HIGH/LOW using pico connection
@@ -1165,8 +1141,7 @@ class InputPwmPinPico(InputPwmPin):
     """
     PWM input pin using Pi Pico
     """
-    def __init__(self, pin_number: int, duty: float = 0.09) \
-            -> None:
+    def __init__(self, pin_number: int, duty: float = 0.09) -> None:
         super().__init__()
         self.pico = donkeycar.parts.pico.instance
         self.pin_number = f'GP{pin_number}'
@@ -1284,7 +1259,6 @@ if __name__ == '__main__':
     parser.add_argument("-p", "--pwm-pin", type=str, default=None,
                         help="pwm pin id, like 'PCA9685:1:60.13' "
                              "or 'RPI_GPIO.BCM.13")
-
     parser.add_argument("-w", "--pwm-in-pin", type=str,
                         default=None,
                         help="pwm input pin id, like 'PICO.13' "
@@ -1376,15 +1350,12 @@ if __name__ == '__main__':
                 ttl_in_pin.start(on_input=on_input, edge=pin_edge[args.interrupt])
             else:
                 ttl_in_pin.start()
-
-        if args.pwm_pin is not None:
-            pwm_out_pin = pwm_pin_by_id(args.pwm_pin, args.hertz)
-            pwm_out_pin.start(args.duty)
-
         if args.out_pin is not None:
             ttl_out_pin = output_pin_by_id(args.out_pin, args.hertz)
             ttl_out_pin.start(PinState.LOW)
-
+        if args.pwm_pin is not None:
+            pwm_out_pin = pwm_pin_by_id(args.pwm_pin, args.hertz)
+            pwm_out_pin.start(args.duty)
         if args.pwm_in_pin is not None:
             pwm_in_pin = input_pwm_pin_by_id(args.pwm_in_pin)
             pwm_in_pin.start()
@@ -1401,7 +1372,7 @@ if __name__ == '__main__':
                     time.sleep(1 / args.hertz * (1 - args.duty))
             elif pwm_in_pin is not None:
                 print(f'Pwm in duty cycle {pwm_in_pin.duty_cycle():5.4f}')
-                time.sleep(1/args.hertz)
+                time.sleep(1 / args.hertz)
             else:
                 # yield time to background threads
                 sleep_time = 1/args.hertz - (time.time() - start_time)
