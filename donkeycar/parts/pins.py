@@ -366,7 +366,6 @@ def input_pwm_pin_by_id(pin_id: str) -> InputPwmPin:
     return input_pwm_pin(pin_provider, pin_number, pin_scheme=PinScheme.BCM)
 
 
-
 def input_pin(
         pin_provider: str,
         pin_number: int,
@@ -388,8 +387,12 @@ def input_pin(
         raise RuntimeError("PinProvider.PCA9685 does not implement InputPin")
     if pin_provider == PinProvider.PIGPIO:
         if pin_scheme != PinScheme.BCM:
-            raise ValueError("Pin scheme must be PinScheme.BCM for PIGPIO")
+            raise ValueError(f"Pin scheme must be {PinScheme.BCM} for PIGPIO")
         return InputPinPigpio(pin_number, pull)
+    if pin_provider == PinProvider.PICO:
+        if pin_scheme != PinScheme.BCM:
+            raise ValueError(f"Pin scheme must be {PinScheme.BCM} for PICO")
+        return InputPinPico(pin_number, pull)
     raise RuntimeError(f"UnknownPinProvider ({pin_provider})")
 
 
@@ -420,6 +423,10 @@ def output_pin(
         if pin_scheme != PinScheme.BCM:
             raise ValueError("Pin scheme must be PinScheme.BCM for PIGPIO")
         return OutputPinPigpio(pin_number)
+    if pin_provider == PinProvider.PICO:
+        if pin_scheme != PinScheme.BCM:
+            raise ValueError("Pin scheme must be PinScheme.BCM for PICO")
+        return OutputPinPico(pin_number)
     raise RuntimeError(f"UnknownPinProvider ({pin_provider})")
 
 
@@ -1051,16 +1058,19 @@ class InputPwmPinPigpio(InputPwmPin):
 
 
 class InputPinPico(InputPin):
-    def __init__(self, pin_number: str, pull: PinPull = PinPull.PULL_NONE) ->\
+    def input(self) -> int:
+        pass
+
+    def __init__(self, pin_number: int, pull: PinPull = PinPull.PULL_NONE) ->\
             None:
         """
         Input pin ttl HIGH/LOW using pico connection
-        :param pin_number: PICO.BCM pin number, like 'GP2' or 'GP15'.
+        :param pin_number: PICO.BCM pin number, like 2 or '5.
         :param pull: enable a pull up or down resistor on pin.  Default is
                         PinPull.PULL_NONE
         """
         super().__init__()
-        self.pin_number = pin_number
+        self.pin_number = f'GP{pin_number}'
         self.pull = pull
         self.pico = donkeycar.parts.pico.instance
         self._state = PinState.NOT_STARTED
@@ -1102,6 +1112,53 @@ class InputPinPico(InputPin):
         if self.state() != PinState.NOT_STARTED:
             self._state = self.pico.read(self.pin_number)
         return self._state
+
+
+class OutputPinPico(OutputPin):
+    def __init__(self, pin_number: int) ->\
+            None:
+        """
+        Input pin ttl HIGH/LOW using pico connection
+        :param pin_number: PICO.BCM pin number, like 2 or 15.
+        """
+        super().__init__()
+        self.pin_number = f'GP{pin_number}'
+        self.pico = donkeycar.parts.pico.instance
+        self._state = PinState.NOT_STARTED
+
+    def __del__(self):
+        self.stop()
+
+    def start(self, state: int = PinState.LOW) -> None:
+        """
+        Start the input pin, arguments cannot be passed.
+        :param state: PinState.LOW or PinState.HIGH
+        """
+        if self.state() != PinState.NOT_STARTED:
+            raise RuntimeError(f"Attempt to start InputPinPico("
+                               f"{self.pin_number}) that is already started.")
+        self.pico.setup_ouput_pin(self.pin_number, mode='OUTPUT')
+        self.pico.write(self.pin_number, state)  # write initial state
+
+    def stop(self) -> None:
+        if self.state() != PinState.NOT_STARTED:
+            self._state = PinState.NOT_STARTED
+
+    def state(self) -> int:
+        """
+        Return last input() value.  This does NOT read the input again;
+        it returns that last value that input() returned.
+        :return: PinState.LOW/HIGH OR PinState.NOT_STARTED if not started
+        """
+        return self._state
+
+    def output(self, state: int) -> None:
+        """
+        Write output state to the pin.
+        :param state: PinState.LOW or PinState.HIGH
+        """
+        if self.state() != PinState.NOT_STARTED:
+            self.pico.write(self.pin_number, self._state)
 
 
 class InputPwmPinPico(InputPwmPin):

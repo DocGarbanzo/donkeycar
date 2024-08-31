@@ -92,12 +92,12 @@ def pin_from_dict(pin_name, d):
     print(f'Creating pin from dict: {d}')
     # convert from pin_name string to board pin object
     gpio = getattr(board, pin_name)
-    assert gpio != board.LED, 'Cannot use LED pin as input'
+    assert gpio != board.LED, 'Cannot assign LED pin as input or output.'
     pin = None
     if d['mode'] == 'INPUT':
         pin = digitalio.DigitalInOut(gpio)
         pin.direction = digitalio.Direction.INPUT
-        pull = d.get('pull')  # None will work here otherwise map
+        pull = d.get('pull')  # None will work here, otherwise map
         if pull == 1:
             pull = digitalio.Pull.UP
         elif pull == 2:
@@ -127,8 +127,7 @@ def pin_from_dict(pin_name, d):
         pin = PWMOut(gpio, frequency=freq, duty_cycle=duty_cycle)
         print(f'Configured pwm output pin, gpio: {gpio},',
               f'frequency: {pin.pin.frequency},',
-              f'duty_cycle: {pin.pin.duty_cycle / 65535},',
-              f'pwm output: {pin.pin}')
+              f'duty_cycle: {pin.pin.duty_cycle / 65535}')
     return pin
 
 
