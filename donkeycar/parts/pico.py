@@ -337,7 +337,7 @@ class Pico:
 
         assert mode in ['OUTPUT', 'PWM'], \
             f"Mode {mode} not supported for output pins on Pico"
-        setup_dict = dict(input_pins={gpio: dict(mode=mode, **kwargs)})
+        setup_dict = dict(output_pins={gpio: dict(mode=mode, **kwargs)})
         logger.info(f"Setting up input pin {gpio} in mode {mode} using "
                     f"setup dict {setup_dict}")
         with self.lock:
