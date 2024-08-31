@@ -335,10 +335,10 @@ class Pico:
         :param kwargs:  additional arguments for the mode
         """
 
-        assert mode in ['OUTPUT', 'PWM'], \
+        assert mode in ('OUTPUT', 'PWM'), \
             f"Mode {mode} not supported for output pins on Pico"
         setup_dict = dict(output_pins={gpio: dict(mode=mode, **kwargs)})
-        logger.info(f"Setting up input pin {gpio} in mode {mode} using "
+        logger.info(f"Setting up output pin {gpio} in mode {mode} using "
                     f"setup dict {setup_dict}")
         with self.lock:
             # send the setup dictionary
