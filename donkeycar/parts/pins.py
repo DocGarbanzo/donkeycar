@@ -1184,8 +1184,8 @@ class PwmPinPico(PwmPin):
     """
     PWM output pin using Pico
     """
-    def __init__(self, pin_number: int, frequency_hz: int = 60) \
-            -> None:
+    def __init__(self, pin_number: int, frequency_hz: int = 60) -> None:
+        super().__init__()
         self.pin_number: str = f'GP{pin_number}'
         self.frequency: int = frequency_hz
         self.pico = donkeycar.parts.pico.instance
@@ -1201,9 +1201,9 @@ class PwmPinPico(PwmPin):
                                f"{self.pin_number})  that is already started.")
         if duty < 0 or duty > 1:
             raise ValueError("duty_cycle must be in range 0 to 1")
-        self.pico.setup_input_pin(self.pin_number, mode='PWM_OUT',
-                                  duty_cycle=duty,
-                                  frequency=self.frequency)
+        self.pico.setup_output_pin(self.pin_number, mode='PWM_OUT',
+                                   duty_cycle=duty,
+                                   frequency=self.frequency)
         self._state = PinState.HIGH
 
     def stop(self) -> None:

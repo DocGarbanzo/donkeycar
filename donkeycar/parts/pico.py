@@ -344,7 +344,7 @@ class Pico:
             # send the setup dictionary
             pack = json.dumps(setup_dict) + '\n'
             self.serial.write(pack.encode())
-        # self.send_dict[gpio] = 0
+        self.send_dict[gpio] = 0 if mode == 'OUTPUT' else kwargs['duty']
 
 
 instance = Pico()
