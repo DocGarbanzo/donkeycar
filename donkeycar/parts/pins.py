@@ -1265,8 +1265,8 @@ if __name__ == '__main__':
                              "or 'RPI_GPIO.BCM.13")
     parser.add_argument("-w", "--pwm-in-pin", type=str,
                         default=None,
-                        help="pwm input pin id, like 'PICO.13' "
-                             "or 'PIGPIO.BCM.13")
+                        help="pwm input pin id, like 'PICO.BCM.13' "
+                             "or 'PIGPIO.BCM.13' ")
     parser.add_argument("-hz", "--hertz", type=int, default=60,
                         help="PWM signal frequency in hertz.  Default is 60hz")
     parser.add_argument("-d", "--duty", type=float, default=0.09,

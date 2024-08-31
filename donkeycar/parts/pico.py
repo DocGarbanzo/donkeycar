@@ -213,8 +213,8 @@ class Pico:
 
     def __init__(self, port: str = '/dev/ttyACM1'):
         """
-        Initialize the Pico part.
-        :param port:                port for data connection
+        Initialize the Pico communicator.
+        :param port: port for data connection
         """
         self.serial = serial.Serial(port, 115200)
         self.counter = 0
@@ -227,12 +227,11 @@ class Pico:
         self.lock = Lock()
         self.start = None
         logger.info(f"Pico created on port: {port}")
+        # send the initial setup dictionary to clear all pins
+        pack = json.dumps(dict(input_pins={}, output_pins={})) + '\n'
+        self.serial.write(pack.encode())
         self.t = Thread(target=self.loop, args=(), daemon=True)
         self.t.start()
-
-    def __del__(self):
-        logging.info("Deleting Pico object.")
-        self.stop()
 
     def loop(self):
         """
