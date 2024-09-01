@@ -21,7 +21,8 @@ except ImportError as e:
     logger.warn(f"RPi.GPIO was not imported. {e}")
     globals()["GPIO"] = None
 
-from donkeycar.parts.pins import OutputPin, PwmPin, PinState
+from donkeycar.parts.pins import OutputPin, PwmPin, PinState, \
+    input_pwm_pin_by_id
 from donkeycar.utilities.deprecated import deprecated
 
 logger = logging.getLogger(__name__)
@@ -918,14 +919,8 @@ class RCReceiver:
                           being the center values when the controls are not
                           pressed.
         """
-        import pigpio
-        self.pi = pigpio.pi()
-        self.gpio = gpio
-        self.high_tick = None
-        self.period = None
-        self.high = None
-        self.min_pwm = 1000
-        self.max_pwm = 2000
+        self.min_duty = 0.06
+        self.max_duty = 0.12
         self.invert = invert
         self.jitter = jitter
         if no_action is not None:
@@ -933,44 +928,11 @@ class RCReceiver:
         else:
             self.no_action = (self.MAX_OUT - self.MIN_OUT) / 2.0
 
-        self.factor = (self.MAX_OUT - self.MIN_OUT) \
-                      / (self.max_pwm - self.min_pwm)
-        self.pi.set_mode(self.gpio, pigpio.INPUT)
-        self.cb = self.pi.callback(self.gpio, pigpio.EITHER_EDGE, self._cbf)
+        self.factor = ((self.MAX_OUT - self.MIN_OUT)
+                       / (self.max_duty - self.min_duty))
+        self.pin = input_pwm_pin_by_id(gpio)
+        self.pin.start()
         logger.info(f'RCReceiver gpio {gpio} created')
-
-    def _update_param(self, tick):
-        """ Helper function for callback function _cbf.
-        :param tick: current tick in mu s
-        :return: difference in ticks
-        """
-        import pigpio
-        if self.high_tick is not None:
-            t = pigpio.tickDiff(self.high_tick, tick)
-            return t
-
-    def _cbf(self, gpio, level, tick):
-        """ Callback function for pigpio interrupt gpio. Signature is determined
-            by pigpiod library. This function is called every time the gpio
-            changes state as we specified EITHER_EDGE.
-        :param gpio: gpio to listen for state changes
-        :param level: rising/falling edge
-        :param tick: # of mu s since boot, 32 bit int
-        """
-        if level == 1:
-            self.period = self._update_param(tick)
-            self.high_tick = tick
-        elif level == 0:
-            self.high = self._update_param(tick)
-
-    def pulse_width(self):
-        """
-        :return: the PWM pulse width in microseconds.
-        """
-        if self.high is not None:
-            return self.high
-        else:
-            return 0.0
 
     def run(self):
         """
@@ -978,7 +940,7 @@ class RCReceiver:
         [MAX_OUT,MIN_OUT]
         """
         # signal is a value in [0, (MAX_OUT-MIN_OUT)]
-        signal = (self.pulse_width() - self.min_pwm) * self.factor
+        signal = (self.pin.duty_cycle() - self.min_duty) * self.factor
         # Assuming non-activity if the pulse is at no_action point
         is_action = abs(signal - self.no_action) > self.jitter
         # if deemed noise assume no signal
@@ -995,7 +957,7 @@ class RCReceiver:
         """
         Donkey parts interface
         """
-        self.cb.cancel()
+        self.pin.stop()
 
 
 class MockRCReceiver:

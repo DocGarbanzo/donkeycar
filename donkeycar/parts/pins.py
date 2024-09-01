@@ -1001,12 +1001,20 @@ class PwmPinPigpio(PwmPin):
 
 
 class InputPwmPinPigpio(InputPwmPin):
-    def __init__(self, pin_number: int, duty=0.09, pgpio=None) -> None:
+    def __init__(self, pin_number: int, duty=0.09, frequency: int = 60,
+                 pgpio=None) -> None:
         super().__init__()
         self.pgpio = pgpio
         self.pin_number = pin_number
         self.duty = duty
+        self.frequency = frequency
         self._state: int = PinState.NOT_STARTED
+        self.cb = None
+        self.high_tick = None
+        self.lo = None
+        self.high = None
+        if self.duty < 0 or self.duty > 1:
+            raise ValueError("duty_cycle must be in range 0 to 1")
 
     def start(self) -> None:
         """
@@ -1017,16 +1025,76 @@ class InputPwmPinPigpio(InputPwmPin):
         if self.state() != PinState.NOT_STARTED:
             raise RuntimeError(f"Attempt to start InputPWMPinPigpio"
                                f"({self.pin_number}) that is already started.")
-        if self.duty < 0 or self.duty > 1:
-            raise ValueError("duty_cycle must be in range 0 to 1")
+
         self.pgpio = self.pgpio or pigpio.pi()
         self.pgpio.set_mode(self.pin_number, pigpio.INPUT)
-        # self.pgpio.set_PWM_frequency(self.pin_number, self.frequency)
-        # self.pgpio.set_PWM_range(self.pin_number, 4095)  # 12 bits, same as PCA9685
-        # self.pgpio.set_PWM_dutycycle(self.pin_number, int(duty * 4095))  # set initial state
-        # self._state = duty
-        raise RuntimeError("InputPwmPinPigpio not implemented")
+        self.cb = self.pgpio.callback(self.pin_number, pigpio.EITHER_EDGE,
+                                      self._cbf)
+        self._state = self.duty
 
+    def _update_param(self, tick):
+        """ Helper function for callback function _cbf.
+        :param tick: current tick in mu s
+        :return: difference in ticks
+        """
+        if self.high_tick is not None:
+            t = pigpio.tickDiff(self.high_tick, tick)
+            return t
+
+    def _cbf(self, gpio, level, tick):
+        """ Callback function for pigpio interrupt gpio. Signature is determined
+            by pigpiod library. This function is called every time the gpio
+            changes state as we specified EITHER_EDGE.
+        :param gpio: gpio to listen for state changes
+        :param level: rising/falling edge
+        :param tick: # of mu s since boot, 32 bit int
+        """
+        if level == 1:
+            self.lo = self._update_param(tick)
+            self.high_tick = tick
+        elif level == 0:
+            self.high = self._update_param(tick)
+
+    def pulse_width(self):
+        """
+        :return: the PWM pulse width in microseconds.
+        """
+        if self.high is not None:
+            return self.high
+        else:
+            return 0.0
+
+    @abstractmethod
+    def stop(self) -> None:
+        """
+        Stop the pin and return it to PinState.NOT_STARTED
+        """
+        if self._state != PinState.NOT_STARTED:
+            self.cb.cancel()
+            self._state = PinState.NOT_STARTED
+
+    @abstractmethod
+    def state(self) -> float:
+        """
+        Return most recent output state.  This does not re-read the pin,
+        It just returns that last value set by the output() method.
+        If the pin is not started or has been stopped,
+        this will return PinState:NOT_STARTED
+        :return: most recent output duty_cycle
+        """
+        return self._state
+
+    @abstractmethod
+    def duty_cycle(self) -> float:
+        """
+        Get the input duty cycle of the pin
+        in range 0 to 1.0 (0% to 100%)
+        :return: duty cycle in range 0 to 1
+        :except: RuntimeError is pin is not started
+        """
+        if self._state != PinState.NOT_STARTED:
+            self._state = self.pulse_width() * self.frequency * 1.0e-6
+        return self._state
 
 #
 # ----- PICO implementation -----
