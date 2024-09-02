@@ -36,7 +36,7 @@ from random import random
 
 import donkeycar as dk
 import donkeycar.parts
-from donkeycar.parts.actuator import EStop
+from donkeycar.parts.actuator import EStop, RCReceiver
 from donkeycar.parts.pico import OdometerPico
 from donkeycar.parts.tub_v2 import TubWiper, TubWriter
 from donkeycar.parts.file_watcher import FileWatcher
@@ -187,52 +187,24 @@ def calibrate(cfg):
     from donkeycar.parts.pico import Pico, PicoPWMInput, DutyScaler
 
     class Plotter:
-        def run(self, steer, steer_duty=0, throttle=0, throttle_duty=0,
-                ch_3=0, ch_3_duty=0):
+        def run(self, steer, throttle=0, ch_3=0):
             print(f'Calibration - angle: {steer:+4.3f} '
-                  f'steer duty: {steer_duty:+4.3f} throttle {throttle:+4.3f} '
-                  f'throttle duty {throttle_duty:+4.3f} '
-                  f'ch3: {ch_3:+4.3f} ch3 duty: {ch_3_duty:+4.3f}')
+                  f'throttle {throttle:+4.3f} '
+                  f'ch3: {ch_3:+4.3f}')
 
     car = dk.vehicle.Vehicle()
-    pico = Pico(pin_configuration=cfg.PICO_PIN_CONFIGURATION)
-    car.add(pico, outputs=['pico/read_steering_duty', 'pico/read_throttle_duty',
-                           'pico/read_ch_3_duty', 'pico/read_odo'],
-            threaded=True)
+    rc_steering = RCReceiver(gpio=cfg.STEERING_RC_GPIO)
+    car.add(rc_steering, outputs=['user/angle'])
 
-    rc_steering = DutyScaler(x_min=-1, x_max=1,
-                             duty_min=cfg.PICO_STEERING_MIN_DUTY,
-                             duty_max=cfg.PICO_STEERING_MAX_DUTY,
-                             duty_center=cfg.PICO_STEERING_CENTER_DUTY,
-                             x_deadband=0.01, to_duty=False)
-    car.add(rc_steering, inputs=['pico/read_steering_duty'],
-            outputs=['user/angle'])
+    rc_throttle = RCReceiver(gpio=cfg.THROTTLE_RC_GPIO)
+    car.add(rc_throttle, outputs=['user/throttle'])
 
-    rc_throttle = DutyScaler(x_min=-1, x_max=1,
-                             duty_min=cfg.PICO_THROTTLE_MIN_DUTY,
-                             duty_max=cfg.PICO_THROTTLE_MAX_DUTY,
-                             duty_center=cfg.PICO_THROTTLE_CENTER_DUTY,
-                             x_deadband=0.01, to_duty=False)
-    car.add(rc_throttle, inputs=['pico/read_throttle_duty'],
-            outputs=['user/throttle'])
+    rc_ch_3 = RCReceiver(gpio=cfg.CH3_RC_GPIO)
+    car.add(rc_ch_3, outputs=['user/ch_3'])
 
-    rc_ch_3 = DutyScaler(x_min=0, x_max=1,
-                         duty_min=cfg.PICO_STEERING_MIN_DUTY,
-                         duty_max=cfg.PICO_STEERING_MAX_DUTY, round_digits=0,
-                         to_duty=False)
-    car.add(rc_ch_3, inputs=['pico/read_ch_3_duty'], outputs=['user/ch_3'])
-
-    pwm_steering = DutyScaler(x_min=-1, x_max=1,
-                              duty_min=cfg.PICO_STEERING_MIN_DUTY,
-                              duty_max=cfg.PICO_STEERING_MAX_DUTY,
-                              duty_center=cfg.PICO_STEERING_CENTER_DUTY,
-                              to_duty=True)
-    car.add(pwm_steering, inputs=['user/angle'],
-            outputs=['pico/write_steering_duty'])
-
-    car.add(Plotter(), inputs=['user/angle', 'pico/read_steering_duty',
-                               'user/throttle', 'pico/read_throttle_duty',
-                               'user/ch_3', 'pico/read_ch_3_duty'])
+    car.add(Plotter(), inputs=['user/angle',
+                               'user/throttle',
+                               'user/ch_3'])
 
     car.start(rate_hz=10, max_loop_count=cfg.MAX_LOOPS)
 
