@@ -444,9 +444,10 @@ def input_pwm_pin(
     :except: RuntimeError if pin_provider is not valid.
     """
     if pin_scheme != PinScheme.BCM:
-        raise ValueError("Pin scheme must be PinScheme.BCM for input pwm pin")
+        raise ValueError(f"Pin scheme must be {PinScheme.BCM} for input pwm pin")
     if pin_provider not in (PinProvider.PIGPIO, PinProvider.PICO):
-        raise ValueError("Pin provider must be PIGPIO or PICO")
+        raise ValueError(f"Pin provider must be PIGPIO or PICO for input pwm "
+                         f"pin but not {pin_provider}")
     if pin_provider == PinProvider.PIGPIO:
         return InputPwmPinPigpio(pin_number, duty=duty)
     if pin_provider == PinProvider.PICO:
