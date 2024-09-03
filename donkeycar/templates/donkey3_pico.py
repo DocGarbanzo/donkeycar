@@ -196,15 +196,15 @@ def calibrate(cfg):
     rc_steering = RCReceiver(gpio=cfg.STEERING_RC_GPIO)
     car.add(rc_steering, outputs=['user/angle'])
 
-    rc_throttle = RCReceiver(gpio=cfg.THROTTLE_RC_GPIO)
-    car.add(rc_throttle, outputs=['user/throttle'])
+    # rc_throttle = RCReceiver(gpio=cfg.THROTTLE_RC_GPIO)
+    # car.add(rc_throttle, outputs=['user/throttle'])
+    #
+    # rc_ch_3 = RCReceiver(gpio=cfg.CH3_RC_GPIO)
+    # car.add(rc_ch_3, outputs=['user/ch_3'])
 
-    rc_ch_3 = RCReceiver(gpio=cfg.CH3_RC_GPIO)
-    car.add(rc_ch_3, outputs=['user/ch_3'])
-
-    car.add(Plotter(), inputs=['user/angle',
-                               'user/throttle',
-                               'user/ch_3'])
+    car.add(Plotter(), inputs=['user/angle']) #,
+                               # 'user/throttle',
+                               # 'user/ch_3'])
 
     car.start(rate_hz=10, max_loop_count=cfg.MAX_LOOPS)
 
