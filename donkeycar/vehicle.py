@@ -5,6 +5,7 @@ from threading import Thread
 from .memory import Memory
 from prettytable import PrettyTable
 import traceback
+from donkeycar.parts.pico import instance
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +176,7 @@ class Vehicle:
             traceback.print_exc()
         finally:
             self.stop()
+            instance.stop()
             logging.shutdown()
 
     def update_parts(self):
