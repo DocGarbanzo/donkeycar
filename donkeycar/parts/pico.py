@@ -324,6 +324,7 @@ class Pico:
         with self.lock:
             # send the setup dictionary
             pack = json.dumps(setup_dict) + '\n'
+            logger.debug(f"Sending setup dict: {pack}")
             self.serial.write(pack.encode())
         self.receive_dict[gpio] = 0
 
