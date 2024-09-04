@@ -25,30 +25,15 @@ Options:
     --type=MODEL_TYPE       type of the model to load [default: linear]
 """
 
-import os.path
-
 from docopt import docopt
 import logging
-import time
-from datetime import datetime
-import socket
-from random import random
 
 import donkeycar as dk
 import donkeycar.parts
-from donkeycar.parts.actuator import EStop, RCReceiver
+from donkeycar.parts.actuator import RCReceiver
 from donkeycar.parts.pico import OdometerPico
-from donkeycar.parts.tub_v2 import TubWiper, TubWriter
-from donkeycar.parts.file_watcher import FileWatcher
-from donkeycar.parts.keras_2 import ModelLoader, ModelResetter
-from donkeycar.parts.transform import SimplePidController, \
-    ImuCombinerNormaliser, ControlSwitch, \
-    SpeedRescaler, RecordingCondition
-from donkeycar.parts.sensor import Odometer, LapTimer, IsThrottledChecker
+from donkeycar.parts.sensor import LapTimer
 from donkeycar.parts.controller import WebFpv
-from donkeycar.parts.web_controller.web import LocalWebController
-from donkeycar.parts.image_transformations import ImageTransformations
-from donkeycar.pipeline.database import PilotDatabase
 
 
 file_handler = logging.handlers.RotatingFileHandler(
@@ -194,7 +179,7 @@ def calibrate(cfg):
 
     car = dk.vehicle.Vehicle()
     rc_steering = RCReceiver(gpio=cfg.STEERING_RC_GPIO)
-    car.add(rc_steering, outputs=['user/angle'])
+    car.add(rc_steering, outputs=['user/angle', 'user/angle_on'])
 
     # rc_throttle = RCReceiver(gpio=cfg.THROTTLE_RC_GPIO)
     # car.add(rc_throttle, outputs=['user/throttle'])
