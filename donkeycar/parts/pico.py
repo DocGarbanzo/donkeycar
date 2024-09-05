@@ -144,11 +144,9 @@ class Pico:
             return self.receive_dict[gpio]
 
     def stop(self):
-        logger.info("Stopping Pico communication.")
         self.running = False
         time.sleep(0.1)
         self.t.join()
-        logger.info("Pico communication stopped.")
         self.serial.close()
         total_time = time.time() - self.start
         logger.info(f"Pico communication disconnected, ran {self.counter} "
