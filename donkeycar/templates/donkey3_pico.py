@@ -184,7 +184,7 @@ def calibrate(cfg):
     rc_throttle = RCReceiver(gpio=cfg.THROTTLE_RC_GPIO)
     car.add(rc_throttle, outputs=['user/throttle', 'user/rc_throttle_on'])
 
-    rc_ch_3 = RCReceiver(gpio=cfg.CH3_RC_GPIO)
+    rc_ch_3 = RCReceiver(min_out=0, gpio=cfg.CH3_RC_GPIO)
     car.add(rc_ch_3, outputs=['user/ch_3', 'user/rc_ch_3_on'])
 
     car.add(Plotter(), inputs=['user/angle', 'user/throttle', 'user/ch_3'])

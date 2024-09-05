@@ -906,10 +906,9 @@ class RCReceiver:
     on 5V. If your receiver accepts 3.3V input, then it can be connected
     directly to the Pi.
     """
-    MIN_OUT = -1
-    MAX_OUT = 1
 
-    def __init__(self, gpio, invert=False, jitter=0.025, no_action=None):
+    def __init__(self, gpio, min_out=-1, max_out=1, min_duty=0.06,
+                 max_duty=0.12, invert=False, jitter=0.025, no_action=None):
         """
         :param gpio: gpio pin connected to RC channel
         :param invert: invert value of run() within [MIN_OUT,MAX_OUT]
@@ -919,8 +918,10 @@ class RCReceiver:
                           being the center values when the controls are not
                           pressed.
         """
-        self.min_duty = 0.06
-        self.max_duty = 0.12
+        self.min_out = min_out
+        self.max_out = max_out
+        self.min_duty = min_duty
+        self.max_duty = max_duty
         self.invert = invert
         self.jitter = jitter
         if no_action is not None:
@@ -948,10 +949,10 @@ class RCReceiver:
             signal = self.no_action
         # convert into min max interval
         if self.invert:
-            signal = -signal + self.MAX_OUT
+            signal = -signal + self.max_out
         else:
-            signal += self.MIN_OUT
-        signal = clamp(signal, self.MIN_OUT, self.MAX_OUT)
+            signal += self.min_out
+        signal = clamp(signal, self.min_out, self.max_out)
         return signal, is_action
 
     def shutdown(self):
