@@ -927,9 +927,9 @@ class RCReceiver:
         if no_action is not None:
             self.no_action = no_action
         else:
-            self.no_action = (self.MAX_OUT - self.MIN_OUT) / 2.0
+            self.no_action = (self.max_out - self.min_out) / 2.0
 
-        self.factor = ((self.MAX_OUT - self.MIN_OUT)
+        self.factor = ((self.max_out - self.min_out)
                        / (self.max_duty - self.min_duty))
         self.pin = input_pwm_pin_by_id(gpio)
         self.pin.start()
