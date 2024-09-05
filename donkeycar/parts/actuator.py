@@ -941,7 +941,6 @@ class RCReceiver:
         """
         # signal is a value in [0, (MAX_OUT-MIN_OUT)]
         signal = (self.pin.duty_cycle() - self.min_duty) * self.factor
-        signal = clamp(signal, self.MIN_OUT, self.MAX_OUT)
         # Assuming non-activity if the pulse is at no_action point
         is_action = abs(signal - self.no_action) > self.jitter
         # if deemed noise assume no signal
@@ -952,6 +951,7 @@ class RCReceiver:
             signal = -signal + self.MAX_OUT
         else:
             signal += self.MIN_OUT
+        signal = clamp(signal, self.MIN_OUT, self.MAX_OUT)
         return signal, is_action
 
     def shutdown(self):
