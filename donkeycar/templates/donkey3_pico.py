@@ -30,7 +30,8 @@ import logging
 
 import donkeycar as dk
 import donkeycar.parts
-from donkeycar.parts.actuator import RCReceiver
+from donkeycar.parts.actuator import RCReceiver, PulseController, PWMSteering, \
+    PWMThrottle
 from donkeycar.parts.pico import OdometerPico
 from donkeycar.parts.sensor import LapTimer
 from donkeycar.parts.controller import WebFpv
@@ -53,31 +54,6 @@ CAM_IMG = 'cam/image_array'
 
 def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
           web=False, fpv=False, no_tub=False, verbose=False):
-    """
-    Construct a working robotic vehicle from many parts. Each part runs as a job
-    in the Vehicle loop, calling either its run or run_threaded method depending
-    on the constructor flag `threaded`. All parts are updated one after another
-    at the frame rate given in cfg.DRIVE_LOOP_HZ assuming each part finishes
-    processing in a timely manner. Parts may have named outputs and inputs. The
-    framework handles passing named outputs to parts requesting the same named
-    input.
-    """
-    from donkeycar.parts.pico import Pico, DutyScaler
-
-    class StraightThroughSwitch:
-        last_ch3 = 0
-        def run(self, angle_duty, throttle_duty, ch3):
-            if ch3 < 0.5:
-                if self.last_ch3 != ch3:
-                    self.last_ch3 = ch3
-                    print(f'Switching to translated pwm mode')
-                return angle_duty, throttle_duty
-            else:
-                if self.last_ch3 != ch3:
-                    self.last_ch3 = ch3
-                    print(f'Switching to straight through mode')
-                return -1, -1
-
     if verbose:
         donkeycar.logger.setLevel(logging.DEBUG)
 
@@ -91,59 +67,15 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
                        image_d=cfg.IMAGE_DEPTH)
         car.add(cam, outputs=[CAM_IMG], threaded=True)
 
-    pico = Pico(pin_configuration=cfg.PICO_PIN_CONFIGURATION)
-    car.add(pico,
-            inputs=['pico/write_steering_duty', 'pico/write_throttle_duty'],
-            outputs=['pico/read_steering_duty', 'pico/read_throttle_duty',
-                     'pico/read_ch_3_duty', 'pico/read_odo'],
-            threaded=True)
+    rc_steering = RCReceiver(gpio=cfg.STEERING_RC_GPIO)
+    car.add(rc_steering, outputs=['user/angle', 'user/angle_on'])
 
-    rc_steering = DutyScaler(x_min=-1, x_max=1,
-                             duty_min=cfg.PICO_STEERING_MIN_DUTY,
-                             duty_max=cfg.PICO_STEERING_MAX_DUTY,
-                             duty_center=cfg.PICO_STEERING_CENTER_DUTY,
-                             x_deadband=0.01,
-                             to_duty=False)
-    car.add(rc_steering, inputs=['pico/read_steering_duty'],
-            outputs=['user/angle'])
+    rc_throttle = RCReceiver(gpio=cfg.THROTTLE_RC_GPIO)
+    car.add(rc_throttle, outputs=['user/throttle', 'user/rc_throttle_on'])
 
-    rc_throttle = DutyScaler(x_min=-1, x_max=1,
-                             duty_min=cfg.PICO_THROTTLE_MIN_DUTY,
-                             duty_max=cfg.PICO_THROTTLE_MAX_DUTY,
-                             duty_center=cfg.PICO_THROTTLE_CENTER_DUTY,
-                             x_deadband=0.01)
-    car.add(rc_throttle, inputs=['pico/read_throttle_duty'],
-            outputs=['user/throttle'])
+    rc_ch_3 = RCReceiver(min_out=0, gpio=cfg.CH3_RC_GPIO)
+    car.add(rc_ch_3, outputs=['user/ch_3', 'user/rc_ch_3_on'])
 
-    rc_ch_3 = DutyScaler(x_min=0, x_max=1,
-                         duty_min=cfg.PICO_STEERING_MIN_DUTY,
-                         duty_max=cfg.PICO_STEERING_MAX_DUTY, round_digits=0,
-                         to_duty=False)
-    car.add(rc_ch_3, inputs=['pico/read_ch_3_duty'], outputs=['user/ch_3'])
-
-    pwm_steering = DutyScaler(x_min=-1, x_max=1,
-                              duty_min=cfg.PICO_STEERING_MIN_DUTY,
-                              duty_max=cfg.PICO_STEERING_MAX_DUTY,
-                              duty_center=cfg.PICO_STEERING_CENTER_DUTY,
-                              to_duty=True)
-    car.add(pwm_steering, inputs=['user/angle'],
-            outputs=['pico/write_steering_duty'])
-
-    pwm_throttle = DutyScaler(x_min=-1, x_max=1,
-                              duty_min=cfg.PICO_THROTTLE_MIN_DUTY,
-                              duty_max=cfg.PICO_THROTTLE_MAX_DUTY,
-                              duty_center=cfg.PICO_THROTTLE_CENTER_DUTY,
-                              to_duty=True)
-    car.add(pwm_throttle, inputs=['user/throttle'],
-            outputs=['pico/write_throttle_duty'])
-
-    car.add(StraightThroughSwitch(),
-            inputs=['pico/write_steering_duty', 'pico/write_throttle_duty',
-                    'user/ch_3'],
-            outputs=['pico/write_steering_duty', 'pico/write_throttle_duty'])
-
-
-    # add odometer -------------------------------------------------------------
     odo = OdometerPico(tick_per_meter=cfg.TICK_PER_M, weight=0.5)
     car.add(odo, inputs=['pico/read_odo'],
             outputs=['car/speed', 'car/inst_speed', 'car/distance'])
@@ -157,6 +89,20 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     # # add mpu ------------------------------------------------------------------
     # mpu = Mpu6050Ada()
     # car.add(mpu, outputs=['car/accel', 'car/gyro'], threaded=True)
+
+    steering_pulse = PulseController(pwm_pin=cfg.STEERING_CHANNEL)
+    pwm_steering = PWMSteering(controller=steering_pulse,
+                               left_pulse=cfg.STEERING_LEFT_PWM,
+                               right_pulse=cfg.STEERING_RIGHT_PWM)
+    car.add(pwm_steering, inputs=['user/angle'], threaded=True)
+
+    throttle_pulse = PulseController(pwm_pin=cfg.THROTTLE_CHANNEL)
+    pwm_steering = PWMThrottle(controller=throttle_pulse,
+                               max_pulse=cfg.THROTTLE_FORWARD_PWM,
+                               zero_pulse=cfg.THROTTLE_STOPPED_PWM,
+                               min_pulse=cfg.THROTTLE_REVERSE_PWM)
+    car.add(pwm_steering, inputs=['user/throttle'], threaded=True)
+
     car.start(rate_hz=car_frequency, max_loop_count=cfg.MAX_LOOPS)
 
 

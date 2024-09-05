@@ -89,7 +89,8 @@ class PulseController:
     See pins.py for pin provider implementations.
     """
 
-    def __init__(self, pwm_pin:PwmPin, pwm_scale:float = 1.0, pwm_inverted:bool = False) -> None:
+    def __init__(self, pwm_pin: PwmPin, pwm_scale: float = 1.0,
+                 pwm_inverted: bool = False) -> None:
         """
         :param pwm_pin:PwnPin pin that will emit the pulse.
         :param pwm_scale:float scaling the 12 bit pulse value to compensate
@@ -101,7 +102,7 @@ class PulseController:
         self.inverted = pwm_inverted
         self.started = pwm_pin.state() != PinState.NOT_STARTED
 
-    def set_pulse(self, pulse:int) -> None:
+    def set_pulse(self, pulse: int) -> None:
         """
         Set the length of the pulse using a 12 bit integer (0..4095)
         :param pulse:int 12bit integer (0..4095)
@@ -117,7 +118,7 @@ class PulseController:
             pulse = 4095 - pulse
         self.pwm_pin.duty_cycle(int(pulse * self.scale) / 4095)
 
-    def run(self, pulse:int) -> None:
+    def run(self, pulse: int) -> None:
         """
         Set the length of the pulse using a 12 bit integer (0..4095)
         :param pulse:int 12bit integer (0..4095)

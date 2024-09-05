@@ -35,13 +35,13 @@ PCA9685_I2C_BUSNUM = None
 USE_RC = True
 
 # STEERING
-STEERING_CHANNEL = 1
+STEERING_CHANNEL = "PICO.BCM.16"
 STEERING_LEFT_PWM = 270
 STEERING_RIGHT_PWM = 480
 STEERING_RC_GPIO = "PICO.BCM.18"
 
 # THROTTLE
-THROTTLE_CHANNEL = 0
+THROTTLE_CHANNEL = "PICO.BCM.17"
 THROTTLE_FORWARD_PWM = 490
 THROTTLE_STOPPED_PWM = 375
 THROTTLE_REVERSE_PWM = 280
@@ -68,41 +68,6 @@ LAP_TIMER_GPIO = 16
 IMU_ACCEL_NORM = 20
 IMU_GYRO_NORM = 250
 GYRO_Z_INDEX = 2
-
-# PICO
-
-PICO_STEERING_MIN_DUTY = 0.0625
-PICO_STEERING_MAX_DUTY = 0.1256
-PICO_STEERING_CENTER_DUTY = 0.0940
-PICO_THROTTLE_MIN_DUTY = 0.0619
-PICO_THROTTLE_MAX_DUTY = 0.1247
-PICO_THROTTLE_CENTER_DUTY = 0.0930
-
-
-PICO_PIN_CONFIGURATION = {
-    'input_pins': {
-        # 'pin_13': dict(gpio='GP13', mode='INPUT', pull_up=False),
-        'steering_pwm': dict(gpio='GP18', mode='PWM_IN',
-                             duty_center=PICO_STEERING_CENTER_DUTY),
-        'throttle_pwm': dict(gpio='GP19', mode='PWM_IN',
-                             duty_center=PICO_THROTTLE_CENTER_DUTY),
-        'ch_3': dict(gpio='GP20', mode='PWM_IN'),
-        'odo_in': dict(gpio='GP21', mode='PULSE_IN', maxlen=8, auto_clear=True),
-        # 'an_in': dict(gpio='GP28', mode='ANALOG_IN'),
-    },
-    'output_pins': {
-        # 'pin_14': dict(gpio='GP14', mode='OUTPUT', value=0),
-        'steering_out': dict(gpio='GP16', mode='PWM',
-                             frequency=62.5,
-                             duty_cycle=PICO_STEERING_CENTER_DUTY,
-                             straight='steering_pwm'),
-        'throttle_out': dict(gpio='GP17', mode='PWM',
-                             frequency=62.5,
-                             duty_cycle=PICO_THROTTLE_CENTER_DUTY,
-                             straight='throttle_pwm'),
-    },
-}
-
 
 
 # TRAINING
