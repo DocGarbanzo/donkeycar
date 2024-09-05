@@ -269,7 +269,7 @@ def zip_dir(dir_path, zip_path):
 
 '''
 BINNING
-functions to help converte between floating point numbers and categories.
+functions to help converting between floating point numbers and categories.
 '''
 
 
