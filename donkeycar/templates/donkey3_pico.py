@@ -33,6 +33,7 @@ import donkeycar.parts
 from donkeycar.parts.actuator import RCReceiver, PulseController, PWMSteering, \
     PWMThrottle
 from donkeycar.parts.pico import OdometerPico
+from donkeycar.parts.pins import pwm_pin_by_id
 from donkeycar.parts.sensor import LapTimer
 from donkeycar.parts.controller import WebFpv
 
@@ -90,13 +91,15 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     # mpu = Mpu6050Ada()
     # car.add(mpu, outputs=['car/accel', 'car/gyro'], threaded=True)
 
-    steering_pulse = PulseController(pwm_pin=cfg.STEERING_CHANNEL)
+    steering_pin = pwm_pin_by_id(cfg.STEERING_CHANNEL)
+    steering_pulse = PulseController(pwm_pin=steering_pin)
     pwm_steering = PWMSteering(controller=steering_pulse,
                                left_pulse=cfg.STEERING_LEFT_PWM,
                                right_pulse=cfg.STEERING_RIGHT_PWM)
     car.add(pwm_steering, inputs=['user/angle'], threaded=True)
 
-    throttle_pulse = PulseController(pwm_pin=cfg.THROTTLE_CHANNEL)
+    throttle_pin = pwm_pin_by_id(cfg.THROTTLE_CHANNEL)
+    throttle_pulse = PulseController(pwm_pin=throttle_pin)
     pwm_steering = PWMThrottle(controller=throttle_pulse,
                                max_pulse=cfg.THROTTLE_FORWARD_PWM,
                                zero_pulse=cfg.THROTTLE_STOPPED_PWM,

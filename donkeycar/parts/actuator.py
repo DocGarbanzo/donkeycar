@@ -100,7 +100,7 @@ class PulseController:
         self.pwm_pin = pwm_pin
         self.scale = pwm_scale
         self.inverted = pwm_inverted
-        self.started = pwm_pin.state() != PinState.NOT_STARTED
+        self.started = self.pwm_pin.state() != PinState.NOT_STARTED
 
     def set_pulse(self, pulse: int) -> None:
         """
