@@ -452,8 +452,7 @@ def input_pwm_pin(
         return InputPwmPinPigpio(pin_number, duty=duty)
     if pin_provider == PinProvider.PICO:
         return InputPwmPinPico(pin_number, duty=duty)
-    else:
-        raise RuntimeError(f"UnknownPinProvider ({pin_provider})")
+    raise RuntimeError(f"UnknownPinProvider ({pin_provider})")
 
 
 #
@@ -611,7 +610,6 @@ class PwmPinGpio(PwmPin):
             gpio_fn(self.pin_scheme, lambda: GPIO.cleanup(self.pin_number))
             logger.info(f"PwmPin 'RPI_GPIO.{self.pin_scheme_str}.{self.pin_number}' stopped.")
         self._state = PinState.NOT_STARTED
-
 
     def state(self) -> float:
         return self._state
@@ -1002,7 +1000,7 @@ class PwmPinPigpio(PwmPin):
 
 
 class InputPwmPinPigpio(InputPwmPin):
-    def __init__(self, pin_number: int, duty=0.09, frequency: int = 60,
+    def __init__(self, pin_number: int, duty: float = 0.09, frequency: int = 60,
                  pgpio=None) -> None:
         super().__init__()
         self.pgpio = pgpio
