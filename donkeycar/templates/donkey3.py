@@ -569,7 +569,7 @@ def benchmark(cfg, model_path, verbose=False):
                    tick_per_meter=cfg.TICK_PER_M,
                    weight=0.025)
     car.add(odo, outputs=['car/speed', 'car/inst_speed', 'car/distance'])
-    lap = LapTimer(gpio=cfg.LAP_TIMER_GPIO, trigger=3)
+    lap = LapTimer(gpio=cfg.LAP_TIMER_GPIO)
     car.add(lap, inputs=['car/distance'],
             outputs=['car/lap', 'car/m_in_lap', 'car/lap_updated'],
             threaded=True)

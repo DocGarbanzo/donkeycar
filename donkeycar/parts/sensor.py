@@ -109,7 +109,7 @@ class LapTimer:
     """
     LapTimer to count the number of laps, and lap times, based on gpio counts
     """
-    def __init__(self, gpio=16, trigger=5, min_time=5.0):
+    def __init__(self, gpio=16, min_time=4.0):
         """
         :param gpio:        pin for data connection to sensor
         :param trigger:     how many consecutive readings are required for a
@@ -118,7 +118,8 @@ class LapTimer:
         """
         from gpiozero import Button
         gpio = 'GPIO' + str(gpio)
-        self.pin = Button(gpio)
+        self.pin = Button(gpio, pull_up=True, hold_time=0.01, bounce_time=0.1)
+        self.pin.when_held = self.count_lap
         self.last_time = time.time()
         self.lap_count = 0
         self.last_lap_count = 0
@@ -126,50 +127,29 @@ class LapTimer:
         self.lap_lengths = []
         self.distance = 0.0
         self.last_distance = 0.0
-        self.running = True
-        self.count_lo = 0
-        self.trigger = trigger
         self.min_time = min_time
         logger.info(f"Lap timer added at gpio {gpio}")
 
-    def update(self):
+    def count_lap(self):
         """
         Donkey parts interface
         """
-        while self.running:
-            current_state = self.pin.is_pressed
-            # Signal detected: if pin is lo which equals Button pressed
-            if current_state:
-                self.count_lo += 1
-                logger.debug(f'Lap timer signal low detected')
-            # No signal: pin is high
-            else:
-                # assume when seeing enough consecutive lo this was a real
-                # signal and the sensor went back to high
-                if self.count_lo > self.trigger:
-                    logger.info('Lap timer triggered')
-                    now = time.time()
-                    dt = now - self.last_time
-                    # only count lap if more than min_time passed
-                    if dt > self.min_time:
-                        self.last_time = now
-                        self.lap_times.append(dt)
-                        this_lap_dist = self.distance - self.last_distance
-                        self.last_distance = self.distance
-                        self.lap_lengths.append(this_lap_dist)
-                        logger.info(f'Lap {self.lap_count} of length '
-                                    f'{this_lap_dist:6.3f}m detected after '
-                                    f'{dt:6.3f}s')
-                        self.lap_count += 1
-                # reset lo counter
-                self.count_lo = 0
-            # Sleep for 1 ms. At 5m/s car makes 5mm / 1ms. At that speed
-            # trigger determines how many 1/2cm the car has to be in the
-            # absorption area of the IR signal (by default 5). This scales
-            # down w/ the speed.
-            time.sleep(0.001)
+        logger.info('Lap timer triggered')
+        now = time.time()
+        dt = now - self.last_time
+        # only count lap if more than min_time passed
+        if dt > self.min_time:
+            self.last_time = now
+            self.lap_times.append(dt)
+            this_lap_dist = self.distance - self.last_distance
+            self.last_distance = self.distance
+            self.lap_lengths.append(this_lap_dist)
+            logger.info(f'Lap {self.lap_count} of length '
+                        f'{this_lap_dist:6.3f}m detected after '
+                        f'{dt:6.3f}s')
+            self.lap_count += 1
 
-    def run_threaded(self, distance):
+    def run(self, distance):
         """
         Donkey parts interface
         """
@@ -182,7 +162,7 @@ class LapTimer:
         """
         Donkey parts interface
         """
-        self.running = False
+        self.pin.pin.close()
         logger.info("Lap Summary: (times in s)")
         pt = PrettyTable()
         pt.field_names = ['Lap', 'Time', 'Distance']
