@@ -170,8 +170,7 @@ def drive(cfg, use_pid=False, no_cam=False, model_path=None, model_type=None,
     # add lap timer ------------------------------------------------------------
     lap = LapTimer(gpio=cfg.LAP_TIMER_GPIO, trigger=4)
     car.add(lap, inputs=['car/distance'],
-            outputs=['car/lap', 'car/m_in_lap', 'car/lap_updated'],
-            threaded=True)
+            outputs=['car/lap', 'car/m_in_lap', 'car/lap_updated'])
 
     # add mpu ------------------------------------------------------------------
     mpu = Mpu6050Ada()
@@ -571,8 +570,7 @@ def benchmark(cfg, model_path, verbose=False):
     car.add(odo, outputs=['car/speed', 'car/inst_speed', 'car/distance'])
     lap = LapTimer(gpio=cfg.LAP_TIMER_GPIO)
     car.add(lap, inputs=['car/distance'],
-            outputs=['car/lap', 'car/m_in_lap', 'car/lap_updated'],
-            threaded=True)
+            outputs=['car/lap', 'car/m_in_lap', 'car/lap_updated'])
 
         # Add image transformations like crop or trapezoidal mask
     if hasattr(cfg, 'TRANSFORMATIONS') and cfg.TRANSFORMATIONS or \
