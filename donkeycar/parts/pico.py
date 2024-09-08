@@ -22,16 +22,14 @@ class Pico:
 
     pin_configuration = {
         'input_pins': {
-            'pin_13': dict(gpio='GP13', mode='INPUT', pull_up=False),
-            'odo_in': dict(gpio='GP18', mode='PULSE_IN',
-                           maxlen=8, auto_clear=True),
-            'pulse_in': dict(gpio='GP16', mode='PULSE_IN', maxlen=4),
-            'an_in': dict(gpio='GP28', mode='ANALOG_IN'),
+            'GP13': dict(mode='INPUT', pull_up=False),
+            'GP18': dict(mode='PULSE_IN', maxlen=8, auto_clear=True),
+            'GP16': dict(mode='PULSE_IN', maxlen=4),
+            'GP28': dict(mode='ANALOG_IN'),
         },
         'output_pins': {
-            'pin_14': dict(gpio='GP14', mode='OUTPUT', value=0),
-            'pwm_out': dict(gpio='GP15', mode='PWM', frequency=60,
-                            duty_cycle=0.06, straight='pulse_in'),
+            'GP14': dict(mode='OUTPUT', value=0),
+            'GP15': dict(mode='PWM', frequency=60, duty_cycle=0.06),
         },
     }
 
@@ -61,7 +59,7 @@ class Pico:
         Initialize the Pico communicator.
         :param port: port for data connection
         """
-        self.serial = serial.Serial(port, 115200)
+        self.serial = serial.Serial(port, 115200, write_timeout=1.0)
         self.counter = 0
         self.running = True
         self.pin_configuration = dict()
