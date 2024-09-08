@@ -7,6 +7,8 @@ import json
 import logging
 from threading import Lock, Thread
 
+from serial.serialutil import SerialTimeoutException
+
 logger = logging.getLogger(__name__)
 
 
@@ -72,10 +74,14 @@ class Pico:
         logger.info(f"Pico created on port: {port}")
         # send the initial setup dictionary to clear all pins
         pack = json.dumps(dict(input_pins={}, output_pins={})) + '\n'
-        self.serial.write(pack.encode())
-        self.t = Thread(target=self.loop, args=(), daemon=True)
-        self.t.start()
-        atexit.register(self.stop)
+        try:
+            self.serial.write(pack.encode())
+            self.t = Thread(target=self.loop, args=(), daemon=True)
+            self.t.start()
+            atexit.register(self.stop)
+        except SerialTimeoutException as e:
+            logger.error(f"Failed to initialise Pi Pico dict because of {e}")
+            raise RuntimeError("Failed to initialise Pi Pico.")
 
     def loop(self):
         """
@@ -163,11 +169,16 @@ class Pico:
         setup_dict = dict(input_pins={gpio: dict(mode=mode, **kwargs)})
         logger.info(f"Setting up input pin {gpio} in mode {mode} using "
                     f"setup dict {setup_dict}")
-        with self.lock:
-            # send the setup dictionary
-            pack = json.dumps(setup_dict) + '\n'
-            logger.debug(f"Sending setup dict: {pack}")
-            self.serial.write(pack.encode())
+        try:
+            with self.lock:
+                # send the setup dictionary
+                pack = json.dumps(setup_dict) + '\n'
+                logger.debug(f"Sending setup dict: {pack}")
+                self.serial.write(pack.encode())
+        except SerialTimeoutException as e:
+            logger.error(f"Input pin {gpio} setup failed to send setup dict "
+                         f"because of {e}, skipping.")
+
         self.receive_dict[gpio] = 0
 
     def setup_output_pin(self, gpio: str, mode: str, **kwargs) -> None:
@@ -182,11 +193,15 @@ class Pico:
         setup_dict = dict(output_pins={gpio: dict(mode=mode, **kwargs)})
         logger.info(f"Setting up output pin {gpio} in mode {mode} using "
                     f"setup dict {setup_dict}")
-        with self.lock:
-            # send the setup dictionary
-            pack = json.dumps(setup_dict) + '\n'
-            self.serial.write(pack.encode())
-        self.send_dict[gpio] = 0 if mode == 'OUTPUT' else kwargs['duty']
+        try:
+            with self.lock:
+                # send the setup dictionary
+                pack = json.dumps(setup_dict) + '\n'
+                self.serial.write(pack.encode())
+            self.send_dict[gpio] = 0 if mode == 'OUTPUT' else kwargs['duty']
+        except SerialTimeoutException as e:
+            logger.error(f"Output pin {gpio} setup failed to send setup dict "
+                         f"because of {e}, skipping.")
 
     def remove_pin(self, gpio: str) -> None:
         """
@@ -203,159 +218,16 @@ class Pico:
         else:
             logger.warning(f"Pin {gpio} not in send or receive dict.")
             return
-        with self.lock:
-            # send the setup dictionary
-            pack = json.dumps(setup_dict) + '\n'
-            self.serial.write(pack.encode())
+        try:
+            with self.lock:
+                # send the setup dictionary
+                pack = json.dumps(setup_dict) + '\n'
+                self.serial.write(pack.encode())
+        except SerialTimeoutException as e:
+            logger.error(f"Remove pin {gpio} setup failed to send setup dict "
+                         f"because of {e}, skipping.")
 
 instance = Pico()
-
-
-class DutyScaler:
-    """
-    Donkey part to convert an input float number into a pwm duty cycle output
-    for the Pico's PWMOut pins. The input is a float in [in_min, in_max]
-    mapping to a duty cycle float within [duty_min, duty_max].
-    Note you can provide duty_max < duty_min, if an inversion of the signal
-    is required. Standard RC ESC and sero signals range between 1000us and
-    2000us, with 1500us being the center. At a 60Hz frequency this translates
-    to duty cycles between 6%-12%.
-    """
-
-    def __init__(self, x_min=0.0, x_max=1.0, x_center=None, x_deadband=None,
-                 duty_min=0.06, duty_max=0.012, duty_center=None,
-                 round_digits=3, to_duty=False):
-        """
-        Initialize the PicoPWMOut part.
-        :param in_min:      minimum input value
-        :param in_max:      maximum input value
-        :param duty_min:    minimum duty cycle
-        :param duty_max:    maximum duty cycle
-        """
-        self.x_min = x_min
-        self.x_max = x_max
-        self.x_center = x_center or (x_max + x_min) / 2
-        self.x_deadband = x_deadband
-        self.duty_min = duty_min
-        self.duty_max = duty_max
-        self.duty_center = duty_center or (duty_max + duty_min) / 2
-        self.round_digits = round_digits
-        self.to_duty = to_duty
-        logger.info(f"DutyScaler "
-                    f"{'to_duty' if to_duty else 'from_duty'} created with min"
-                    f":{x_min}, max:{x_max}, duty min:{duty_min}, "
-                    f"duty max:{duty_max}, round digits: {round_digits} and "
-                    f"deadband: {x_deadband}")
-
-    @staticmethod
-    def bilinear_interpolate(x, x_min, x_max, x_c, y_min, y_max, y_c):
-        """
-        Bilinear interpolation for a point x between two points (x_min, y_min)
-        and a center point x_c, such that for x_min <= x <= x_c we return
-        values in [y_min, y_c] and for x_c <= x <= x_max we return values in
-        [y_c, y_max].
-        """
-        if x is None:
-            return y_c
-        if x < x_min:
-            return y_min
-        if x > x_max:
-            return y_max
-        if x < x_c:
-            return y_min + (x - x_min) * (y_c - y_min) / (x_c - x_min)
-        return y_c + (x - x_c) * (y_max - y_c) / (x_max - x_c)
-
-    def run(self, z):
-        """
-        Convert the input value z into a duty cycle value between duty_min
-        and duty_max, if to_duty is True, otherwise convert the duty cycle into
-        a value between x_min and x_max.
-        """
-        if self.to_duty:
-            res = self.bilinear_interpolate(z, self.x_min, self.x_max,
-                                            self.x_center, self.duty_min,
-                                            self.duty_max, self.duty_center)
-        else:
-            res = self.bilinear_interpolate(z, self.duty_min, self.duty_max,
-                                            self.duty_center, self.x_min,
-                                            self.x_max, self.x_center)
-            if self.x_deadband and abs(res - self.x_center) < self.x_deadband:
-                res = self.x_center
-        if self.round_digits is not None:
-            res = round(res, self.round_digits)
-        logger.debug(f"Input: {z} Output: {res} duty_min {self.duty_min} "
-                     f"duty_max {self.duty_max} duty_center "
-                     f"{self.duty_center} x_min {self.x_min} x_max "
-                     f"{self.x_max} x_center {self.x_center} deadband "
-                     f"{self.x_deadband}")
-        return res
-
-    def shutdown(self):
-        pass
-
-
-class PicoPWMInput:
-    """
-    Donkey part to convert a PulseIn signal from the Pico into a float output
-    between out min and out max. The PulseIn signal is expected to be a list
-    of integers containing hi, lo signals in microseconds.
-
-    """
-    def __init__(self, out_min=0.0, out_max=1.0, out_center=None,
-                 out_deadband=None, duty_min=0.06, duty_max=0.012,
-                 duty_center=None, round_digits=None):
-
-        """
-        Initialize the PicoPWMInput part.
-        :param out_min:         minimum output value
-        :param out_max:         maximum output value
-        :param out_center:      center output value
-        :param out_deadband:    if the output is within this range of the center
-        :param duty_min:        minimum duty cycle
-        :param duty_max:        maximum duty cycle
-        :param duty_center:     center duty cycle
-        """
-        self.out_min = out_min
-        self.out_max = out_max
-        self.out_center = out_center or (out_max + out_min) / 2
-        self.duty_min = duty_min
-        self.duty_max = duty_max
-        self.duty_center = duty_center or (duty_max + duty_min) / 2
-        self.last_out = self.out_center
-        self.last_duty = self.duty_center
-        self.out_deadband = out_deadband
-        self.round_digits = round_digits
-        if self.round_digits is not None:
-            self.last_out = round(self.last_out, self.round_digits)
-        logger.info(
-            f"PicoPWMInput created with min:{out_min} and max:{out_max} and "
-            f"center:{self.out_center}")
-
-    def run(self, duty_in):
-        """
-        Convert the duty_in value into a float output value between out_min
-        and out_max.
-        """
-        if duty_in is not None:
-            self.last_duty = duty_in
-        if self.last_duty < self.duty_center:
-            duty_rel = ((self.last_duty - self.duty_min)
-                        / (self.duty_center - self.duty_min))
-            self.last_out = (self.out_min + duty_rel
-                             * (self.out_center - self.out_min))
-            self.last_out = max(self.last_out, self.out_min)
-        else:
-            duty_rel = ((self.last_duty - self.duty_center)
-                        / (self.duty_max - self.duty_center))
-            self.last_out = (self.out_center + duty_rel
-                             * (self.out_max - self.out_center))
-            self.last_out = min(self.last_out, self.out_max)
-        if (self.out_deadband and
-                abs(self.last_out - self.out_center) < self.out_deadband):
-            self.last_out = self.out_center
-        if self.round_digits is not None:
-            self.last_out = round(self.last_out, self.round_digits)
-        return self.last_out, self.last_duty
 
 
 class OdometerPico:
