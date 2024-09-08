@@ -61,7 +61,7 @@ class Pico:
         Initialize the Pico communicator.
         :param port: port for data connection
         """
-        self.serial = serial.Serial(port, 115200, write_timeout=2.0)
+        self.serial = serial.Serial(port, 115200, write_timeout=5.0)
         self.counter = 0
         self.running = True
         self.pin_configuration = dict()
