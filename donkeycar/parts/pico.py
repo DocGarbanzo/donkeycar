@@ -71,7 +71,7 @@ class Pico:
         self.receive_dict = dict()
         self.lock = Lock()
         self.start = None
-        logger.info(f"Pico created on port: {port}")
+        logger.info(f"Creating Pico on port: {port}...initialising comms"...)
         # send the initial setup dictionary to clear all pins
         pack = json.dumps(dict(input_pins={}, output_pins={})) + '\n'
         try:
@@ -82,6 +82,7 @@ class Pico:
         except SerialTimeoutException as e:
             logger.error(f"Failed to initialise Pi Pico dict because of {e}")
             raise RuntimeError("Failed to initialise Pi Pico.")
+        logger.info(f"...Pico communication initialised.")
 
     def loop(self):
         """
@@ -198,7 +199,8 @@ class Pico:
                 # send the setup dictionary
                 pack = json.dumps(setup_dict) + '\n'
                 self.serial.write(pack.encode())
-            self.send_dict[gpio] = 0 if mode == 'OUTPUT' else kwargs['duty']
+                time.sleep(0.2)
+                self.send_dict[gpio] = 0 if mode == 'OUTPUT' else kwargs['duty']
         except SerialTimeoutException as e:
             logger.error(f"Output pin {gpio} setup failed to send setup dict "
                          f"because of {e}, skipping.")
