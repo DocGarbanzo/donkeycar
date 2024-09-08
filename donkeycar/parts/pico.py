@@ -152,7 +152,8 @@ class Pico:
         self.running = False
         time.sleep(0.1)
         #self.t.join()
-        self.serial.flush()
+        self.serial.reset_input_buffer()
+        self.serial.reset_output_buffer()
         self.serial.close()
         total_time = time.time() - self.start
         logger.info(f"Pico communication disconnected, ran {self.counter} "
