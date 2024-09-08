@@ -100,7 +100,7 @@ class PulseController:
         self.pwm_pin = pwm_pin
         self.scale = pwm_scale
         self.inverted = pwm_inverted
-        self.started = self.pwm_pin.state() != PinState.NOT_STARTED
+        self.pwm_pin.start()
 
     def set_pulse(self, pulse: int) -> None:
         """
@@ -111,9 +111,6 @@ class PulseController:
             logging.error("pulse must be in range 0 to 4095")
             pulse = clamp(pulse, 0, 4095)
 
-        if not self.started:
-            self.pwm_pin.start()
-            self.started = True
         if self.inverted:
             pulse = 4095 - pulse
         self.pwm_pin.duty_cycle(int(pulse * self.scale) / 4095)
