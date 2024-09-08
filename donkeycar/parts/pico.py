@@ -71,7 +71,7 @@ class Pico:
         self.receive_dict = dict()
         self.lock = Lock()
         self.start = None
-        logger.info(f"Creating Pico on port: {port}...initialising comms"...)
+        logger.info(f"Creating Pico on port: {port}...initialising comms, ...")
         # send the initial setup dictionary to clear all pins
         pack = json.dumps(dict(input_pins={}, output_pins={})) + '\n'
         try:
