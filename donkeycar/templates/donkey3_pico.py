@@ -95,7 +95,7 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     pwm_steering = PWMSteering(controller=steering_pulse,
                                left_pulse=cfg.STEERING_LEFT_PWM,
                                right_pulse=cfg.STEERING_RIGHT_PWM)
-    car.add(pwm_steering, inputs=['user/angle'], threaded=True)
+    car.add(pwm_steering, inputs=['user/angle'])
 
     throttle_pin = pwm_pin_by_id(cfg.THROTTLE_CHANNEL)
     throttle_pulse = PulseController(pwm_pin=throttle_pin)
@@ -103,7 +103,7 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
                                max_pulse=cfg.THROTTLE_FORWARD_PWM,
                                zero_pulse=cfg.THROTTLE_STOPPED_PWM,
                                min_pulse=cfg.THROTTLE_REVERSE_PWM)
-    car.add(pwm_throttle, inputs=['user/throttle'], threaded=True)
+    car.add(pwm_throttle, inputs=['user/throttle'])
 
     car.start(rate_hz=car_frequency, max_loop_count=cfg.MAX_LOOPS)
 
