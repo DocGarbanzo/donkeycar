@@ -114,7 +114,7 @@ class Pico:
                              f'because of {e}. Expected json, but got: '
                              f'+++{str_in}+++')
             except Exception as e:
-                logger.error(f'Problem with serial input {e}')
+                logger.error(f'Problem with serial comms {e}')
             self.counter += 1
         logger.info('Pico loop stopped.')
 
