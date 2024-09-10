@@ -105,6 +105,11 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
                                min_pulse=cfg.THROTTLE_REVERSE_PWM)
     car.add(pwm_throttle, inputs=['user/throttle'])
 
+    led_pin = pwm_pin_by_id('PICO.BCM.0')
+    led_pulse = PulseController(pwm_pin=led_pin)
+    pwm_led = PWMSteering(controller=led_pulse, left_pulse=0, right_pulse=4095)
+    car.add(pwm_led, inputs=['user/angle'])
+
     car.start(rate_hz=car_frequency, max_loop_count=cfg.MAX_LOOPS)
 
 
