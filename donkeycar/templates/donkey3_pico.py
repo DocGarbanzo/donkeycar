@@ -122,8 +122,6 @@ def calibrate(cfg):
     third channel on the remote we can use it for wiping bad data while
     recording, so we print its values here, too.
     """
-    from donkeycar.parts.pico import Pico, PicoPWMInput, DutyScaler
-
     class Plotter:
         def run(self, steer, throttle=0, ch_3=0):
             print(f'Calibration - angle: {steer:+4.3f} '
