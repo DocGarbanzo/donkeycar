@@ -178,6 +178,8 @@ class Pico:
                 # send the setup dictionary
                 pack = json.dumps(setup_dict) + '\n'
                 logger.debug(f"Sending setup dict: {pack}")
+                self.serial.reset_input_buffer()
+                self.serial.reset_output_buffer()
                 self.serial.write(pack.encode())
         except SerialTimeoutException as e:
             logger.error(f"Input pin {gpio} setup failed to send setup dict "
@@ -201,6 +203,8 @@ class Pico:
             with self.lock:
                 # send the setup dictionary
                 pack = json.dumps(setup_dict) + '\n'
+                self.serial.reset_input_buffer()
+                self.serial.reset_output_buffer()
                 self.serial.write(pack.encode())
                 time.sleep(0.2)
                 self.send_dict[gpio] = 0 if mode == 'OUTPUT' else kwargs['duty']
@@ -227,10 +231,13 @@ class Pico:
             with self.lock:
                 # send the setup dictionary
                 pack = json.dumps(setup_dict) + '\n'
+                self.serial.reset_input_buffer()
+                self.serial.reset_output_buffer()
                 self.serial.write(pack.encode())
         except SerialTimeoutException as e:
             logger.error(f"Remove pin {gpio} setup failed to send setup dict "
                          f"because of {e}, skipping.")
+
 
 instance = Pico()
 
