@@ -91,6 +91,7 @@ class Pico:
         """
         # clear the input buffer
         self.serial.reset_input_buffer()
+        self.serial.reset_output_buffer()
         self.start = time.time()
         # start loop of continuous communication
         while self.running:
