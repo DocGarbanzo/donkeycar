@@ -53,6 +53,7 @@ logger = logging.getLogger(__name__)
 CAM_IMG = 'cam/image_array'
 
 
+# noinspection LanguageDetectionInspection
 def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
           web=False, fpv=False, no_tub=False, verbose=False):
     if verbose:
@@ -104,11 +105,6 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
                                zero_pulse=cfg.THROTTLE_STOPPED_PWM,
                                min_pulse=cfg.THROTTLE_REVERSE_PWM)
     car.add(pwm_throttle, inputs=['user/throttle'])
-
-    led_pin = pwm_pin_by_id('PICO.BCM.2')
-    led_pulse = PulseController(pwm_pin=led_pin)
-    pwm_led = PWMSteering(controller=led_pulse, left_pulse=0, right_pulse=4095)
-    car.add(pwm_led, inputs=['user/angle'])
 
     car.start(rate_hz=car_frequency, max_loop_count=cfg.MAX_LOOPS)
 
