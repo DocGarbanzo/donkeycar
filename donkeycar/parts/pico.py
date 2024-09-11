@@ -221,9 +221,11 @@ class Pico:
         if gpio in self.receive_dict:
             setup_dict['input_pins'] = {gpio: {}}
             del self.receive_dict[gpio]
+            logger.info(f"Removed input pin {gpio} on pico.")
         elif gpio in self.send_dict:
             setup_dict['output_pins'] = {gpio: {}}
             del self.send_dict[gpio]
+            logger.info(f"Removed output pin {gpio} on pico.")
         else:
             logger.warning(f"Pin {gpio} not in send or receive dict.")
             return
@@ -235,7 +237,7 @@ class Pico:
                 self.serial.reset_output_buffer()
                 self.serial.write(pack.encode())
         except SerialTimeoutException as e:
-            logger.error(f"Remove pin {gpio} setup failed to send setup dict "
+            logger.error(f"Remove pin {gpio} failed to send setup dict "
                          f"because of {e}, skipping.")
 
 
