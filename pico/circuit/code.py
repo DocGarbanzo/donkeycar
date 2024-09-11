@@ -189,6 +189,8 @@ def update_output_pins(output_data, output_pins):
         out_pin = output_pins.get(pin_name)
         try:
             if isinstance(out_pin, digitalio.DigitalInOut):
+                if value != out_pin.value:
+                    print(f'Updating pin {pin_name} to {value}')
                 out_pin.value = bool(value)
             elif isinstance(out_pin, PWMOut):
                 out_pin.set_duty_cycle(value)
