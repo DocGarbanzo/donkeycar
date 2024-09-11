@@ -34,7 +34,7 @@ import donkeycar.parts
 from donkeycar.parts.actuator import RCReceiver, PulseController, PWMSteering, \
     PWMThrottle
 from donkeycar.parts.pico import OdometerPico
-from donkeycar.parts.pins import pwm_pin_by_id
+from donkeycar.parts.pins import pwm_pin_by_id, output_pin_by_id
 from donkeycar.parts.sensor import LapTimer
 from donkeycar.parts.controller import WebFpv
 
@@ -109,6 +109,16 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     car.start(rate_hz=car_frequency, max_loop_count=cfg.MAX_LOOPS)
 
 
+class DigitalOutput:
+    def __init__(self, gpio):
+        self.pin = output_pin_by_id(gpio)
+
+    def run(self, value):
+        self.pin.value = value > 0.0
+
+    def shutdown(self):
+        self.pin.stop()
+
 def pwm(cfg, verbose=False):
     if verbose:
         donkeycar.logger.setLevel(logging.DEBUG)
@@ -119,10 +129,12 @@ def pwm(cfg, verbose=False):
     rc_steering = RCReceiver(gpio=cfg.STEERING_RC_GPIO)
     car.add(rc_steering, outputs=['user/angle', 'user/angle_on'])
 
-    led_pin = pwm_pin_by_id('PICO.BCM.2', frequency_hz=500)
-    led_pulse = PulseController(pwm_pin=led_pin)
-    pwm_led = PWMSteering(controller=led_pulse, left_pulse=0, right_pulse=4095)
-    car.add(pwm_led, inputs=['user/angle'])
+    # led_pin = pwm_pin_by_id('PICO.BCM.2', frequency_hz=500)
+    # led_pulse = PulseController(pwm_pin=led_pin)
+    # pwm_led = PWMSteering(controller=led_pulse, left_pulse=0, right_pulse=4095)
+    # car.add(pwm_led, inputs=['user/angle'])
+
+    car.add(DigitalOutput(gpio='PICO.BCM.2'), inputs=['user/angle'])
     car.start(rate_hz=car_frequency, max_loop_count=cfg.MAX_LOOPS)
 
 
