@@ -112,12 +112,14 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
 class DigitalOutput:
     def __init__(self, gpio):
         self.pin = output_pin_by_id(gpio)
+        self.pin.start()
 
     def run(self, value):
         self.pin.output(value > 0.0)
 
     def shutdown(self):
         self.pin.stop()
+
 
 def pwm(cfg, verbose=False):
     if verbose:
