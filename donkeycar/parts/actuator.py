@@ -122,6 +122,9 @@ class PulseController:
         """
         self.set_pulse(pulse)
 
+    def shutdown(self) -> None:
+        self.pwm_pin.stop()
+
 
 @deprecated("Deprecated in favor or PulseController.  This will be removed in a future release")
 class PCA9685:
@@ -325,7 +328,7 @@ class PWMSteering:
         # set steering straight
         self.pulse = 0
         self.running = False
-        self.controller.pin.stop()
+        self.controller.shutdown()
 
 
 class PWMThrottle:
@@ -379,7 +382,7 @@ class PWMThrottle:
         # stop vehicle
         self.run(0)
         self.running = False
-        self.controller.pin.stop()
+        self.controller.shutdown()
 
 
 class EStop:
