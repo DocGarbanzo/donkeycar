@@ -114,7 +114,7 @@ class DigitalOutput:
         self.pin = output_pin_by_id(gpio)
 
     def run(self, value):
-        self.pin.value = value > 0.0
+        self.pin.output(value > 0.0)
 
     def shutdown(self):
         self.pin.stop()
