@@ -1274,12 +1274,11 @@ class PwmPinPico(PwmPin):
             raise ValueError("duty_cycle must be in range 0 to 1")
         self.pico.setup_output_pin(self.pin_number, mode='PWM',
                                    duty=duty, frequency=self.frequency)
-        self._state = PinState.HIGH
+        self._state = duty
 
     def stop(self) -> None:
-        if self.state() != PinState.NOT_STARTED:
-            self._state = PinState.NOT_STARTED
-            self.pico.remove_pin(self.pin_number)
+        self._state = PinState.NOT_STARTED
+        self.pico.remove_pin(self.pin_number)
 
     def state(self) -> float:
         """
