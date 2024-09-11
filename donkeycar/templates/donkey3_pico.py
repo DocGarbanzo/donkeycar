@@ -10,6 +10,7 @@ Usage:
     prog calibrate
     prog stream
     prog led
+    prog pwm
 
 Options:
     -h --help               Show this screen.
@@ -105,7 +106,23 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
                                zero_pulse=cfg.THROTTLE_STOPPED_PWM,
                                min_pulse=cfg.THROTTLE_REVERSE_PWM)
     car.add(pwm_throttle, inputs=['user/throttle'])
+    car.start(rate_hz=car_frequency, max_loop_count=cfg.MAX_LOOPS)
 
+
+def pwm(cfg, verbose=False):
+    if verbose:
+        donkeycar.logger.setLevel(logging.DEBUG)
+
+    car = dk.vehicle.Vehicle()
+    car_frequency = cfg.DRIVE_LOOP_HZ
+
+    rc_steering = RCReceiver(gpio=cfg.STEERING_RC_GPIO)
+    car.add(rc_steering, outputs=['user/angle', 'user/angle_on'])
+
+    led_pin = pwm_pin_by_id('PICO.BCM.2', frequency_hz=500)
+    led_pulse = PulseController(pwm_pin=led_pin)
+    pwm_led = PWMSteering(controller=led_pulse, left_pulse=0, right_pulse=4095)
+    car.add(pwm_led, inputs=['user/angle'])
     car.start(rate_hz=car_frequency, max_loop_count=cfg.MAX_LOOPS)
 
 
@@ -196,4 +213,6 @@ if __name__ == '__main__':
         stream(config)
     elif args['led']:
         led(config)
+    elif args['pwm']:
+        pwm(config, verbose=args['--verbose'])
     logger.info(f'Ending run of {__file__}')
