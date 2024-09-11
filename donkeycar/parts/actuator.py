@@ -324,8 +324,8 @@ class PWMSteering:
     def shutdown(self):
         # set steering straight
         self.pulse = 0
-        time.sleep(0.3)
         self.running = False
+        self.controller.pin.stop()
 
 
 class PWMThrottle:
@@ -379,6 +379,7 @@ class PWMThrottle:
         # stop vehicle
         self.run(0)
         self.running = False
+        self.controller.pin.stop()
 
 
 class EStop:
