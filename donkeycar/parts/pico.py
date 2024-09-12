@@ -100,10 +100,10 @@ class Pico:
                 pack = None
                 with self.lock:
                     pack = json.dumps(self.send_dict) + '\n'
-                self.serial.write(pack.encode())
-                if last_dict != self.send_dict:
-                    logger.debug(f'Last sent: {self.send_dict}')
-                    last_dict = self.send_dict
+                    self.serial.write(pack.encode())
+                    if last_dict != self.send_dict:
+                        logger.debug(f'Last sent: {self.send_dict}')
+                        last_dict = self.send_dict
                 time.sleep(0)
                 bytes_in = self.serial.read_until()
                 time.sleep(0)
