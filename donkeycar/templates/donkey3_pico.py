@@ -128,15 +128,15 @@ def pwm(cfg, verbose=False):
     car = dk.vehicle.Vehicle()
     car_frequency = cfg.DRIVE_LOOP_HZ
 
-    rc_steering = RCReceiver(gpio=cfg.STEERING_RC_GPIO)
-    car.add(rc_steering, outputs=['user/angle', 'user/angle_on'])
+    rc_steering = RCReceiver(gpio=cfg.THROTTLE_RC_GPIO)
+    car.add(rc_steering, outputs=['user/throttle', 'user/throttle_on'])
 
     # led_pin = pwm_pin_by_id('PICO.BCM.2', frequency_hz=500)
     # led_pulse = PulseController(pwm_pin=led_pin)
     # pwm_led = PWMSteering(controller=led_pulse, left_pulse=0, right_pulse=4095)
     # car.add(pwm_led, inputs=['user/angle'])
 
-    car.add(DigitalOutput(gpio='PICO.BCM.2'), inputs=['user/angle'])
+    car.add(DigitalOutput(gpio='PICO.BCM.2'), inputs=['user/throttle'])
     car.start(rate_hz=car_frequency, max_loop_count=cfg.MAX_LOOPS)
 
 
