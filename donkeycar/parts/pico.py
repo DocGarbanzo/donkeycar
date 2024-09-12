@@ -111,7 +111,7 @@ class Pico:
                 received_dict = json.loads(str_in)
                 with self.lock:
                     self.receive_dict.update(received_dict)
-                if self.counter % 100 == 0:
+                if self.counter % 40 == 0:
                     logger.debug(f'Last sent: {self.send_dict}')
                     logger.debug(f'Last received: {received_dict}')
             except ValueError as e:
