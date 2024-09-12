@@ -167,7 +167,7 @@ def calibrate(cfg):
 
     car.add(Plotter(), inputs=['user/angle', 'user/throttle', 'user/ch_3'])
 
-    car.start(rate_hz=20, max_loop_count=cfg.MAX_LOOPS)
+    car.start(rate_hz=30, max_loop_count=cfg.MAX_LOOPS)
 
 
 def stream(cfg):
