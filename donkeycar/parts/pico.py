@@ -112,8 +112,8 @@ class Pico:
                 with self.lock:
                     self.receive_dict.update(received_dict)
                 if self.counter % 1000 == 0:
-                    logger.debug(f'Last sent: {pack}')
-                    logger.debug(f'Last received: {str_in}')
+                    logger.debug(f'Last sent: {self.send_dict}')
+                    logger.debug(f'Last received: {received_dict}')
             except ValueError as e:
                 logger.error(f'Failed to load json in loop {self.counter} '
                              f'because of {e}. Expected json, but got: '
