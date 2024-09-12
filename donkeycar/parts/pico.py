@@ -94,12 +94,16 @@ class Pico:
         self.serial.reset_output_buffer()
         self.start = time.time()
         # start loop of continuous communication
+        last_dict = self.send_dict
         while self.running:
             try:
                 pack = None
                 with self.lock:
                     pack = json.dumps(self.send_dict) + '\n'
                 self.serial.write(pack.encode())
+                if last_dict != self.send_dict:
+                    logger.debug(f'Last sent: {self.send_dict}')
+                    last_dict = self.send_dict
                 time.sleep(0)
                 bytes_in = self.serial.read_until()
                 time.sleep(0)
