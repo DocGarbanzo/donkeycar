@@ -10,7 +10,7 @@ Usage:
     prog calibrate
     prog stream
     prog led
-    prog pwm
+    prog pwm [--verbose]
 
 Options:
     -h --help               Show this screen.
