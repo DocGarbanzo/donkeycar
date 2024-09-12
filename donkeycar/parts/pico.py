@@ -97,23 +97,23 @@ class Pico:
         last_dict = self.send_dict
         while self.running:
             try:
-                pack = None
-                with self.lock:
-                    pack = json.dumps(self.send_dict) + '\n'
-                    self.serial.write(pack.encode())
-                    if last_dict != self.send_dict:
-                        logger.debug(f'Last sent: {self.send_dict}')
-                        last_dict = self.send_dict
-                time.sleep(0)
                 bytes_in = self.serial.read_until()
-                time.sleep(0)
+                time.sleep(0.0)
                 str_in = bytes_in.decode()[:-1]
                 received_dict = json.loads(str_in)
                 with self.lock:
                     self.receive_dict.update(received_dict)
+                time.sleep(0.0)
+                with self.lock:
+                    pack = json.dumps(self.send_dict) + '\n'
+                    self.serial.write(pack.encode())
+                    if last_dict != self.send_dict:
+                        logger.debug(f'Updated send dict: {self.send_dict}')
+                        last_dict = self.send_dict
+                time.sleep(0.0)
                 if self.counter % 10 == 0:
-                    logger.debug(f'Last sent: {self.send_dict}')
                     logger.debug(f'Last received: {received_dict}')
+                    logger.debug(f'Last sent: {self.send_dict}')
             except ValueError as e:
                 logger.error(f'Failed to load json in loop {self.counter} '
                              f'because of {e}. Expected json, but got: '
