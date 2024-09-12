@@ -7,7 +7,7 @@ steering triggers.
 Usage:
     prog drive [--pid] [--no_cam] [--model=PATH_TO_PILOT] [--web]\
         [--fpv] [--no_tub] [--verbose] [--type=MODEL_TYPE]
-    prog calibrate
+    prog calibrate [--verbose]
     prog stream
     prog led
     prog pwm [--verbose]
@@ -140,7 +140,9 @@ def pwm(cfg, verbose=False):
     car.start(rate_hz=car_frequency, max_loop_count=cfg.MAX_LOOPS)
 
 
-def calibrate(cfg):
+def calibrate(cfg, verbose=False):
+    if verbose:
+        donkeycar.logger.setLevel(logging.DEBUG)
     """
     Construct an auxiliary robotic vehicle from only the RC controllers and
     prints their values. The RC remote usually has a tuning pot for the throttle
