@@ -113,7 +113,7 @@ class Pico:
                 if self.counter % 10 == 0:
                     logger.debug(f'Last received: {received_dict}')
                     logger.debug(f'Last sent: {self.send_dict}')
-                time.sleep(0.001)
+                time.sleep(0.0)
             except ValueError as e:
                 logger.error(f'Failed to load json in loop {self.counter} '
                              f'because of {e}. Expected json, but got: '
