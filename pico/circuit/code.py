@@ -213,6 +213,7 @@ def read(serial, input_pins, output_pins, led, is_setup, count):
     # only call update_output_pins if setup has been done
     elif is_setup:
         update_output_pins(read_dict, output_pins)
+    serial.reset_input_buffer()
     # else:
     #     led.value = False
     return is_setup
