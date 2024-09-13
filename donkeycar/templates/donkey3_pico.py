@@ -141,8 +141,6 @@ def pwm(cfg, verbose=False):
 
 
 def calibrate(cfg, verbose=False):
-    if verbose:
-        donkeycar.logger.setLevel(logging.DEBUG)
     """
     Construct an auxiliary robotic vehicle from only the RC controllers and
     prints their values. The RC remote usually has a tuning pot for the throttle
@@ -156,6 +154,9 @@ def calibrate(cfg, verbose=False):
             print(f'Calibration - angle: {steer:+4.3f} '
                   f'throttle {throttle:+4.3f} '
                   f'ch3: {ch_3:+4.3f}')
+
+    if verbose:
+        donkeycar.logger.setLevel(logging.DEBUG)
 
     car = dk.vehicle.Vehicle()
     rc_steering = RCReceiver(gpio=cfg.STEERING_RC_GPIO)
