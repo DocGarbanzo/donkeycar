@@ -184,7 +184,9 @@ def setup(setup_dict, input_pins, output_pins):
     return True
 
 
-def update_output_pins(output_data, output_pins):
+def update_output_pins(output_data, output_pins, led):
+    if output_data:
+        led.value = True
     for pin_name, value in output_data.items():
         out_pin = output_pins.get(pin_name)
         try:
@@ -199,10 +201,12 @@ def update_output_pins(output_data, output_pins):
                       because of unknown type {type(out_pin)}.')
         except ValueError as e:
             print(f'Failed update output pin {pin_name} because of {e}')
+    if output_data:
+        led.value = False
 
 
 def read(serial, input_pins, output_pins, led, is_setup, count):
-    led.value = True
+
     bytes_in = serial.readline()
     read_dict = bytes_to_dict(bytes_in, count)
     # if setup dict sent, this contains 'input_pins' or 'output_pins'
@@ -210,8 +214,7 @@ def read(serial, input_pins, output_pins, led, is_setup, count):
         is_setup = setup(read_dict, input_pins, output_pins)
     # only call update_output_pins if setup has been done
     elif is_setup:
-        update_output_pins(read_dict, output_pins)
-    led.value = False
+        update_output_pins(read_dict, output_pins, led)
     return is_setup
 
 
