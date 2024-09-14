@@ -5,7 +5,7 @@ import analogio
 import pulseio
 import pwmio
 import usb_cdc
-import json
+import pickle
 import microcontroller
 
 
@@ -105,21 +105,17 @@ class AnalogIN:
 def bytes_to_dict(byte_data, count):
     if byte_data == b'':
         return {}
-    str_in = byte_data.decode()[:-1]
-    if not str_in:
-        return {}
     try:
-        out_dict = json.loads(str_in)
+        out_dict = pickle.loads(byte_data)
         return out_dict
-    except ValueError as e:
-        print(f'Failed to decode JSON because of {e}',
-              f'from {str_in} in loop {count}.')
+    except pickle.UnpicklingError as e:
+        print(f'Failed to decode pickle because of {e}',
+              f'from {byte_data} in loop {count}.')
     return {}
 
 
 def dict_to_bytes(dict_data):
-    str_out = json.dumps(dict_data) + '\n'
-    byte_out = str_out.encode()
+    byte_out = pickle.dumps(dict_data) + b'\n'
     return byte_out
 
 

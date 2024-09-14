@@ -3,7 +3,7 @@ import time
 from collections import deque
 
 import serial
-import json
+import pickle
 import logging
 from threading import Lock, Thread
 
@@ -73,9 +73,9 @@ class Pico:
         self.start = None
         logger.info(f"Creating Pico on port: {port}...initialising comms, ...")
         # send the initial setup dictionary to clear all pins
-        pack = json.dumps(dict(input_pins={}, output_pins={})) + '\n'
+        pack = pickle.dumps(dict(input_pins={}, output_pins={})) + b'\n'
         try:
-            self.serial.write(pack.encode())
+            self.serial.write(pack)
             self.t = Thread(target=self.loop, args=(), daemon=True)
             self.t.start()
             atexit.register(self.stop)
@@ -86,7 +86,7 @@ class Pico:
 
     def loop(self):
         """
-        Donkey parts interface. We are sending newline delimited json strings
+        Donkey parts interface. We are sending newline delimited pickle strings
         and expect the same in return.
         """
         # clear the input buffer
@@ -98,15 +98,13 @@ class Pico:
         while self.running:
             try:
                 bytes_in = self.serial.read_until()
-                #time.sleep(0.0)
-                str_in = bytes_in.decode()[:-1]
-                received_dict = json.loads(str_in)
+                str_in = bytes_in[:-1]
+                received_dict = pickle.loads(str_in)
                 with self.lock:
                     self.receive_dict.update(received_dict)
-                #time.sleep(0.0)
                 with self.lock:
-                    pack = json.dumps(self.send_dict) + '\n'
-                    self.serial.write(pack.encode())
+                    pack = pickle.dumps(self.send_dict) + b'\n'
+                    self.serial.write(pack)
                     if last_dict != self.send_dict:
                         logger.debug(f'Updated send dict: {self.send_dict}')
                         last_dict = self.send_dict
@@ -115,8 +113,8 @@ class Pico:
                     logger.debug(f'Last sent: {self.send_dict}')
                 time.sleep(0.0)
             except ValueError as e:
-                logger.error(f'Failed to load json in loop {self.counter} '
-                             f'because of {e}. Expected json, but got: '
+                logger.error(f'Failed to load pickle in loop {self.counter} '
+                             f'because of {e}. Expected pickle, but got: '
                              f'+++{str_in}+++')
             except Exception as e:
                 logger.error(f'Problem with serial comms {e}')
@@ -180,11 +178,11 @@ class Pico:
         try:
             with self.lock:
                 # send the setup dictionary
-                pack = json.dumps(setup_dict) + '\n'
+                pack = pickle.dumps(setup_dict) + b'\n'
                 logger.debug(f"Sending setup dict: {pack}")
                 self.serial.reset_input_buffer()
                 self.serial.reset_output_buffer()
-                self.serial.write(pack.encode())
+                self.serial.write(pack)
         except SerialTimeoutException as e:
             logger.error(f"Input pin {gpio} setup failed to send setup dict "
                          f"because of {e}, skipping.")
@@ -206,10 +204,10 @@ class Pico:
         try:
             with self.lock:
                 # send the setup dictionary
-                pack = json.dumps(setup_dict) + '\n'
+                pack = pickle.dumps(setup_dict) + b'\n'
                 self.serial.reset_input_buffer()
                 self.serial.reset_output_buffer()
-                self.serial.write(pack.encode())
+                self.serial.write(pack)
                 time.sleep(0.2)
                 self.send_dict[gpio] = 0 if mode == 'OUTPUT' else kwargs['duty']
         except SerialTimeoutException as e:
@@ -236,10 +234,10 @@ class Pico:
         try:
             with self.lock:
                 # send the setup dictionary
-                pack = json.dumps(setup_dict) + '\n'
+                pack = pickle.dumps(setup_dict) + b'\n'
                 self.serial.reset_input_buffer()
                 self.serial.reset_output_buffer()
-                self.serial.write(pack.encode())
+                self.serial.write(pack)
         except SerialTimeoutException as e:
             logger.error(f"Remove pin {gpio} failed to send setup dict "
                          f"because of {e}, skipping.")
