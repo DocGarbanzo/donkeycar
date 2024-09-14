@@ -132,7 +132,7 @@ def pin_from_dict(pin_name, d):
     pin = None
     if d['mode'] == 'INPUT':
         pin = DigitalIO(gpio, digitalio.Direction.INPUT, d.get('pull'))
-        print(f'Configured digital input pin, gpio: {gpio}, pull: '
+        print(f'Configured digital input pin, gpio: {gpio}, pull:',
               f'{pin.pin.pull}')
     elif d['mode'] == 'PULSE_IN':
         pin = PulseInResettable(gpio, maxlen=d.get('maxlen', 2),
