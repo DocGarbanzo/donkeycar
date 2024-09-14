@@ -72,7 +72,6 @@ class DigitalIO:
                  value=0):
         self.pin = digitalio.DigitalInOut(gpio)
         self.pin.direction = direction
-        self.pin.pull = None
         # for input pins, set pull-up or pull-down
         if direction == digitalio.Direction.INPUT and pull:
             if pull == 1:
