@@ -15,7 +15,7 @@ class PulseInResettable:
         self.auto_clear = auto_clear
         self.pin.clear()
 
-    def get_readings(self):
+    def get_value(self):
         l = len(self.pin)
         res = list(self.pin[i] for i in range(l))
         if self.auto_clear:
@@ -35,12 +35,12 @@ class PWMIn(PulseInResettable):
         self.max_us = max_us
         self.frequency = frequency
 
-    def get_readings(self):
+    def get_value(self):
         """
         Get the duty cycle from the last two readings. Assuming min and max
         us are 1000 and 2000, respectively,
         """
-        r = super().get_readings()
+        r = super().get_value()
         if len(r) > 1:
             duty_us = min(r[-2], r[-1])
             # High signals should be between min_us and max_us. As we
@@ -62,9 +62,45 @@ class PWMOut:
     def deinit(self):
         self.pin.deinit()
 
-    def set_duty_cycle(self, value):
+    def set_value(self, value):
         """ Set the duty cycle of the PWM output. """
         self.pin.duty_cycle = int(value * 65535)
+
+
+class DigitalIO:
+    def __init__(self, gpio, direction: digitalio.Direction, pull: int = None,
+                 value=0):
+        self.pin = digitalio.DigitalInOut(gpio)
+        self.pin.direction = direction
+        self.pin.pull = None
+        # for input pins, set pull-up or pull-down
+        if direction == digitalio.Direction.INPUT and pull:
+            if pull == 1:
+                self.pin.pull = digitalio.Pull.UP
+            elif pull == 2:
+                self.pin.pull = digitalio.Pull.DOWN
+        self.set_value(value)
+
+    def set_value(self, value):
+        if self.pin.direction == digitalio.Direction.OUTPUT:
+            self.pin.value = value
+
+    def get_value(self):
+        return self.pin.value
+
+    def deinit(self):
+        self.pin.deinit()
+
+
+class AnalogIN:
+    def __init__(self, gpio):
+        self.pin = analogio.AnalogIn(gpio)
+
+    def get_value(self):
+        return self.pin.value
+
+    def deinit(self):
+        self.pin.deinit()
 
 
 def bytes_to_dict(byte_data, count):
@@ -95,15 +131,9 @@ def pin_from_dict(pin_name, d):
     assert gpio != board.LED, 'Cannot assign LED pin as input or output.'
     pin = None
     if d['mode'] == 'INPUT':
-        pin = digitalio.DigitalInOut(gpio)
-        pin.direction = digitalio.Direction.INPUT
-        pull = d.get('pull')  # None will work here, otherwise map
-        if pull == 1:
-            pull = digitalio.Pull.UP
-        elif pull == 2:
-            pull = digitalio.Pull.DOWN
-        pin.pull = pull
-        print(f'Configured digital input pin, gpio: {gpio}, pull: {pin.pull}')
+        pin = DigitalIO(gpio, digitalio.Direction.INPUT, d.get('pull'))
+        print(f'Configured digital input pin, gpio: {gpio}, pull: '
+              f'{pin.pin.pull}')
     elif d['mode'] == 'PULSE_IN':
         pin = PulseInResettable(gpio, maxlen=d.get('maxlen', 2),
                                 auto_clear=d.get('auto_clear', False))
@@ -113,14 +143,12 @@ def pin_from_dict(pin_name, d):
         pin = PWMIn(gpio, duty=d.get('duty_center', 0.09))
         print(f'Configured pwm-in pin, gpio: {gpio}, duty_center: {pin.duty}')
     elif d['mode'] == 'ANALOG_IN':
-        pin = analogio.AnalogIn(gpio)
+        pin = AnalogIN(gpio)
         print(f'Configured analog input pin, gpio: {gpio}')
     elif d['mode'] == 'OUTPUT':
-        pin = digitalio.DigitalInOut(gpio)
-        pin.direction = digitalio.Direction.OUTPUT
-        pin.value = False
+        pin = DigitalIO(gpio, digitalio.Direction.OUTPUT)
         print(f'Configured digital output pin, gpio: {gpio},',
-              f'value: {pin.value}')
+              f'value: {pin.pin.value}')
     elif d['mode'] == 'PWM':
         duty_cycle = d.get('duty_cycle', 0.09)
         freq = int(d.get('frequency', 60))
@@ -189,18 +217,11 @@ def update_output_pins(output_data, output_pins, led):
         led.value = True
     for pin_name, value in output_data.items():
         out_pin = output_pins.get(pin_name)
-        try:
-            if isinstance(out_pin, digitalio.DigitalInOut):
-                if value != out_pin.value:
-                    print(f'Updating pin {pin_name} to {value}')
-                out_pin.value = bool(value)
-            elif isinstance(out_pin, PWMOut):
-                out_pin.set_duty_cycle(value)
-            else:
-                print(f'Cannot update pin out_pin: {pin_name} \
-                      because of unknown type {type(out_pin)}.')
-        except ValueError as e:
-            print(f'Failed update output pin {pin_name} because of {e}')
+        if out_pin:
+            try:
+                out_pin.set_value(value)
+            except ValueError as e:
+                print(f'Failed updating output pin {pin_name} because of {e}')
     if output_data:
         led.value = False
 
@@ -221,10 +242,7 @@ def read(serial, input_pins, output_pins, led, is_setup, count):
 def write(serial, input_pins, write_dict):
     """ Return list if no error or return error as string"""
     for name, pin in input_pins.items():
-        if type(pin) in (digitalio.DigitalInOut, analogio.AnalogIn):
-            write_dict[name] = pin.value
-        elif type(pin) in (PulseInResettable, PWMIn):
-            write_dict[name] = pin.get_readings()
+        write_dict[name] = pin.get_value()
 
     byte_out = dict_to_bytes(write_dict)
     n = serial.write(byte_out)
