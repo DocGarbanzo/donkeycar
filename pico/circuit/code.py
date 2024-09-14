@@ -202,8 +202,7 @@ def update_output_pins(output_data, output_pins):
 
 
 def read(serial, input_pins, output_pins, led, is_setup, count):
-    # if serial.in_waiting > 0:
-    #led.value = True
+    led.value = True
     bytes_in = serial.readline()
     read_dict = bytes_to_dict(bytes_in, count)
     # if setup dict sent, this contains 'input_pins' or 'output_pins'
@@ -212,8 +211,7 @@ def read(serial, input_pins, output_pins, led, is_setup, count):
     # only call update_output_pins if setup has been done
     elif is_setup:
         update_output_pins(read_dict, output_pins)
-    # else:
-    #     led.value = False
+    led.value = False
     return is_setup
 
 
