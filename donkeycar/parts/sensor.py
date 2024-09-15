@@ -12,6 +12,8 @@ from subprocess import run
 
 import logging
 
+from donkeycar.parts.pins import analog_input_pin_by_id
+
 logger = logging.getLogger(__name__)
 
 
@@ -208,3 +210,62 @@ class IsThrottledChecker:
 
     def shutdown(self):
         self.run = False
+
+
+class Voltmeter:
+    """
+    This is a class is a donkey part that reads the voltage from an analog
+    pin using the pin factory in pins.py and reports the voltage in volts. We
+    assume the analog input pin reads voltage as a 16 bit integer (eg this
+    happens on Pi Pico), so we need to convert to absolut voltage. In additon
+    there is a voltage divider in the circuit as the pin can only read up to
+    3.3V. The voltage divider ratio is passed in the constructor.
+    """
+
+    def __init__(self, pin: str, divider_ratio: float = 4.08, warning_level=0.):
+        """
+        :param pin:                 the pin to read from
+        :param divider_ratio:   the conversion factor from your voltage
+                                    divider as the pico can only read 3.3V
+                                    maximum.
+        """
+        # Here we initialise the pin using the analog_input_pin_by_id function
+        # from the pins.py file. This is a factory function that returns
+        # a pin object based on the pin name string. The pin object is
+        # an AnalogInputPin object that has a read method that returns the
+        # value of the pin.
+
+        self.pin = analog_input_pin_by_id(pin)
+        self.pin.start()
+        self.divider_ratio = divider_ratio
+        self.warning_level = warning_level
+        logger.info(f"PicoVoltmeter added with pin {pin} and divider ratio "
+                    f"{divider_ratio}")
+
+    def run(self):
+        """
+        Reads the analog input pin value as 16 bit integer and converts it to
+        a voltage using the conversion factor.
+
+        :param pico: the pico object
+        :return: the voltage in volts
+        """
+        value = self.pin.input()
+        voltage = value * self.divider_ratio * 3.3 / 65535
+        # calculate relative battery level, assuming 3s battery has > 9V and
+        # minimum level should be at least 3.3V per cell
+        pct = 0.0
+        # 3S
+        if voltage > 9.:
+            pct = max(0., (voltage - 9.9) / (12.6 - 9.9))
+        # 2S
+        elif voltage > 6.:
+            pct = max(0., (voltage - 6.6) / (8.4 - 6.6))
+        else:
+            logger.warning(f"Voltage below 6V: {voltage}")
+        if pct < self.warning_level:
+            logger.warning(f"Battery level at {int(pct * 100)}%")
+        return voltage, pct
+
+    def shutdown(self):
+        pass
