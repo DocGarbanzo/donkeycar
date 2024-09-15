@@ -108,11 +108,12 @@ class PulseController:
         :param pulse:int 12bit integer (0..4095)
         """
         if pulse < 0 or pulse > 4095:
-            logging.error("pulse must be in range 0 to 4095")
+            logger.error("pulse must be in range 0 to 4095")
             pulse = clamp(pulse, 0, 4095)
 
         if self.inverted:
             pulse = 4095 - pulse
+        logger.debug(f"Setting pulse to {pulse}")
         self.pwm_pin.duty_cycle(int(pulse * self.scale) / 4095)
 
     def run(self, pulse: int) -> None:
@@ -160,7 +161,7 @@ class PCA9685:
 
     def set_duty_cycle(self, duty_cycle):
         if duty_cycle < 0 or duty_cycle > 1:
-            logging.error("duty_cycle must be in range 0 to 1")
+            logger.error("duty_cycle must be in range 0 to 1")
             duty_cycle = clamp(duty_cycle, 0, 1)
 
         if duty_cycle == 1:
