@@ -205,6 +205,9 @@ class CalibrateCar(BaseCommand):
         parser.add_argument('--arduino', dest='arduino', action='store_true',
                             help='Use arduino pin for PWM '
                                  '(calibrate pin=<channel>)')
+        parser.add_argument('--pwm_pin', default=None,
+                            help='The PWM pin to calibrate in the usual '
+                                 'format like "PCA9685:1:60.13"')
         parser.set_defaults(arduino=False)
         parsed_args = parser.parse_args(args)
         return parsed_args
