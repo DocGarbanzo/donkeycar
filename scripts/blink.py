@@ -8,7 +8,7 @@ led = RGBLED(red='GPIO6', green='GPIO13', blue='GPIO19')
 red = (1, 0, 0)
 green = (0, 1, 0)
 blue = (0, 0, 1)
-yellow = (1, 1, 0)
+yellow = (1, 0.7, 0)
 q = queue.Queue()
 num_tasks = 0
 
@@ -53,8 +53,8 @@ if __name__ == "__main__":
             elif c == 'y':
                 color = yellow
             if color:
-                item = (led.blink, dict(on_color=color, on_time=0.3,
-                                        off_time=0.3, n=5, background=False))
+                item = (led.blink, dict(on_color=color, on_time=0.2,
+                                        off_time=0.2, n=3, background=False))
                 q.put(item)
                 print(f'Task {color} added to queue')
             else:
