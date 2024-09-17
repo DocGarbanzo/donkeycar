@@ -15,7 +15,7 @@ run_worker = True
 
 def worker():
     global num_tasks
-    #global run_worker
+    global run_worker
     while run_worker:
         item = q.get()
         print("Received task...")
