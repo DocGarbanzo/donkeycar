@@ -11,12 +11,11 @@ blue = (0, 0, 1)
 yellow = (1, 1, 0)
 q = queue.Queue()
 num_tasks = 0
-run_worker = True
+
 
 def worker():
     global num_tasks
-    global run_worker
-    while run_worker:
+    while True:
         item = q.get()
         print("Received task...")
         func, kwargs = item
@@ -36,7 +35,6 @@ if __name__ == "__main__":
         print(val)
         if val == 'q':
             run = False
-            run_worker = False
             break
         color = None
         for c in val:
@@ -54,9 +52,8 @@ if __name__ == "__main__":
             else:
                 print('Invalid color string')
 
-    worker_thread.join()
-    print('Worker thread joined')
     led.off()
+    global num_tasks
     print(f'Exiting main loop, called {num_tasks} tasks')
 
 
