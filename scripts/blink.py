@@ -53,7 +53,6 @@ if __name__ == "__main__":
                 print('Invalid color string')
 
     led.off()
-    global num_tasks
     print(f'Exiting main loop, called {num_tasks} tasks')
 
 
