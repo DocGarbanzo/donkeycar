@@ -37,15 +37,12 @@ class Pico:
 
     The dictionary is required to have either 'input_pins' or 'output_pins'
     or both as keys. Input and output refers to the pins on the pico,
-    i.e. an input pin reads values and sends those as outputs of the Pico
-    Donkeycar part. Don't get confused by that:
-        Pi Pico input pin -> Donkeycar Pico part output
-        Pi Pico output pin -> Donkeycar Pico part input
+    i.e. an input pin reads values and sends those to the pi.
 
     The values of 'input_pins' and 'output_pins' contain dictionaries with
-    the pin name as key and the pin configuration as value. The pin
+    the pin GPIO as key and the pin configuration as value. The pin
     configuration is a dictionary with key-values depending on the mode of
-    the pin. All pins use the 'gpio' key for the pin number. The 'mode' key
+    the pin. All pins use the 'mode' key for the pin type. The 'mode' key
     is required for all pins. The different supported modes are:
         'INPUT': for digital input
         'PULSE_IN': for pulse input
@@ -94,22 +91,15 @@ class Pico:
         self.serial.reset_output_buffer()
         self.start = time.time()
         # start loop of continuous communication
-        last_dict = self.send_dict
         while self.running:
             try:
                 bytes_in = self.serial.read_until()
-                #time.sleep(0.0)
                 str_in = bytes_in.decode()[:-1]
                 received_dict = json.loads(str_in)
                 with self.lock:
                     self.receive_dict.update(received_dict)
-                #time.sleep(0.0)
-                with self.lock:
                     pack = json.dumps(self.send_dict) + '\n'
                     self.serial.write(pack.encode())
-                    if last_dict != self.send_dict:
-                        logger.debug(f'Updated send dict: {self.send_dict}')
-                        last_dict = self.send_dict
                 if self.counter % 10 == 0:
                     logger.debug(f'Last received: {received_dict}')
                     logger.debug(f'Last sent: {self.send_dict}')
@@ -156,7 +146,6 @@ class Pico:
     def stop(self):
         self.running = False
         time.sleep(0.1)
-        #self.t.join()
         self.serial.reset_input_buffer()
         self.serial.reset_output_buffer()
         self.serial.close()
@@ -320,3 +309,5 @@ class OdometerPico:
             path = join(getcwd(), 'odo.json')
             with open(path, "w") as outfile:
                 dump(self._debug_data, outfile, indent=4)
+
+

@@ -246,6 +246,50 @@ class InputPwmPin(ABC):
         """
         pass  # subclasses must override
 
+
+class AnalogInputPin(ABC):
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    @abstractmethod
+    def start(self) -> None:
+        """
+        Start the pin in input mode and with given starting state.
+        This raises and RuntimeError if the pin is already started.
+        You can check to see if the pin is started by calling
+        state() and checking for PinState.NOT_STARTED
+        """
+        pass  # subclasses should override this
+
+    @abstractmethod
+    def stop(self) -> None:
+        """
+        Stop the pin and return it to PinState.NOT_STARTED
+        """
+        pass  # subclasses should override this
+
+    @abstractmethod
+    def state(self) -> float:
+        """
+        Return most recent output state.  This does not re-read the pin,
+        It just returns that last value set by the output() method.
+        If the pin is not started or has been stopped,
+        this will return PinState:NOT_STARTED
+        :return: most recent output duty_cycle
+        """
+        return PinState.NOT_STARTED  # subclasses must override
+
+    @abstractmethod
+    def input(self) -> float:
+        """
+        Get the input voltage of the pin
+        :return: voltage in range [0, 2^16) = [0, 65536)
+        :except: RuntimeError is pin is not started
+        """
+        pass  # subclasses must override
+
+
 #
 # ####### Factory Methods
 #
@@ -332,6 +376,17 @@ def input_pwm_pin_by_id(pin_id: str) -> InputPwmPin:
                            "implement PWMInputPin")
     pin_number = int(parts[2])
     return input_pwm_pin(pin_provider, pin_number, pin_scheme=PinScheme.BCM)
+
+
+def analog_input_pin_by_id(pin_id: str) -> AnalogInputPin:
+    """
+    Select an analog input pin given a pin id.
+    """
+    parts = pin_id.split(".")
+    pin_provider = parts[0]
+    pin_scheme = parts[1]
+    pin_number = int(parts[2])
+    return analog_input_pin(pin_provider, pin_number, pin_scheme=pin_scheme)
 
 
 def input_pin(
@@ -454,6 +509,24 @@ def input_pwm_pin(
         return InputPwmPinPico(pin_number, duty=duty)
     raise RuntimeError(f"UnknownPinProvider ({pin_provider})")
 
+
+def analog_input_pin(
+        pin_provider: str,
+        pin_number: int,
+        pin_scheme: str = PinScheme.BCM) -> AnalogInputPin:
+    """
+    construct an AnalogInputPin using the given pin provider
+    :param pin_provider: PinProvider string
+    :param pin_number: zero based pin number
+    :param pin_scheme: PinScheme string
+    :return: AnalogInputPin
+    :except: RuntimeError if pin_provider is not valid.
+    """
+    if pin_provider != PinProvider.PICO:
+        raise RuntimeError("Only Pico implements AnalogInputPin")
+    if pin_scheme != PinScheme.BCM:
+        raise ValueError("Pin scheme must be PinScheme.BCM for PICO")
+    return AnalogInputPinPico(pin_number)
 
 #
 # ----- RPi.GPIO/Jetson.GPIO implementations -----
@@ -1133,6 +1206,58 @@ class InputPinPico(InputPin):
         assert (on_input is None and edge is None), \
             "Pico pin does not support callbacks"
         self.pico.setup_input_pin(self.pin_number, mode='INPUT', pull=self.pull)
+        self._state = self.pico.read(self.pin_number)  # read initial state
+
+    def stop(self) -> None:
+        if self.state() != PinState.NOT_STARTED:
+            self._state = PinState.NOT_STARTED
+            self.pico.remove_pin(self.pin_number)
+
+    def state(self) -> int:
+        """
+        Return last input() value.  This does NOT read the input again;
+        it returns that last value that input() returned.
+        :return: PinState.LOW/HIGH OR PinState.NOT_STARTED if not started
+        """
+        return self._state
+
+    def input(self) -> int:
+        """
+        Read the input pins state.
+        :return: PinState.LOW/HIGH OR PinState.NOT_STARTED if not started
+        """
+        if self.state() != PinState.NOT_STARTED:
+            self._state = self.pico.read(self.pin_number)
+        return self._state
+
+
+class AnalogInputPinPico(AnalogInputPin):
+    def input(self) -> int:
+        pass
+
+    def __init__(self, pin_number: int) -> None:
+        """
+        Analog input pin using Pi Pico
+        :param pin_number: PICO.BCM pin number, only 26, 27 or 28 are working.
+        """
+        if pin_number not in (26, 27, 28):
+            raise ValueError(f"Analog pin {pin_number} is not supported on Pico")
+        super().__init__()
+        self.pin_number = f'GP{pin_number}'
+        self.pico = donkeycar.parts.pico.instance
+        self._state = PinState.NOT_STARTED
+
+    def __del__(self):
+        self.stop()
+
+    def start(self, on_input=None, edge=None) -> None:
+        """
+        Start the input pin, arguments cannot be passed.
+        """
+        if self.state() != PinState.NOT_STARTED:
+            raise RuntimeError(f"Attempt to start InputPinPico("
+                               f"{self.pin_number}) that is already started.")
+        self.pico.setup_input_pin(self.pin_number, mode='ANALOG')
         self._state = self.pico.read(self.pin_number)  # read initial state
 
     def stop(self) -> None:
