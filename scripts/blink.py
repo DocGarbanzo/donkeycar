@@ -14,6 +14,7 @@ num_tasks = 0
 
 
 def worker():
+    global num_tasks
     while True:
         item = q.get()
         print("Received task...")
@@ -50,8 +51,6 @@ if __name__ == "__main__":
         else:
             print('Invalid color string')
 
-    q.join()
-    print('Queue joined')
     worker_thread.join()
     print('Worker thread joined')
     led.off()
