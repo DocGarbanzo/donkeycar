@@ -9,6 +9,7 @@ red = (1, 0, 0)
 green = (0, 1, 0)
 blue = (0, 0, 1)
 yellow = (1, 0.5, 0)
+purple = (1, 0, 1)
 q = queue.Queue()
 num_tasks = 0
 
@@ -39,7 +40,7 @@ if __name__ == "__main__":
     blink_continuous()
 
     while run:
-        val = input("Enter color string of r, b, y or q for quit:\n")
+        val = input("Enter color string of r, b, y, p or q for quit:\n")
         print(f"Received input {val}")
         if val == 'q':
             run = False
@@ -52,6 +53,8 @@ if __name__ == "__main__":
                 color = blue
             elif c == 'y':
                 color = yellow
+            elif c == 'p':
+                color = purple
             if color:
                 item = (led.blink, dict(on_color=color, on_time=0.2,
                                         off_time=0.2, n=3, background=False))
