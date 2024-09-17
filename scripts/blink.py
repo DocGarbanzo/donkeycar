@@ -15,7 +15,7 @@ num_tasks = 0
 
 def blink_continuous():
     led.blink(on_color=green, on_time=0.3,
-              off_time=0.3, n=5, background=True)
+              off_time=0.3, background=True)
 
 
 def worker():
