@@ -51,8 +51,8 @@ if __name__ == "__main__":
                                         off_time=0.3, n=5, background=False))
                 q.put(item)
                 print(f'Task {color} added to queue')
-        else:
-            print('Invalid color string')
+            else:
+                print('Invalid color string')
 
     worker_thread.join()
     print('Worker thread joined')
