@@ -13,6 +13,11 @@ q = queue.Queue()
 num_tasks = 0
 
 
+def blink_continuous():
+    led.blink(on_color=green, on_time=0.3,
+              off_time=0.3, n=5, background=True)
+
+
 def worker():
     global num_tasks
     while True:
@@ -23,6 +28,7 @@ def worker():
         print("Finished task")
         num_tasks += 1
         q.task_done()
+        blink_continuous()
 
 
 if __name__ == "__main__":
@@ -30,9 +36,11 @@ if __name__ == "__main__":
     worker_thread = Thread(target=worker, daemon=True)
     worker_thread.start()
     print('Worker thread started')
+    blink_continuous()
+
     while run:
-        val = input("Enter color string of r, b, y or q for quit: ")
-        print(val)
+        val = input("Enter color string of r, b, y or q for quit:\n")
+        print(f"Received input {val}")
         if val == 'q':
             run = False
             break
