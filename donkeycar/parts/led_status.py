@@ -121,14 +121,15 @@ class RGB_LED:
 
 
 # Colors
-RED = (4095, 0, 0)
-GREEN = (0, 4095, 0)
-BLUE = (0, 0, 4095)
-YELLOW = (4095, 512, 0)
-PURPLE = (1024, 0, 4095)
-WHITE = (4095, 1048, 4095)
-ORANGE = (4095, 128, 0)
-OFF = (0, 0, 0)
+class Color12bit:
+    RED = (4095, 0, 0)
+    GREEN = (0, 4095, 0)
+    BLUE = (0, 0, 4095)
+    YELLOW = (4095, 512, 0)
+    PURPLE = (1024, 0, 4095)
+    WHITE = (4095, 1048, 4095)
+    ORANGE = (4095, 128, 0)
+    OFF = (0, 0, 0)
 
 
 class LEDStatus:
@@ -138,7 +139,7 @@ class LEDStatus:
         self.run = True
         self.pulse_on_time = 0.25
         self.queue = queue.Queue()
-        self.pulse_color = GREEN
+        self.pulse_color = Color12bit.GREEN
         self.continuous_loop = True
         self.larsen(4)
         logger.info("Created LEDStatus part")
@@ -170,17 +171,17 @@ class LEDStatus:
         for _ in range(num):
             self._set_color(color)
             time.sleep(on_time)
-            self._set_color(OFF)
+            self._set_color(Color12bit.OFF)
             time.sleep(off_time)
 
     def larsen(self, num):
         on_time = 0.15
-        colors = (BLUE, GREEN, RED)
+        colors = (Color12bit.BLUE, Color12bit.GREEN, Color12bit.RED)
         for _ in range(num):
             for col in colors:
                 self._set_color(col)
                 time.sleep(on_time)
-        self._set_color(OFF)
+        self._set_color(Color12bit.OFF)
 
     def schedule_continuous(self):
         self.queue.put(Thread(target=self.pulse, daemon=True))
@@ -197,14 +198,15 @@ class LEDStatus:
 
     def run_threaded(self, mode=None, lap=False, wipe=False):
         if mode is not None:
-            self.pulse_color = GREEN if mode == 0 else YELLOW
+            self.pulse_color = Color12bit.GREEN \
+                if mode == 0 else Color12bit.YELLOW
         t = None
         if lap:
             # 3 red blinks when lap
-            t = Thread(target=self.blink, args=(0.1, RED, 3))
+            t = Thread(target=self.blink, args=(0.1, Color12bit.RED, 3))
         if wipe:
             # 1 violet blink when wiper
-            t = Thread(target=self.blink, args=(0.5, PURPLE, 1, False))
+            t = Thread(target=self.blink, args=(0.5, Color12bit.PURPLE, 1, False))
         # if new thread created, schedule it and restart continuous thread:
         if t:
             self.continuous_loop = False
@@ -215,7 +217,66 @@ class LEDStatus:
         # stop the loop
         self.run = False
         self.continuous_loop = False
-        self.blink(0.3, WHITE, 2, False)
+        self.blink(0.3, Color12bit.WHITE, 2, False)
+
+
+class ColorRGB:
+    RED = (1, 0, 0)
+    GREEN = (0, 1, 0)
+    BLUE = (0, 0, 1)
+    YELLOW = (1, 1, 0)
+    ORANGE = (1, 0.5, 0)
+    PURPLE = (0.75, 0, 1)
+    WHITE = (1, 1, 1)
+    OFF = (0, 0, 0)
+
+
+class LEDStatusPi:
+    def __init__(self, r_pin='GPIO6', g_pin='GPIO13', b_pin='GPIO19'):
+        from gpiozero import RGBLED
+        self.led = RGBLED(red=r_pin, g_pin=g_pin, b_pin=b_pin)
+        self.run = True
+        self.queue = queue.Queue()
+        self.pulse_color = ColorRGB.GREEN
+        self.mode = 0
+
+    def update(self):
+        while self.run:
+            kwargs = dict(background=False)
+            kwargs.update(self.queue.get())
+            self.led.blink(**kwargs)
+            self.queue.task_done()
+            self.blink_continuous()
+
+    def _update_continuous(self, mode=0):
+        if mode == self.mode:
+            return
+        if mode == 0:
+            self.pulse_color = ColorRGB.GREEN
+        elif mode == 1:
+            self.pulse_color = ColorRGB.YELLOW
+        self.blink_continuous()
+        self.mode = mode
+
+    def run_threaded(self, mode=0, lap=False, wipe=False):
+        self._update_continuous(mode)
+        t = None
+        # 3 red blinks when lap or 1 violet blink when wiper
+        if lap:
+            t = dict(on_color=ColorRGB.RED, on_time=0.2, off_time=0.2, n=3)
+        if wipe:
+            t = dict(on_color=ColorRGB.PURPLE, on_time=0.4, off_time=0.0, n=1)
+        if t:
+            self.queue.put(t)
+
+    def shutdown(self):
+        self.run = False
+        self.led.blink(on_color=ColorRGB.WHITE, on_time=0.4,
+                       off_time=0.2, background=False, n=2)
+
+    def blink_continuous(self):
+        self.led.blink(on_color=self.pulse_color, on_time=0.3,
+                       off_time=0.3, background=True)
 
 
 if __name__ == "__main__":
