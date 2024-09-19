@@ -200,11 +200,11 @@ class OnOff:
 
 
 def led(cfg):
-    from donkeycar.parts.led_status import LEDStatus
+    from donkeycar.parts.led_status import LEDStatusPi
     donkeycar.logger.setLevel(logging.DEBUG)
     car = dk.vehicle.Vehicle()
     car.add(OnOff(), outputs=['mode', 'lap', 'wipe'])
-    car.add(LEDStatus(), inputs=['mode', 'lap', 'wipe'], threaded=True)
+    car.add(LEDStatusPi(), inputs=['mode', 'lap', 'wipe'], threaded=True)
     car.start(rate_hz=40, max_loop_count=2000)
 
 
