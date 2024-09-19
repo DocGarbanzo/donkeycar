@@ -238,7 +238,7 @@ class LEDStatusPi:
         self.run = True
         self.queue = queue.Queue()
         self.pulse_color = ColorRGB.GREEN
-        self.mode = 0
+        self.mode = None
         logger.info("Created LEDStatusPi part")
 
     def update(self):
