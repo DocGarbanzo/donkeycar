@@ -234,7 +234,7 @@ class ColorRGB:
 class LEDStatusPi:
     def __init__(self, r_pin='GPIO6', g_pin='GPIO13', b_pin='GPIO19'):
         from gpiozero import RGBLED
-        self.led = RGBLED(red=r_pin, g_pin=g_pin, b_pin=b_pin)
+        self.led = RGBLED(red=r_pin, green=g_pin, blue=b_pin)
         self.run = True
         self.queue = queue.Queue()
         self.pulse_color = ColorRGB.GREEN
