@@ -245,7 +245,6 @@ class LEDStatusPi:
         while self.run:
             kwargs = dict(background=False)
             kwargs.update(self.queue.get())
-            logger.info(f"LEDStatusPi: Blinking {kwargs}")
             self.led.blink(**kwargs)
             self.queue.task_done()
             self.blink_continuous()
@@ -269,7 +268,7 @@ class LEDStatusPi:
             t = dict(on_color=ColorRGB.RED, on_time=0.2, off_time=0.2, n=3)
         if wipe:
             logger.info(f"LEDStatusPi: Wipe detected")
-            t = dict(on_color=ColorRGB.PURPLE, on_time=0.4, off_time=0.0, n=1)
+            t = dict(on_color=ColorRGB.PURPLE, on_time=0.1, off_time=0.1, n=4)
         if t:
             self.queue.put(t)
 
