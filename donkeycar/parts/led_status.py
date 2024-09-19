@@ -239,11 +239,13 @@ class LEDStatusPi:
         self.queue = queue.Queue()
         self.pulse_color = ColorRGB.GREEN
         self.mode = 0
+        logger.info("Created LEDStatusPi part")
 
     def update(self):
         while self.run:
             kwargs = dict(background=False)
             kwargs.update(self.queue.get())
+            logger.info(f"LEDStatusPi: Blinking {kwargs}")
             self.led.blink(**kwargs)
             self.queue.task_done()
             self.blink_continuous()
@@ -263,8 +265,10 @@ class LEDStatusPi:
         t = None
         # 3 red blinks when lap or 1 violet blink when wiper
         if lap:
+            logger.info(f"LEDStatusPi: Lap detected")
             t = dict(on_color=ColorRGB.RED, on_time=0.2, off_time=0.2, n=3)
         if wipe:
+            logger.info(f"LEDStatusPi: Wipe detected")
             t = dict(on_color=ColorRGB.PURPLE, on_time=0.4, off_time=0.0, n=1)
         if t:
             self.queue.put(t)

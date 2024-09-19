@@ -9,7 +9,7 @@ Usage:
         [--fpv] [--no_tub] [--verbose] [--type=MODEL_TYPE]
     prog calibrate [--verbose]
     prog stream
-    prog led
+    prog led [--verbose]
     prog pwm [--verbose]
 
 Options:
@@ -199,9 +199,10 @@ class OnOff:
         return self.mode, is_lap, is_wipe
 
 
-def led(cfg):
+def led(cfg, verbose=False):
     from donkeycar.parts.led_status import LEDStatusPi
-    donkeycar.logger.setLevel(logging.DEBUG)
+    if verbose:
+        donkeycar.logger.setLevel(logging.DEBUG)
     car = dk.vehicle.Vehicle()
     car.add(OnOff(), outputs=['mode', 'lap', 'wipe'])
     car.add(LEDStatusPi(), inputs=['mode', 'lap', 'wipe'], threaded=True)
@@ -229,7 +230,7 @@ if __name__ == '__main__':
     elif args['stream']:
         stream(config)
     elif args['led']:
-        led(config)
+        led(config, verbose=args['--verbose'])
     elif args['pwm']:
         pwm(config, verbose=args['--verbose'])
     logger.info(f'Ending run of {__file__}')
