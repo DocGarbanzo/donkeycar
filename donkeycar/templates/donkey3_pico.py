@@ -206,7 +206,7 @@ def led(cfg, verbose=False):
     car = dk.vehicle.Vehicle()
     car.add(OnOff(), outputs=['mode', 'lap', 'wipe'])
     car.add(LEDStatusPi(), inputs=['mode', 'lap', 'wipe'], threaded=True)
-    car.start(rate_hz=40, max_loop_count=2000)
+    car.start(rate_hz=40, max_loop_count=4000)
 
 
 if __name__ == '__main__':
