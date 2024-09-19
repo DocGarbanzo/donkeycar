@@ -33,6 +33,7 @@ import donkeycar as dk
 import donkeycar.parts
 from donkeycar.parts.actuator import RCReceiver, PulseController, PWMSteering, \
     PWMThrottle
+from donkeycar.parts.led_status import LEDStatusPi
 from donkeycar.parts.pico import OdometerPico
 from donkeycar.parts.pins import pwm_pin_by_id, output_pin_by_id
 from donkeycar.parts.sensor import LapTimer
@@ -61,6 +62,7 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
         donkeycar.logger.setLevel(logging.DEBUG)
 
     car = dk.vehicle.Vehicle()
+    car.mem['mode'] = 0
     car_frequency = cfg.DRIVE_LOOP_HZ
 
     # add camera ---------------------------------------------------------------
@@ -106,6 +108,9 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
                                zero_pulse=cfg.THROTTLE_STOPPED_PWM,
                                min_pulse=cfg.THROTTLE_REVERSE_PWM)
     car.add(pwm_throttle, inputs=['user/throttle'])
+
+    car.add(LEDStatusPi(), inputs=['mode', 'car/lap_updated', 'wipe'],
+            threaded=True)
     car.start(rate_hz=car_frequency, max_loop_count=cfg.MAX_LOOPS)
 
 
@@ -200,7 +205,7 @@ class OnOff:
 
 
 def led(cfg, verbose=False):
-    from donkeycar.parts.led_status import LEDStatusPi
+
     if verbose:
         donkeycar.logger.setLevel(logging.DEBUG)
     car = dk.vehicle.Vehicle()
