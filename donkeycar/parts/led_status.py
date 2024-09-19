@@ -255,7 +255,8 @@ class LEDStatusPi:
         if mode == 0:
             self.pulse_color = ColorRGB.GREEN
         elif mode == 1:
-            self.pulse_color = ColorRGB.YELLOW
+            self.pulse_color = ColorRGB.ORANGE
+        logger.info((f"Mode changed to {mode}"))
         self.blink_continuous()
         self.mode = mode
 
@@ -264,10 +265,10 @@ class LEDStatusPi:
         t = None
         # 3 red blinks when lap or 1 violet blink when wiper
         if lap:
-            logger.info(f"LEDStatusPi: Lap detected")
+            logger.info(f"Lap detected")
             t = dict(on_color=ColorRGB.RED, on_time=0.2, off_time=0.2, n=3)
         if wipe:
-            logger.info(f"LEDStatusPi: Wipe detected")
+            logger.info(f"Wipe detected")
             t = dict(on_color=ColorRGB.PURPLE, on_time=0.1, off_time=0.1, n=4)
         if t:
             self.queue.put(t)
