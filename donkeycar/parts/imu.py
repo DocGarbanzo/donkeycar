@@ -158,8 +158,9 @@ if __name__ == "__main__":
     p = Mpu6050Ada()
     while True:
         try:
-            data = p.run()
-            print(data)
+            accel, gyro = p.run()
+            print(f"accel: ", ",".join(f"{x:+5.4f}" for x in accel),
+                  " gyro: ", ",".join(f"{x:+5.4f}" for x in gyro))
             time.sleep(0.05)
             count += 1
         except KeyboardInterrupt:
