@@ -160,8 +160,8 @@ if __name__ == "__main__":
     while True:
         try:
             accel, gyro = p.run()
-            out_str = f"\raccel: " + f",".join(f"{x:+5.4f}" for x in accel) +\
-                f"gyro: " + ",".join(f"{x:+5.4f}" for x in gyro)
+            out_str = f"\raccel: " + f",".join(f"{x:+5.3f}" for x in accel) +\
+                f" gyro: " + ",".join(f"{x:+5.3f}" for x in gyro)
             stdout.write(out_str)
             stdout.flush()
             time.sleep(0.05)
