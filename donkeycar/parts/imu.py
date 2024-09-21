@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
+import math
 import time
 import board
 import busio
 import adafruit_mpu6050
 import logging
 
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +64,6 @@ class IMU:
             self.sensor.calibrateMPU6500()
             self.sensor.configure()
 
-
         self.accel = { 'x' : 0., 'y' : 0., 'z' : 0. }
         self.gyro = { 'x' : 0., 'y' : 0., 'z' : 0. }
         self.mag = {'x': 0., 'y': 0., 'z': 0.}
@@ -117,6 +118,11 @@ class Mpu6050Ada:
         self.accel = [0] * 3
         self.gyro = [0] * 3
         self.on = True
+        self.pos = [0, 0]
+        self.speed = [0, 0]
+        self.time = time.time()
+        self.angle = 0
+        self.path = [(self.time, self.pos)]
 
     def calibrate(self):
         num_loops = 20
@@ -140,6 +146,17 @@ class Mpu6050Ada:
         for i in range(3):
             self.accel[i] = self.mpu.acceleration[i] - self.accel_zero[i]
             self.gyro[i] = self.mpu.gyro[i] - self.gyro_zero[i]
+        new_time = time.time()
+        delta_t = new_time - self.time
+        self.angle += self.gyro[3] * delta_t
+        delta_v_x = self.accel[0] * delta_t * math.cos(self.angle)
+        delta_v_y = self.accel[1] * delta_t * math.sin(self.angle)
+        self.speed[0] += delta_v_x
+        self.speed[1] += delta_v_y
+        self.pos[0] += self.speed[0] * delta_t
+        self.pos[1] += self.speed[1] * delta_t
+        self.time = new_time
+        self.path.append((self.time, self.pos))
 
     def run(self):
         self.poll()
@@ -150,6 +167,8 @@ class Mpu6050Ada:
 
     def shutdown(self):
         self.on = False
+        df = pd.DataFrame(columns=['x', 'y'], data=self.pos)
+        df.to_csv('imu.csv', index=False)
 
 
 if __name__ == "__main__":
