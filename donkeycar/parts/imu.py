@@ -154,17 +154,21 @@ class Mpu6050Ada:
 
 if __name__ == "__main__":
     import sys
+    from sys import stdout
     count = 0
     p = Mpu6050Ada()
     while True:
         try:
             accel, gyro = p.run()
-            print(f"accel: ", ",".join(f"{x:+5.4f}" for x in accel),
-                  " gyro: ", ",".join(f"{x:+5.4f}" for x in gyro))
+            out_str = f"\raccel: " + f",".join(f"{x:+5.4f}" for x in accel) + \
+                   f"gyro: " + ",".join(f"{x:+5.4f}" for x in gyro)
+            stdout(out_str)
+            stdout.flush()
             time.sleep(0.05)
             count += 1
         except KeyboardInterrupt:
             break
+            stdout.write("\n")
     sys.exit(0)
 
     iter = 0
