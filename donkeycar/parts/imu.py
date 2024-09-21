@@ -180,7 +180,8 @@ if __name__ == "__main__":
         try:
             accel, gyro = p.run()
             out_str = f"\raccel: " + f",".join(f"{x:+5.3f}" for x in accel) +\
-                f" gyro: " + ",".join(f"{x:+5.3f}" for x in gyro)
+                f" gyro: " + ",".join(f"{x:+5.3f}" for x in gyro) +\
+                f" angle: {p.angle:+5.3f}"
             stdout.write(out_str)
             stdout.flush()
             time.sleep(0.05)
