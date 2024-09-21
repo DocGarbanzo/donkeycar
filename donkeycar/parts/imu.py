@@ -186,6 +186,7 @@ if __name__ == "__main__":
             time.sleep(0.05)
             count += 1
         except KeyboardInterrupt:
+            p.shutdown()
             stdout.write("\n")
             break
     sys.exit(0)
