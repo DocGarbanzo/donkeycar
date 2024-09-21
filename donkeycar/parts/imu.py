@@ -122,7 +122,7 @@ class Mpu6050Ada:
         self.speed = [0, 0]
         self.time = time.time()
         self.angle = 0
-        self.path = [(self.time, self.pos)]
+        self.path = [(self.time, *self.pos)]
 
     def calibrate(self):
         num_loops = 20
@@ -156,7 +156,7 @@ class Mpu6050Ada:
         self.pos[0] += self.speed[0] * delta_t
         self.pos[1] += self.speed[1] * delta_t
         self.time = new_time
-        self.path.append((self.time, self.pos))
+        self.path.append((self.time, *self.pos))
 
     def run(self):
         self.poll()
@@ -167,7 +167,7 @@ class Mpu6050Ada:
 
     def shutdown(self):
         self.on = False
-        df = pd.DataFrame(columns=['x', 'y'], data=self.pos)
+        df = pd.DataFrame(columns=['t', 'x', 'y'], data=self.path)
         df.to_csv('imu.csv', index=False)
 
 
