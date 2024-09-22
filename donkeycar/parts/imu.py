@@ -149,8 +149,8 @@ class Mpu6050Ada:
         new_time = time.time()
         delta_t = new_time - self.time
         self.angle += self.gyro[2] * delta_t
-        delta_v_x = self.accel[1] * delta_t * math.cos(self.angle)
-        delta_v_y = -self.accel[1] * delta_t * math.sin(self.angle)
+        delta_v_x = -self.accel[1] * delta_t * math.sin(self.angle)
+        delta_v_y = self.accel[1] * delta_t * math.cos(self.angle)
         self.speed[0] += delta_v_x
         self.speed[1] += delta_v_y
         self.pos[0] += self.speed[0] * delta_t
