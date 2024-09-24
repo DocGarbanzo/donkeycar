@@ -6,6 +6,7 @@ import busio
 import adafruit_mpu6050
 import logging
 
+import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -115,27 +116,26 @@ class Mpu6050Ada:
         self.accel_zero = None
         self.gyro_zero = None
         self.calibrate()
-        self.accel = [0] * 3
-        self.gyro = [0] * 3
+        self.accel = np.zeros(3)
+        self.gyro = np.zeros(3)
         self.on = True
-        self.pos = [0, 0]
-        self.speed = [0, 0]
+        self.pos = np.zeros(3)
+        self.speed = np.zeros(3)
         self.time = time.time()
-        self.angle = 0
-        self.path = [(self.time, *self.pos)]
+        self.path = [] # [(self.time, *self.pos)]
+        self.frame = np.diag([1, 1, 1])
 
     def calibrate(self):
-        num_loops = 20
-        accel = [0, 0, 0]
-        gyro = [0, 0, 0]
+        num_loops = 100
+        accel = np.zeros(3)
+        gyro = np.zeros(3)
         for _ in range(num_loops):
-            for i in range(3):
-                accel[i] += self.mpu.acceleration[i]
-                gyro[i] += self.mpu.gyro[i]
+            accel += self.mpu.acceleration
+            gyro += self.mpu.gyro
             # wait for 25ms
-            time.sleep(0.025)
-        self.accel_zero = [a / num_loops for a in accel]
-        self.gyro_zero = [g / num_loops for g in gyro]
+            time.sleep(0.005)
+        self.accel_zero = accel / num_loops
+        self.gyro_zero = gyro / num_loops
         logger.info('... Mpu6050 calibrated')
 
     def update(self):
@@ -143,20 +143,21 @@ class Mpu6050Ada:
             self.poll()
 
     def poll(self):
-        for i in range(3):
-            self.accel[i] = self.mpu.acceleration[i] - self.accel_zero[i]
-            self.gyro[i] = self.mpu.gyro[i] - self.gyro_zero[i]
+        # self.accel = self.mpu.acceleration - self.accel_zero
+        # self.gyro = self.mpu.gyro - self.gyro_zero
         new_time = time.time()
-        delta_t = new_time - self.time
-        self.angle += self.gyro[2] * delta_t
-        delta_v_x = -self.accel[1] * delta_t * math.sin(self.angle)
-        delta_v_y = self.accel[1] * delta_t * math.cos(self.angle)
-        self.speed[0] += delta_v_x
-        self.speed[1] += delta_v_y
-        self.pos[0] += self.speed[0] * delta_t
-        self.pos[1] += self.speed[1] * delta_t
-        self.time = new_time
-        self.path.append((self.time, *self.pos))
+        # delta_t = new_time - self.time
+        # frame_update = np.array(
+        #     [[1, -self.gyro[2] * delta_t, self.gyro[1] * delta_t],
+        #      [self.gyro[2] * delta_t, 1, -self.gyro[0] * delta_t],
+        #      [-self.gyro[1] * delta_t, self.gyro[0] * delta_t,  1]])
+        # self.frame = np.dot(frame_update, self.frame)
+        # delta_v = np.dot(self.frame, self.accel) * delta_t
+        # self.speed += delta_v
+        # self.pos += self.speed * delta_t
+        # self.path.append((self.time, *self.pos))
+        # self.time = new_time
+        self.path.append((new_time, *self.mpu.gyro, *self.mpu.acceleration))
 
     def run(self):
         self.poll()
@@ -167,7 +168,8 @@ class Mpu6050Ada:
 
     def shutdown(self):
         self.on = False
-        df = pd.DataFrame(columns=['t', 'x', 'y'], data=self.path)
+        df = pd.DataFrame(columns=['t', 'gx', 'gy', 'gz', 'ax', 'ay', 'az'],
+                          data=self.path)
         df.to_csv('imu.csv', index=False)
 
 
@@ -180,8 +182,7 @@ if __name__ == "__main__":
         try:
             accel, gyro = p.run()
             out_str = f"\raccel: " + f",".join(f"{x:+5.3f}" for x in accel) +\
-                f" gyro: " + ",".join(f"{x:+5.3f}" for x in gyro) +\
-                f" angle: {p.angle:+5.3f}"
+                f" gyro: " + ",".join(f"{x:+5.3f}" for x in gyro)
             stdout.write(out_str)
             stdout.flush()
             time.sleep(0.05)
