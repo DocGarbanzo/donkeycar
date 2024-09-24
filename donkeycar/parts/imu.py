@@ -185,7 +185,7 @@ if __name__ == "__main__":
                 f" gyro: " + ",".join(f"{x:+5.3f}" for x in gyro)
             stdout.write(out_str)
             stdout.flush()
-            time.sleep(0.05)
+            time.sleep(0.01)
             count += 1
         except KeyboardInterrupt:
             p.shutdown()
