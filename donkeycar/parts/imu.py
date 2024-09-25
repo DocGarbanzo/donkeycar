@@ -5,6 +5,7 @@ import board
 import busio
 import adafruit_mpu6050
 import logging
+import imufusion
 
 import numpy as np
 import pandas as pd
@@ -121,9 +122,22 @@ class Mpu6050Ada:
         self.on = True
         self.pos = np.zeros(3)
         self.speed = np.zeros(3)
-        self.time = time.time()
+        self.time = None
         self.path = [] # [(self.time, *self.pos)]
         self.frame = np.diag([1, 1, 1])
+        self.sample_rate = 100
+        self.ahrs = imufusion.Ahrs()
+        self.ahrs.settings = imufusion.Settings(
+            # imufusion.CONVENTION_NWU,
+            imufusion.CONVENTION_ENU,
+            0.5,  # gain
+            2000,  # gyroscope range
+            10,  # acceleration rejection
+            10,  # magnetic rejection
+            5 * self.sample_rate,  # recovery trigger period = 5 seconds
+        )
+        self.offset = imufusion.Offset(self.sample_rate)
+        self.matrix = None
 
     def calibrate(self):
         num_loops = 100
@@ -146,7 +160,18 @@ class Mpu6050Ada:
         # self.accel = self.mpu.acceleration - self.accel_zero
         # self.gyro = self.mpu.gyro - self.gyro_zero
         new_time = time.time()
-        # delta_t = new_time - self.time
+        if self.time is None:
+            self.time = new_time
+        delta_t = new_time - self.time
+        # convert from radians to degrees
+        gyro = self.offset.update(self.mpu.gyro / 180 * math.pi)
+        accel = self.mpu.acceleration / 9.81
+        self.ahrs.update_no_magnetometer(gyro, accel, delta_t)
+
+        euler = self.ahrs.quaternion.to_euler()
+        self.matrix = self.ahrs.quaternion.to_matrix()
+
+
         # frame_update = np.array(
         #     [[1, -self.gyro[2] * delta_t, self.gyro[1] * delta_t],
         #      [self.gyro[2] * delta_t, 1, -self.gyro[0] * delta_t],
@@ -156,12 +181,14 @@ class Mpu6050Ada:
         # self.speed += delta_v
         # self.pos += self.speed * delta_t
         # self.path.append((self.time, *self.pos))
-        # self.time = new_time
-        self.path.append((new_time, *self.mpu.gyro, *self.mpu.acceleration))
+        self.time = new_time
+        self.path.append((new_time,
+                          *self.mpu.gyro,
+                          *self.mpu.acceleration))
 
     def run(self):
         self.poll()
-        return self.accel, self.gyro
+        return self.matrix
 
     def run_threaded(self):
         return self.accel, self.gyro
@@ -180,9 +207,9 @@ if __name__ == "__main__":
     p = Mpu6050Ada()
     while True:
         try:
-            accel, gyro = p.run()
-            out_str = f"\raccel: " + f",".join(f"{x:+5.3f}" for x in accel) +\
-                f" gyro: " + ",".join(f"{x:+5.3f}" for x in gyro)
+            matrix = p.run()
+            #out_str = f"\rmatrix: " + f",".join(f"{x:+5.3f}" for x in matrix)
+            out_str = f"\r{matrix}"
             stdout.write(out_str)
             stdout.flush()
             time.sleep(0.01)
