@@ -138,6 +138,7 @@ class Mpu6050Ada:
         )
         self.offset = imufusion.Offset(self.sample_rate)
         self.matrix = None
+        self.euler = None
 
     def calibrate(self):
         num_loops = 100
@@ -169,7 +170,7 @@ class Mpu6050Ada:
         accel = np.array(self.mpu.acceleration) / 9.81
         self.ahrs.update_no_magnetometer(gyro, accel, delta_t)
 
-        euler = self.ahrs.quaternion.to_euler()
+        self.euler = self.ahrs.quaternion.to_euler()
         self.matrix = self.ahrs.quaternion.to_matrix()
 
 
@@ -186,6 +187,7 @@ class Mpu6050Ada:
         self.path.append((new_time,
                           *self.mpu.gyro,
                           *self.mpu.acceleration))
+        return self.matrix
 
     def run(self):
         self.poll()
