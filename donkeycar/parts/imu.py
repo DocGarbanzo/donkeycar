@@ -187,11 +187,10 @@ class Mpu6050Ada:
         self.path.append((new_time,
                           *self.mpu.gyro,
                           *self.mpu.acceleration))
-        return self.matrix
 
     def run(self):
         self.poll()
-        return self.matrix
+        return self.euler
 
     def run_threaded(self):
         return self.accel, self.gyro
