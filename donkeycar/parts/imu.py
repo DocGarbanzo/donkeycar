@@ -190,7 +190,7 @@ class Mpu6050Ada:
 
     def run(self):
         self.poll()
-        return self.euler
+        return self.matrix
 
     def run_threaded(self):
         return self.accel, self.gyro
