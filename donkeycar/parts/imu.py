@@ -146,6 +146,7 @@ class Mpu6050Ada:
             self.poll()
             time.sleep(0.01)
         logger.info("Calibration done.")
+        stdout.flush()
 
     def update(self):
         while self.on:
