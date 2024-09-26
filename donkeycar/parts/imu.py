@@ -116,7 +116,6 @@ class Mpu6050Ada:
         self.mpu.filter_bandwidth = 3
         self.accel_zero = None
         self.gyro_zero = None
-        self.calibrate()
         self.accel = np.zeros(3)
         self.gyro = np.zeros(3)
         self.on = True
