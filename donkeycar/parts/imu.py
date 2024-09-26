@@ -139,27 +139,18 @@ class Mpu6050Ada:
         self.offset = imufusion.Offset(self.sample_rate)
         self.matrix = None
         self.euler = None
+        self.calibrate()
 
     def calibrate(self):
-        num_loops = 100
-        accel = np.zeros(3)
-        gyro = np.zeros(3)
-        for _ in range(num_loops):
-            accel += self.mpu.acceleration
-            gyro += self.mpu.gyro
-            # wait for 25ms
-            time.sleep(0.005)
-        self.accel_zero = accel / num_loops
-        self.gyro_zero = gyro / num_loops
-        logger.info('... Mpu6050 calibrated')
+        while self.ahrs.flags.initialising:
+            self.poll()
+            time.sleep(0.01)
 
     def update(self):
         while self.on:
             self.poll()
 
     def poll(self):
-        # self.accel = self.mpu.acceleration - self.accel_zero
-        # self.gyro = self.mpu.gyro - self.gyro_zero
         new_time = time.time()
         if self.time is None:
             self.time = new_time
@@ -173,24 +164,21 @@ class Mpu6050Ada:
         self.euler = self.ahrs.quaternion.to_euler()
         self.matrix = self.ahrs.quaternion.to_matrix()
 
-
-        # frame_update = np.array(
-        #     [[1, -self.gyro[2] * delta_t, self.gyro[1] * delta_t],
-        #      [self.gyro[2] * delta_t, 1, -self.gyro[0] * delta_t],
-        #      [-self.gyro[1] * delta_t, self.gyro[0] * delta_t,  1]])
-        # self.frame = np.dot(frame_update, self.frame)
         # delta_v = np.dot(self.frame, self.accel) * delta_t
         # self.speed += delta_v
         # self.pos += self.speed * delta_t
         # self.path.append((self.time, *self.pos))
         self.time = new_time
+        if self.ahrs.flags.initialising:
+            return
+        # only record and calculate if not initialising
         self.path.append((new_time,
                           *self.mpu.gyro,
                           *self.mpu.acceleration))
 
     def run(self):
         self.poll()
-        return self.matrix, self.ahrs.flags.initialising
+        return self.matrix
 
     def run_threaded(self):
         return self.accel, self.gyro
@@ -209,9 +197,9 @@ if __name__ == "__main__":
     p = Mpu6050Ada()
     while True:
         try:
-            matrix, init = p.run()
+            matrix = p.run()
             #out_str = f"\rmatrix: " + f",".join(f"{x:+5.3f}" for x in matrix)
-            out_str = f"\rinit = {init} m = {matrix}"
+            out_str = f"\rm = {matrix}"
             stdout.write(out_str)
             stdout.flush()
             time.sleep(0.01)
