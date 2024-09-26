@@ -177,7 +177,7 @@ class Mpu6050Ada:
 
     def run(self):
         self.poll()
-        return self.matrix
+        return self.euler
 
     def run_threaded(self):
         return self.accel, self.gyro
@@ -197,8 +197,8 @@ if __name__ == "__main__":
     while True:
         try:
             matrix = p.run()
-            #out_str = f"\rmatrix: " + f",".join(f"{x:+5.3f}" for x in matrix)
-            out_str = f"\rm = {matrix}"
+            out_str = f"\reuler: " + f",".join(f"{x:+5.3f}" for x in matrix)
+            #out_str = f"\rm = {matrix}"
             stdout.write(out_str)
             stdout.flush()
             time.sleep(0.01)
