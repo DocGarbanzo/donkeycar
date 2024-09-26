@@ -161,7 +161,7 @@ class Mpu6050Ada:
         scaled_gyro = np.array(self.mpu.gyro) * 180 / math.pi
         gyro = self.offset.update(scaled_gyro)
         accel = np.array(self.mpu.acceleration) / 9.81
-        self.ahrs.update_no_magnetometer(gyro, accel, delta_t)
+        self.ahrs.update_no_magnetometer(gyro, accel, 0.01)
 
         self.euler = self.ahrs.quaternion.to_euler()
         self.matrix = self.ahrs.quaternion.to_matrix()
