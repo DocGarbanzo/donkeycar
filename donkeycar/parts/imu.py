@@ -141,9 +141,11 @@ class Mpu6050Ada:
         self.calibrate()
 
     def calibrate(self):
+        logger.info("Calibrating IMU ...")
         while self.ahrs.flags.initialising:
             self.poll()
             time.sleep(0.01)
+        logger.info("Calibration done.")
 
     def update(self):
         while self.on:
