@@ -190,7 +190,7 @@ class Mpu6050Ada:
 
     def run(self):
         self.poll()
-        return self.matrix
+        return self.matrix, self.ahrs.flags.initialising
 
     def run_threaded(self):
         return self.accel, self.gyro
@@ -209,9 +209,9 @@ if __name__ == "__main__":
     p = Mpu6050Ada()
     while True:
         try:
-            matrix = p.run()
+            matrix, init = p.run()
             #out_str = f"\rmatrix: " + f",".join(f"{x:+5.3f}" for x in matrix)
-            out_str = f"\r{matrix}"
+            out_str = f"\rinit = {init} m = {matrix}"
             stdout.write(out_str)
             stdout.flush()
             time.sleep(0.01)
