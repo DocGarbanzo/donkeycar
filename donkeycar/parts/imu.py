@@ -143,10 +143,13 @@ class Mpu6050Ada:
         logger.info('Calibrating Mpu6050 ...')
         num_loops = 100
         gyro = np.zeros(3)
+        accel = np.zeros(3)
         for _ in range(num_loops):
             gyro += self.mpu.gyro
+            accel += self.mpu.acceleration
             time.sleep(0.01)
         self.gyro_zero = gyro / num_loops
+        self.accel_zero = accel / num_loops
         while self.ahrs.flags.initialising:
             self.poll()
             time.sleep(0.01)
@@ -171,7 +174,8 @@ class Mpu6050Ada:
         if not self.ahrs.flags.initialising:
             self.euler = self.ahrs.quaternion.to_euler()
             self.matrix = self.ahrs.quaternion.to_matrix()
-            delta_v = np.dot(self.matrix, accel_phys) * dt
+            lin_accel = accel_phys - self.accel_zero
+            delta_v = np.dot(self.matrix, lin_accel) * dt
             self.speed += delta_v
             self.pos += self.speed * dt
             self.path.append((self.time, *self.pos))
