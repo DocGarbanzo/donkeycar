@@ -138,7 +138,7 @@ class Mpu6050Ada:
         self.offset = imufusion.Offset(self.sample_rate)
         self.matrix = None
         self.euler = None
-        #self.calibrate()
+        self.calibrate()
 
     def calibrate(self):
         logger.info("Calibrating IMU ...")
