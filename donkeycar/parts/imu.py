@@ -159,9 +159,9 @@ class Mpu6050Ada:
         delta_t = new_time - self.time
         # convert from radians to degrees
         scaled_gyro = np.array(self.mpu.gyro) * 180 / math.pi
-        gyro = self.offset.update(scaled_gyro)
+        gyro = scaled_gyro  #self.offset.update(scaled_gyro)
         accel = np.array(self.mpu.acceleration) / 9.81
-        self.ahrs.update_no_magnetometer(gyro, accel, 0.01)
+        self.ahrs.update_no_magnetometer(gyro, accel, delta_t)
 
         self.euler = self.ahrs.quaternion.to_euler()
         self.matrix = self.ahrs.quaternion.to_matrix()
