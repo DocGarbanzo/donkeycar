@@ -111,7 +111,7 @@ class Mpu6050Ada:
         i2c = busio.I2C(board.SCL, board.SDA)
         self.mpu = adafruit_mpu6050.MPU6050(i2c)
         self.mpu.accelerometer_range = adafruit_mpu6050.Range.RANGE_2_G
-        self.mpu.gyro_range = adafruit_mpu6050.GyroRange.RANGE_250_DPS
+        self.mpu.gyro_range = adafruit_mpu6050.GyroRange.RANGE_500_DPS
         # set filter to 44Hz data smoothing
         self.mpu.filter_bandwidth = 3
         self.accel_zero = None
