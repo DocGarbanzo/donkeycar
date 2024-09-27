@@ -146,18 +146,17 @@ class Mpu6050Ada:
         #     time.sleep(0.01)
         # logger.info("Calibration done.")
         # stdout.flush()
-
+        logger.info('Calibrating Mpu6050 ...')
         num_loops = 100
         accel = np.zeros(3)
         gyro = np.zeros(3)
         for _ in range(num_loops):
-            accel += self.mpu.acceleration
             gyro += self.mpu.gyro
             # wait for 25ms
-            time.sleep(0.005)
-        self.accel_zero = accel / num_loops
+            time.sleep(0.01)
+        #self.accel_zero = accel / num_loops
         self.gyro_zero = gyro / num_loops
-        logger.info('... Mpu6050 calibrated')
+        logger.info('Mpu6050 calibrated')
 
     def update(self):
         while self.on:
@@ -186,8 +185,9 @@ class Mpu6050Ada:
         # if self.ahrs.flags.initialising:
         #     return
         # only record and calculate if not initialising
+        gyro = np.array(self.mpu.gyro) - self.gyro_zero
         self.path.append((new_time,
-                          *self.mpu.gyro,
+                          *gyro,
                           *self.mpu.acceleration))
 
     def run(self):
