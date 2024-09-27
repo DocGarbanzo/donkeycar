@@ -123,21 +123,21 @@ class Mpu6050Ada:
         self.speed = np.zeros(3)
         self.time = None
         self.path = [] # [(self.time, *self.pos)]
-        self.sample_rate = 100
-        self.ahrs = imufusion.Ahrs()
-        self.ahrs.settings = imufusion.Settings(
-            # imufusion.CONVENTION_NWU,
-            imufusion.CONVENTION_ENU,
-            0.5,  # gain
-            2000,  # gyroscope range
-            10,  # acceleration rejection
-            10,  # magnetic rejection
-            5 * self.sample_rate,  # recovery trigger period = 5 seconds
-        )
-        self.offset = imufusion.Offset(self.sample_rate)
-        self.matrix = None
-        self.euler = None
-        self.calibrate()
+        # self.sample_rate = 100
+        # self.ahrs = imufusion.Ahrs()
+        # self.ahrs.settings = imufusion.Settings(
+        #     # imufusion.CONVENTION_NWU,
+        #     imufusion.CONVENTION_ENU,
+        #     0.5,  # gain
+        #     2000,  # gyroscope range
+        #     10,  # acceleration rejection
+        #     10,  # magnetic rejection
+        #     5 * self.sample_rate,  # recovery trigger period = 5 seconds
+        # )
+        # self.offset = imufusion.Offset(self.sample_rate)
+        # self.matrix = None
+        # self.euler = None
+        # self.calibrate()
 
     def calibrate(self):
         logger.info("Calibrating IMU ...")
@@ -200,10 +200,10 @@ if __name__ == "__main__":
     while True:
         try:
             matrix = p.run()
-            out_str = f"\reuler: " + f",".join(f"{x:+5.3f}" for x in matrix)
+            #out_str = f"\reuler: " + f",".join(f"{x:+5.3f}" for x in matrix)
             #out_str = f"\rm = {matrix}"
-            stdout.write(out_str)
-            stdout.flush()
+            #stdout.write(out_str)
+            # stdout.flush()
             time.sleep(0.01)
             count += 1
         except KeyboardInterrupt:
