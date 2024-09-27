@@ -123,7 +123,6 @@ class Mpu6050Ada:
         self.speed = np.zeros(3)
         self.time = None
         self.path = [] # [(self.time, *self.pos)]
-        self.frame = np.diag([1, 1, 1])
         self.sample_rate = 100
         self.ahrs = imufusion.Ahrs()
         self.ahrs.settings = imufusion.Settings(
@@ -154,26 +153,26 @@ class Mpu6050Ada:
 
     def poll(self):
         new_time = time.time()
-        if self.time is None:
-            self.time = new_time
-        delta_t = new_time - self.time
-        # convert from radians to degrees
-        scaled_gyro = np.array(self.mpu.gyro) * 180 / math.pi
-        gyro = self.offset.update(scaled_gyro)
-        accel = (np.array(self.mpu.acceleration)
-                 / np.linalg.norm(self.mpu.acceleration)) # 9.81
-        self.ahrs.update_no_magnetometer(gyro, accel, delta_t)
-
-        self.euler = self.ahrs.quaternion.to_euler()
-        self.matrix = self.ahrs.quaternion.to_matrix()
-
-        # delta_v = np.dot(self.frame, self.accel) * delta_t
-        # self.speed += delta_v
-        # self.pos += self.speed * delta_t
-        # self.path.append((self.time, *self.pos))
-        self.time = new_time
-        if self.ahrs.flags.initialising:
-            return
+        # if self.time is None:
+        #     self.time = new_time
+        # delta_t = new_time - self.time
+        # # convert from radians to degrees
+        # scaled_gyro = np.array(self.mpu.gyro) * 180 / math.pi
+        # gyro = self.offset.update(scaled_gyro)
+        # accel = (np.array(self.mpu.acceleration)
+        #          / np.linalg.norm(self.mpu.acceleration)) # 9.81
+        # self.ahrs.update_no_magnetometer(gyro, accel, delta_t)
+        #
+        # self.euler = self.ahrs.quaternion.to_euler()
+        # self.matrix = self.ahrs.quaternion.to_matrix()
+        #
+        # # delta_v = np.dot(self.frame, self.accel) * delta_t
+        # # self.speed += delta_v
+        # # self.pos += self.speed * delta_t
+        # # self.path.append((self.time, *self.pos))
+        # self.time = new_time
+        # if self.ahrs.flags.initialising:
+        #     return
         # only record and calculate if not initialising
         self.path.append((new_time,
                           *self.mpu.gyro,
