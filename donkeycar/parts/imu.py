@@ -161,20 +161,19 @@ class Mpu6050Ada:
         new_time = time.time()
         if self.time is None:
             self.time = new_time
-        delta_t = new_time - self.time
+        dt = new_time - self.time
         gyro = np.array(self.mpu.gyro) - self.gyro_zero
         # convert from radians to degrees
-        scaled_gyro = np.array(gyro) * 180 / math.pi
-        adj_gyro = self.offset.update(scaled_gyro)
-        accel = np.array(self.mpu.acceleration) / 9.81
-        self.ahrs.update_no_magnetometer(adj_gyro, accel, delta_t)
+        gyro_degree = np.array(gyro) * 180 / math.pi
+        adj_gyro = self.offset.update(gyro_degree)
+        accel_phys = np.array(self.mpu.acceleration)
+        self.ahrs.update_no_magnetometer(adj_gyro, accel_phys/9.81, dt)
         if not self.ahrs.flags.initialising:
             self.euler = self.ahrs.quaternion.to_euler()
             self.matrix = self.ahrs.quaternion.to_matrix()
-            accel = self.mpu.acceleration
-            delta_v = np.dot(self.matrix, accel) * delta_t
+            delta_v = np.dot(self.matrix, accel_phys) * dt
             self.speed += delta_v
-            self.pos += self.speed * delta_t
+            self.pos += self.speed * dt
             self.path.append((self.time, *self.pos))
         self.time = new_time
 
