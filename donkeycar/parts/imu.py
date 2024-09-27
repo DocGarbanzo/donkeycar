@@ -123,39 +123,34 @@ class Mpu6050Ada:
         self.speed = np.zeros(3)
         self.time = None
         self.path = [] # [(self.time, *self.pos)]
-        # self.sample_rate = 100
-        # self.ahrs = imufusion.Ahrs()
-        # self.ahrs.settings = imufusion.Settings(
-        #     # imufusion.CONVENTION_NWU,
-        #     imufusion.CONVENTION_ENU,
-        #     0.5,  # gain
-        #     2000,  # gyroscope range
-        #     10,  # acceleration rejection
-        #     10,  # magnetic rejection
-        #     5 * self.sample_rate,  # recovery trigger period = 5 seconds
-        # )
-        # self.offset = imufusion.Offset(self.sample_rate)
-        # self.matrix = None
-        # self.euler = None
+        self.sample_rate = 100
+        self.ahrs = imufusion.Ahrs()
+        self.ahrs.settings = imufusion.Settings(
+            # imufusion.CONVENTION_NWU,
+            imufusion.CONVENTION_ENU,
+            0.5,  # gain
+            2000,  # gyroscope range
+            10,  # acceleration rejection
+            10,  # magnetic rejection
+            5 * self.sample_rate,  # recovery trigger period = 5 seconds
+        )
+        self.offset = imufusion.Offset(self.sample_rate)
+        self.matrix = None
+        self.euler = None
         self.calibrate()
 
     def calibrate(self):
-        # logger.info("Calibrating IMU ...")
-        # while self.ahrs.flags.initialising:
-        #     self.poll()
-        #     time.sleep(0.01)
-        # logger.info("Calibration done.")
-        # stdout.flush()
         logger.info('Calibrating Mpu6050 ...')
         num_loops = 100
-        accel = np.zeros(3)
         gyro = np.zeros(3)
         for _ in range(num_loops):
             gyro += self.mpu.gyro
-            # wait for 25ms
             time.sleep(0.01)
-        #self.accel_zero = accel / num_loops
         self.gyro_zero = gyro / num_loops
+        while self.ahrs.flags.initialising:
+            self.poll()
+            time.sleep(0.01)
+        self.time = time.time()
         logger.info('Mpu6050 calibrated')
 
     def update(self):
@@ -164,31 +159,24 @@ class Mpu6050Ada:
 
     def poll(self):
         new_time = time.time()
-        # if self.time is None:
-        #     self.time = new_time
-        # delta_t = new_time - self.time
-        # # convert from radians to degrees
-        # scaled_gyro = np.array(self.mpu.gyro) * 180 / math.pi
-        # gyro = self.offset.update(scaled_gyro)
-        # accel = (np.array(self.mpu.acceleration)
-        #          / np.linalg.norm(self.mpu.acceleration)) # 9.81
-        # self.ahrs.update_no_magnetometer(gyro, accel, delta_t)
-        #
-        # self.euler = self.ahrs.quaternion.to_euler()
-        # self.matrix = self.ahrs.quaternion.to_matrix()
-        #
-        # # delta_v = np.dot(self.frame, self.accel) * delta_t
-        # # self.speed += delta_v
-        # # self.pos += self.speed * delta_t
-        # # self.path.append((self.time, *self.pos))
-        # self.time = new_time
-        # if self.ahrs.flags.initialising:
-        #     return
-        # only record and calculate if not initialising
+        if self.time is None:
+            self.time = new_time
+        delta_t = new_time - self.time
         gyro = np.array(self.mpu.gyro) - self.gyro_zero
-        self.path.append((new_time,
-                          *gyro,
-                          *self.mpu.acceleration))
+        # convert from radians to degrees
+        scaled_gyro = np.array(gyro) * 180 / math.pi
+        adj_gyro = self.offset.update(scaled_gyro)
+        accel = np.array(self.mpu.acceleration) / 9.81
+        self.ahrs.update_no_magnetometer(adj_gyro, accel, delta_t)
+        if not self.ahrs.flags.initialising:
+            self.euler = self.ahrs.quaternion.to_euler()
+            self.matrix = self.ahrs.quaternion.to_matrix()
+            accel = self.mpu.acceleration
+            delta_v = np.dot(self.matrix, accel) * delta_t
+            self.speed += delta_v
+            self.pos += self.speed * delta_t
+            self.path.append((self.time, *self.pos))
+        self.time = new_time
 
     def run(self):
         self.poll()
@@ -199,8 +187,7 @@ class Mpu6050Ada:
 
     def shutdown(self):
         self.on = False
-        df = pd.DataFrame(columns=['t', 'gx', 'gy', 'gz', 'ax', 'ay', 'az'],
-                          data=self.path)
+        df = pd.DataFrame(columns=['t', 'x', 'y', 'z',], data=self.path)
         df.to_csv('imu.csv', index=False)
 
 
