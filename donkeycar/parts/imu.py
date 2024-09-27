@@ -137,15 +137,27 @@ class Mpu6050Ada:
         # self.offset = imufusion.Offset(self.sample_rate)
         # self.matrix = None
         # self.euler = None
-        # self.calibrate()
+        self.calibrate()
 
     def calibrate(self):
-        logger.info("Calibrating IMU ...")
-        while self.ahrs.flags.initialising:
-            self.poll()
-            time.sleep(0.01)
-        logger.info("Calibration done.")
-        stdout.flush()
+        # logger.info("Calibrating IMU ...")
+        # while self.ahrs.flags.initialising:
+        #     self.poll()
+        #     time.sleep(0.01)
+        # logger.info("Calibration done.")
+        # stdout.flush()
+
+        num_loops = 100
+        accel = np.zeros(3)
+        gyro = np.zeros(3)
+        for _ in range(num_loops):
+            accel += self.mpu.acceleration
+            gyro += self.mpu.gyro
+            # wait for 25ms
+            time.sleep(0.005)
+        self.accel_zero = accel / num_loops
+        self.gyro_zero = gyro / num_loops
+        logger.info('... Mpu6050 calibrated')
 
     def update(self):
         while self.on:
