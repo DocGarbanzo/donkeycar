@@ -9,6 +9,7 @@ import imufusion
 
 import numpy as np
 import pandas as pd
+from tensorflow.python.ops.metrics_impl import precision
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +205,10 @@ if __name__ == "__main__":
         try:
             euler, matrix = p.run()
             #out_str = f"\reuler: " + f",".join(f"{x:+5.3f}" for x in matrix)
-            out_str = f"\rm = {matrix.tolist()}"
+            out_str = f"\rm = " + \
+                np.array2string(matrix, precision=3, separator=',',
+                                sign='+', floatmode='fixed',
+                                suppress_small=True)
             stdout.write(out_str)
             stdout.flush()
             time.sleep(0.01)
