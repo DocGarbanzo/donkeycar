@@ -138,6 +138,7 @@ class Mpu6050Ada:
         self.offset = imufusion.Offset(self.sample_rate)
         self.matrix = None
         self.euler = None
+        self.lin_accel = None
         self.calibrate()
 
     def calibrate(self):
@@ -175,8 +176,8 @@ class Mpu6050Ada:
         if not self.ahrs.flags.initialising:
             self.euler = self.ahrs.quaternion.to_euler()
             self.matrix = self.ahrs.quaternion.to_matrix()
-            lin_accel = accel_phys - self.accel_zero
-            delta_v = np.dot(self.matrix, lin_accel) * dt
+            self.lin_accel = accel_phys - self.accel_zero
+            delta_v = np.dot(self.matrix, self.lin_accel) * dt
             self.speed += delta_v
             self.pos += self.speed * dt
             self.path.append((self.time, *self.pos))
@@ -184,7 +185,7 @@ class Mpu6050Ada:
 
     def run(self):
         self.poll()
-        return self.euler, self.matrix
+        return self.euler, self.matrix, self.lin_accel
 
     def run_threaded(self):
         return self.accel, self.gyro
@@ -201,13 +202,17 @@ if __name__ == "__main__":
     np.set_printoptions(precision=3, sign='+', floatmode='fixed', suppress=True)
     count = 0
     p = Mpu6050Ada()
+    print('\n', '\n')
     while True:
         try:
-            euler, matrix = p.run()
+            euler, matrix, accel = p.run()
             #out_str = f"\reuler: " + f",".join(f"{x:+5.3f}" for x in matrix)
-            out_str = f"\rm = " + \
+            out_str = f"\r\rm = " + \
                 np.array2string(matrix, precision=3, separator=',',
                                 sign='+', floatmode='fixed',
+                                suppress_small=True).replace('\n', '') + '\n' +\
+                np.array2string(accel, precision=3, separator=',',sign='+',
+                                floatmode='fixed',
                                 suppress_small=True).replace('\n', '')
             stdout.write(out_str)
             stdout.flush()
