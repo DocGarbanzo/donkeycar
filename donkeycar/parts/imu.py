@@ -152,6 +152,7 @@ class Mpu6050Ada:
             time.sleep(0.01)
         self.gyro_zero = gyro / num_loops
         self.accel_zero = accel / num_loops
+        logger.info(f'Initial acceleration: {self.accel_zero}')
         while self.ahrs.flags.initialising:
             self.poll()
             time.sleep(0.01)
