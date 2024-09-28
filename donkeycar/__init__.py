@@ -6,7 +6,8 @@ from pkg_resources import get_distribution
 
 __version__ = '5.1.dev1+DocGarbanzo'
 
-logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO').upper())
+log_level = os.environ.get('DONKEY_LOG_LEVEL', 'INFO')
+logging.basicConfig(level=log_level)
 logger = logging.getLogger(__name__)
 
 f = Figlet(font='speed')
@@ -14,6 +15,7 @@ f = Figlet(font='speed')
 
 print(f.renderText('Donkey Car'))
 print(f'using donkey v{__version__} ...')
+print(f'using log level {log_level} ...')
 
 if sys.version_info.major < 3 or sys.version_info.minor < 8:
     msg = f'Donkey Requires Python 3.8 or greater. You are using {sys.version}'
