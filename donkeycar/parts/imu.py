@@ -208,7 +208,7 @@ if __name__ == "__main__":
             out_str = f"\rm = " + \
                 np.array2string(matrix, precision=3, separator=',',
                                 sign='+', floatmode='fixed',
-                                suppress_small=True)
+                                suppress_small=True).replace('\n', '')
             stdout.write(out_str)
             stdout.flush()
             time.sleep(0.01)
