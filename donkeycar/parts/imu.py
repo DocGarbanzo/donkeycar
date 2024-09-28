@@ -150,7 +150,7 @@ class Mpu6050Ada:
         for _ in range(num_loops):
             gyro += self.mpu.gyro
             accel += self.mpu.acceleration
-            self.accel_norm += np.linalg.norm(accel)
+            self.accel_norm += np.linalg.norm(self.mpu.acceleration)
             time.sleep(0.005)
         self.gyro_zero = gyro / num_loops
         self.accel_zero = accel / num_loops
