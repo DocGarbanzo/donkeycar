@@ -124,7 +124,7 @@ class Mpu6050Ada:
         self.speed = np.zeros(3)
         self.time = None
         self.path = [] # [(self.time, *self.pos)]
-        self.sample_rate = 100
+        self.sample_rate = 200
         self.ahrs = imufusion.Ahrs()
         self.ahrs.settings = imufusion.Settings(
             # imufusion.CONVENTION_NWU,
@@ -155,7 +155,7 @@ class Mpu6050Ada:
         logger.info(f'Initial acceleration: {self.accel_zero}')
         while self.ahrs.flags.initialising:
             self.poll()
-            time.sleep(0.01)
+            time.sleep(0.005)
         self.time = time.time()
         logger.info('Mpu6050 calibrated')
 
@@ -222,7 +222,7 @@ if __name__ == "__main__":
                                 suppress_small=True).replace('\n', '')
             stdout.write(out_str)
             stdout.flush()
-            time.sleep(0.01)
+            time.sleep(0.005)
             count += 1
         except KeyboardInterrupt:
             p.shutdown()
