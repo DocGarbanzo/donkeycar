@@ -183,7 +183,7 @@ class Mpu6050Ada:
 
     def run(self):
         self.poll()
-        # return self.euler
+        return self.euler, self.matrix
 
     def run_threaded(self):
         return self.accel, self.gyro
@@ -197,15 +197,16 @@ class Mpu6050Ada:
 if __name__ == "__main__":
     import sys
     from sys import stdout
+    np.set_printoptions(precision=3, sign='+', floatmode='fixed', suppress=True)
     count = 0
     p = Mpu6050Ada()
     while True:
         try:
-            matrix = p.run()
+            euler, matrix = p.run()
             #out_str = f"\reuler: " + f",".join(f"{x:+5.3f}" for x in matrix)
-            #out_str = f"\rm = {matrix}"
-            #stdout.write(out_str)
-            # stdout.flush()
+            out_str = f"\rm = {matrix}"
+            stdout.write(out_str)
+            stdout.flush()
             time.sleep(0.01)
             count += 1
         except KeyboardInterrupt:
