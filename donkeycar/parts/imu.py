@@ -177,8 +177,8 @@ class Mpu6050Ada:
         if not self.ahrs.flags.initialising:
             self.euler = self.ahrs.quaternion.to_euler()
             self.matrix = self.ahrs.quaternion.to_matrix()
-            self.lin_accel = accel_phys - self.accel_zero
-            delta_v = np.dot(self.matrix, self.lin_accel) * dt
+            self.lin_accel = np.dot(self.matrix, accel_phys) - self.accel_zero
+            delta_v = self.lin_accel * dt
             self.speed += delta_v
             self.pos += self.speed * dt
             self.path.append((self.time, *self.pos))
