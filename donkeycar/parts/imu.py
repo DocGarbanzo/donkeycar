@@ -176,7 +176,7 @@ class Mpu6050Ada:
         gyro_degree = np.array(gyro) * 180 / math.pi
         adj_gyro = self.offset.update(gyro_degree)
         accel_phys = np.array(self.mpu.acceleration)
-        self.ahrs.update_no_magnetometer(adj_gyro, accel_phys/self.accel_norm, dt)
+        self.ahrs.update_no_magnetometer(adj_gyro, accel_phys/9.81, dt)
         if not self.ahrs.flags.initialising:
             self.euler = self.ahrs.quaternion.to_euler()
             self.matrix = self.ahrs.quaternion.to_matrix()
@@ -206,7 +206,8 @@ class Mpu6050Ada:
 if __name__ == "__main__":
     import sys
     from sys import stdout
-    np.set_printoptions(precision=3, sign='+', floatmode='fixed', suppress=True)
+    np.set_printoptions(precision=4, sign='+', floatmode='fixed',
+                        separator=',', suppress=True)
     count = 0
     p = Mpu6050Ada()
     print('Go!')
