@@ -197,6 +197,7 @@ class Mpu6050Ada:
         self.on = False
         df = pd.DataFrame(columns=['t', 'x', 'y', 'z',], data=self.path)
         df.to_csv('imu.csv', index=False)
+        logger.info('Mpu6050 shutdown - saved path to imu.csv')
 
 
 if __name__ == "__main__":
