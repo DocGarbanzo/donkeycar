@@ -206,7 +206,7 @@ if __name__ == "__main__":
     np.set_printoptions(precision=3, sign='+', floatmode='fixed', suppress=True)
     count = 0
     p = Mpu6050Ada()
-    print('\n', '\n')
+    print('Go!')
     while True:
         try:
             euler, matrix, accel = p.run()
