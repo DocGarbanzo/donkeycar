@@ -204,7 +204,7 @@ if __name__ == "__main__":
         try:
             euler, matrix = p.run()
             #out_str = f"\reuler: " + f",".join(f"{x:+5.3f}" for x in matrix)
-            out_str = f"\rm = {matrix}"
+            out_str = f"\rm = {matrix.tolist()}"
             stdout.write(out_str)
             stdout.flush()
             time.sleep(0.01)
