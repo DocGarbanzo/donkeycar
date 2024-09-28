@@ -208,9 +208,9 @@ if __name__ == "__main__":
             euler, matrix, accel = p.run()
             #out_str = f"\reuler: " + f",".join(f"{x:+5.3f}" for x in matrix)
             out_str = f"\rm = " + \
-                np.array2string(matrix, precision=3, separator=',',
-                                sign='+', floatmode='fixed',
-                                suppress_small=True).replace('\n', '') +\
+                # np.array2string(matrix, precision=3, separator=',',
+                #                 sign='+', floatmode='fixed',
+                #                 suppress_small=True).replace('\n', '') +\
                 'a = ' + \
                 np.array2string(accel, precision=3, separator=',', sign='+',
                                 floatmode='fixed',
