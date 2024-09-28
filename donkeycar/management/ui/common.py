@@ -2,12 +2,13 @@ import datetime
 import os
 import io
 import time
+import logging
 
 import numpy as np
 from functools import partial
 from PIL import Image as PilImage
 
-from kivy import Logger
+#from kivy import logger
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.window import Window
@@ -25,6 +26,9 @@ from kivy.core.image import Image as CoreImage
 from kivy.uix.widget import Widget
 
 from donkeycar.management.ui.rc_file_handler import rc_handler
+
+logger = logging.getLogger(__name__)
+
 
 LABEL_SPINNER_TEXT = 'Add/remove'
 
@@ -139,7 +143,7 @@ class LabelBar(BoxLayout):
             return
         field, index = decompose(self.field)
         if not field in record.underlying:
-            Logger.error(f'Record: Bad record {record.underlying["_index"]} - '
+            logger.error(f'Record: Bad record {record.underlying["_index"]} - '
                          f'missing field {self.field}')
             return
         val = record.underlying[field]
@@ -236,10 +240,10 @@ class FullImage(Image):
             self.core_image = CoreImage(bytes_io, ext='png')
             self.texture = self.core_image.texture
         except KeyError as e:
-            Logger.error(f'Record {record.underlying["_index"]}: '
+            logger.error(f'Record {record.underlying["_index"]}: '
                          f'Missing key: {e}')
         except Exception as e:
-            Logger.error(f'Record : {record.underlying["_index"]}'
+            logger.error(f'Record : {record.underlying["_index"]}'
                          f'Bad record: {e}')
 
     def get_image(self, record):

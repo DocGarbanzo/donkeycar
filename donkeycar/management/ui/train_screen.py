@@ -4,7 +4,8 @@ from threading import Thread
 import json
 
 import pandas as pd
-from kivy import Logger
+import logging
+
 from kivy.clock import Clock
 from kivy.properties import ObjectProperty, NumericProperty, ListProperty, \
     StringProperty
@@ -13,8 +14,10 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
 from kivy.uix.popup import Popup
 from kivy_garden.matplotlib import FigureCanvasKivyAgg
+logging.getLogger('matplotlib').setLevel(logging.ERROR)
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+
 
 from donkeycar.config import Config
 from donkeycar.management.ui.common import FileChooserBase, get_app_screen, \
@@ -23,6 +26,8 @@ from donkeycar.management.ui.rc_file_handler import rc_handler
 from donkeycar.pipeline.database import PilotDatabase
 from donkeycar.pipeline.training import train
 
+
+logger = logging.getLogger(__name__)
 
 mpl.rcParams.update({'font.size': 8})
 plt.style.use('dark_background')
@@ -144,7 +149,7 @@ class ConfigViewerPopup(Popup):
             s = s.replace("None", "null")
             cfg_list = json.loads(s)
         except Exception as e:
-            Logger.error(f'Failed json read of config: {e}')
+            logger.error(f'Failed json read of config: {e}')
         assert isinstance(cfg_list, list), "De-jsonised config should be list"
         return dict(cfg_list)
 
@@ -177,7 +182,7 @@ class HistoryPlot(FigureCanvasKivyAgg):
         # arrange subplots
         non_val_cols = [c for c in loss_df.columns if c[:4] != 'val_']
         if len(non_val_cols) != n / 2:
-            Logger.Error(f"Issue with history data, validation data history "
+            logger.Error(f"Issue with history data, validation data history "
                          f"is not half of the loss data")
             return
         subplots = [(nv, f'val_{nv}') for nv in non_val_cols]
@@ -217,7 +222,7 @@ class TrainScreen(AppScreen):
                             transfer=transfer_model,
                             comment=self.ids.comment.text)
         except Exception as e:
-            Logger.error(e)
+            logger.error(e)
             status(f'Training failed see console')
 
     def train(self):
@@ -298,7 +303,7 @@ class TrainScreen(AppScreen):
         pilot = self.ids.select_spinner.text
         cfg = self.database.get_entry(pilot).get('Config')
         if not cfg:
-            Logger.Error(f'Config for pilot {pilot} not found in database')
+            logger.Error(f'Config for pilot {pilot} not found in database')
             return
         popup = ConfigViewerPopup(config=cfg, title=f'Config for {pilot}')
         popup.fill_grid()
@@ -308,7 +313,7 @@ class TrainScreen(AppScreen):
         pilot = self.ids.select_spinner.text
         history = self.database.get_entry(pilot).get('History')
         if not history:
-            Logger.Error(f'History for pilot {pilot} not found in database')
+            logger.Error(f'History for pilot {pilot} not found in database')
             return
         df = pd.DataFrame(history)
         popup = HistoryViewerPopup(df=df, title=f'Training history for {pilot}')

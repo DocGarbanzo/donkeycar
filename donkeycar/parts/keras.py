@@ -15,7 +15,7 @@ from collections import deque
 
 import numpy as np
 from typing import Dict, Tuple, Optional, Union, List, Sequence, Callable, Any
-from logging import getLogger
+import logging
 
 from tensorflow.python.data.ops.dataset_ops import DatasetV1, DatasetV2
 
@@ -24,6 +24,7 @@ from donkeycar.utils import normalize_image, linear_bin
 from donkeycar.pipeline.types import TubRecord
 from donkeycar.parts.interpreter import Interpreter, KerasInterpreter
 
+logging.getLogger('tensorflow').setLevel(logging.WARNING)
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras.layers import (Dense, Input,Convolution2D,
@@ -42,7 +43,7 @@ ONE_BYTE_SCALE = 1.0 / 255.0
 XY = Union[float, np.ndarray, Tuple[Union[float, np.ndarray], ...]]
 
 
-logger = getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class KerasPilot(ABC):

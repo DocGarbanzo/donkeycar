@@ -20,6 +20,7 @@ import logging
 from typing import List, Any, Tuple, Union
 from collections import UserString
 
+logging.getLogger('PIL').setLevel(logging.ERROR)
 from PIL import Image
 import numpy as np
 

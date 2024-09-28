@@ -16,6 +16,7 @@ from donkeycar.pipeline.types import TubDataset, TubRecord
 from donkeycar.pipeline.augmentations import ImageAugmentation
 from donkeycar.parts.image_transformations import ImageTransformations
 from donkeycar.utils import get_model_by_type, normalize_image, train_test_split
+logging.getLogger('tensorflow').setLevel(logging.WARNING)
 import tensorflow as tf
 import numpy as np
 

@@ -2,14 +2,17 @@ import os
 import re
 from functools import partial
 from subprocess import Popen, PIPE, STDOUT
+import logging
 
-from kivy import Logger
 from kivy.clock import Clock
 from kivy.properties import NumericProperty, ObjectProperty, StringProperty, \
     ListProperty, BooleanProperty
 
 from donkeycar.management.ui.common import get_app_screen, AppScreen, status
 from donkeycar.management.ui.rc_file_handler import rc_handler
+
+
+logger = logging.getLogger(__name__)
 
 
 class CarScreen(AppScreen):
@@ -55,7 +58,7 @@ class CarScreen(AppScreen):
         if not self.ids.create_dir.active:
             target += '/'
         cmd = ['rsync', '-rv', '--progress', '--partial', target, dest]
-        Logger.info('car pull: ' + str(cmd))
+        logger.info('car pull: ' + str(cmd))
         proc = Popen(cmd, shell=False, stdout=PIPE, text=True,
                      encoding='utf-8', universal_newlines=True)
         repeats = 100
@@ -84,7 +87,7 @@ class CarScreen(AppScreen):
         dest = f'{self.config.PI_USERNAME}@{self.config.PI_HOSTNAME}:' + \
                f'{os.path.join(self.car_dir, "models")}'
         cmd = ['rsync', '-rv', '--progress', '--partial', *filter, src, dest]
-        Logger.info('car push: ' + ' '.join(cmd))
+        logger.info('car push: ' + ' '.join(cmd))
         proc = Popen(cmd, shell=False, stdout=PIPE,
                      encoding='utf-8', universal_newlines=True)
         repeats = 0
@@ -189,7 +192,7 @@ class CarScreen(AppScreen):
                f'{self.config.PI_USERNAME}@{self.config.PI_HOSTNAME}',
                f'source env/bin/activate; cd {self.car_dir}; ./manage.py '
                f'drive {model_args} 2>&1']
-        Logger.info(f'car connect: {cmd}')
+        logger.info(f'car connect: {cmd}')
         proc = Popen(cmd, shell=False, stdout=PIPE, text=True,
                      encoding='utf-8', universal_newlines=True)
         while True:
@@ -201,12 +204,12 @@ class CarScreen(AppScreen):
                 if res:
                     try:
                         self.pid = int(res.group(0).split('PID: ')[1])
-                        Logger.info(f'car connect: manage.py drive PID: '
+                        logger.info(f'car connect: manage.py drive PID: '
                                     f'{self.pid}')
                     except Exception as e:
-                        Logger.error(f'car connect: {e}')
+                        logger.error(f'car connect: {e}')
                     return
-                Logger.info(f'car connect: {stdout_data}')
+                logger.info(f'car connect: {stdout_data}')
             else:
                 return
 
@@ -215,5 +218,5 @@ class CarScreen(AppScreen):
             cmd = f'ssh {self.config.PI_USERNAME}@{self.config.PI_HOSTNAME} '\
                   + f'kill -SIGINT {self.pid}'
             out = os.popen(cmd).read()
-            Logger.info(f"car connect: Kill PID {self.pid} + {out}")
+            logger.info(f"car connect: Kill PID {self.pid} + {out}")
             self.pid = None

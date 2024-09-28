@@ -5,6 +5,7 @@ from collections import deque
 
 import numpy as np
 from typing import Dict, Tuple, Union, List, Callable
+logging.getLogger('tensorflow').setLevel(logging.WARNING)
 import tensorflow as tf
 
 from tensorflow import keras

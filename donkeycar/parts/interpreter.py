@@ -2,8 +2,9 @@ import os
 from abc import ABC, abstractmethod
 import logging
 import numpy as np
-from typing import Union, Sequence, List
+from typing import Union, Sequence
 
+logging.getLogger('tensorflow').setLevel(logging.WARNING)
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.python.saved_model import tag_constants, signature_constants

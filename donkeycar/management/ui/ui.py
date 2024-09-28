@@ -1,5 +1,7 @@
 import os
-from kivy.logger import Logger, LOG_LEVELS
+import logging
+
+#from kivy.logger import Logger, LOG_LEVELS
 from kivy.clock import Clock
 from kivy.app import App
 from kivy.properties import StringProperty
@@ -14,8 +16,8 @@ from donkeycar.management.ui.train_screen import TrainScreen
 from donkeycar.management.ui.tub_screen import TubScreen
 from donkeycar.management.ui.common import AppScreen
 
-Logger.setLevel(LOG_LEVELS["info"])
-
+# Logger.setLevel(LOG_LEVELS["info"])
+logger = logging.getLogger(__name__)
 Window.size = (800, 800)
 
 
@@ -55,7 +57,7 @@ class DonkeyApp(App):
         tub = self.root.ids.tub_screen.ids.tub_loader.tub
         if tub:
             tub.close()
-        Logger.info("App: Good bye Donkey")
+        logger.info("App: Good bye Donkey")
 
 
 def main():

@@ -4,15 +4,15 @@ import numpy as np
 import plotly.express as px
 import pandas as pd
 
-
-from kivy import Logger
 from kivy.uix.boxlayout import BoxLayout
 from kivy.properties import NumericProperty, ObjectProperty, StringProperty, \
     ListProperty, BooleanProperty
 from kivy_garden.matplotlib.backend_kivyagg import FigureCanvasKivyAgg
+
+import logging
+logging.getLogger('matplotlib').setLevel(logging.ERROR)
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-
 
 from donkeycar import load_config
 from donkeycar.management.ui.common import FileChooserBase, \
@@ -22,6 +22,8 @@ from donkeycar.management.ui.rc_file_handler import rc_handler
 from donkeycar.parts.tub_v2 import Tub
 from donkeycar.pipeline.types import TubRecord
 
+
+logger = logging.getLogger(__name__)
 
 mpl.rcParams.update({'font.size': 8})
 plt.style.use('dark_background')
@@ -47,11 +49,11 @@ class ConfigManager(BackgroundBoxLayout, FileChooserBase):
             # If load successful, store into app config
             rc_handler.data['car_dir'] = self.file_path
         except FileNotFoundError:
-            Logger.error(f'Config: Directory {self.file_path} has no '
+            logger.error(f'Config: Directory {self.file_path} has no '
                          f'config.py')
             self.config = None
         except Exception as e:
-            Logger.error(f'Config: {e}')
+            logger.error(f'Config: {e}')
             self.config = None
 
     def on_config(self, obj, cfg):
@@ -118,7 +120,7 @@ class TubLoader(BackgroundBoxLayout, FileChooserBase):
                     res = train_filter(record)
                     return res
                 except KeyError as err:
-                    Logger.error(f'Filter: {err}')
+                    logger.error(f'Filter: {err}')
                     return True
 
         self.records = [TubRecord(cfg, self.tub.base_path, record)

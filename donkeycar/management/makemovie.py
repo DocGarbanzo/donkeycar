@@ -1,12 +1,13 @@
 import tempfile
+import logging
 
+logging.getLogger('tensorflow').setLevel(logging.WARNING)
+import tensorflow as tf
 from tensorflow.python.keras import activations
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.models import load_model
-import tensorflow as tf
-import cv2
 from matplotlib import cm
-
+import cv2
 
 import donkeycar as dk
 from donkeycar.parts.tub_v2 import Tub

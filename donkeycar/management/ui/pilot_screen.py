@@ -1,7 +1,8 @@
 from copy import copy #, deepcopy
 import os
+import logging
 
-from kivy import Logger
+#from kivy import logger
 from kivy.properties import StringProperty, ObjectProperty, ListProperty, \
     NumericProperty, BooleanProperty
 from kivy.uix.boxlayout import BoxLayout
@@ -17,6 +18,8 @@ from donkeycar.parts.image_transformations import ImageTransformations
 from donkeycar.pipeline.augmentations import ImageAugmentation
 from donkeycar.utils import get_model_by_type
 from donkeycar.parts.keras_2 import KerasSquarePlusImu, KerasSquarePlusMemoryLap
+
+logger = logging.getLogger(__name__)
 
 
 ALL_FILTERS = ['*.h5', '*.tflite', '*.savedmodel', '*.trt']
@@ -43,12 +46,12 @@ class PilotLoader(BoxLayout, FileChooserBase):
                 # if successfully loaded, add to rc file
                 if entry not in rc_handler.data['pilots']:
                     rc_handler.data['pilots'].append(entry)
-                Logger.info(f'Pilot: Successfully loaded {self.file_path}')
+                logger.info(f'Pilot: Successfully loaded {self.file_path}')
             except FileNotFoundError:
-                Logger.error(f'Pilot: Model {self.file_path} not found')
+                logger.error(f'Pilot: Model {self.file_path} not found')
                 remove_pilot_from_db(entry)
             except Exception as e:
-                Logger.error(f'Failed loading {self.file_path}: {e}')
+                logger.error(f'Failed loading {self.file_path}: {e}')
                 remove_pilot_from_db(entry)
 
     def on_model_type(self, obj, model_type):
@@ -131,7 +134,7 @@ class OverlayImage(FullImage):
             # Not each model is supported in each interpreter
             output = self.pilot_loader.pilot.run(*args)
         except Exception as e:
-            Logger.error(e)
+            logger.error(e)
 
         rgb = (0, 0, 255)
         MakeMovie.draw_line_into_image(output[0], output[1], True, img_arr, rgb)
@@ -196,7 +199,7 @@ class Transformations(RoundedButton):
         popup.open()
 
     def on_selected(self, obj, select):
-        Logger.info(f"Selected {select}")
+        logger.info(f"Selected {select}")
         if self.is_post:
             self.pilot_screen.post_trans_list = self.selected
         else:
@@ -292,7 +295,7 @@ class PilotScreen(AppScreen):
             for c in self.ids.pilot_board.children:
                 c.ids.pilot_loader.root_path = self.config.MODELS_PATH
         except Exception as e:
-            Logger.error(f'Error at config update in train screen: {e}')
+            logger.error(f'Error at config update in train screen: {e}')
 
     def initialise(self, e):
         # self.ids.pilot_board.add_viewer()
