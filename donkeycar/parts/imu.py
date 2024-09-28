@@ -207,7 +207,7 @@ if __name__ == "__main__":
     import sys
     from sys import stdout
     np.set_printoptions(precision=4, sign='+', floatmode='fixed',
-                        separator=',', suppress=True)
+                        suppress=True)
     count = 0
     p = Mpu6050Ada()
     print('Go!')
