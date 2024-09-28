@@ -150,11 +150,10 @@ class Mpu6050Ada:
         for _ in range(num_loops):
             gyro += self.mpu.gyro
             accel += self.mpu.acceleration
-            self.accel_norm += np.linalg.norm(self.mpu.acceleration)
             time.sleep(0.005)
         self.gyro_zero = gyro / num_loops
         self.accel_zero = accel / num_loops
-        self.accel_norm /= num_loops
+        self.accel_norm = np.linalg.norm(self.accel_zero)
         logger.info(f'Initial acceleration: {self.accel_zero}, '
                     f'norm: {self.accel_norm}')
         while self.ahrs.flags.initialising:
