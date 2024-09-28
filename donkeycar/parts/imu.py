@@ -139,6 +139,7 @@ class Mpu6050Ada:
         self.matrix = None
         self.euler = None
         self.lin_accel = None
+        self.accel_norm = 0
         self.calibrate()
 
     def calibrate(self):
@@ -149,10 +150,13 @@ class Mpu6050Ada:
         for _ in range(num_loops):
             gyro += self.mpu.gyro
             accel += self.mpu.acceleration
+            self.accel_norm += np.linalg.norm(accel)
             time.sleep(0.005)
         self.gyro_zero = gyro / num_loops
         self.accel_zero = accel / num_loops
-        logger.info(f'Initial acceleration: {self.accel_zero}')
+        self.accel_norm /= num_loops
+        logger.info(f'Initial acceleration: {self.accel_zero}, '
+                    f'norm: {self.accel_norm}')
         while self.ahrs.flags.initialising:
             self.poll()
             time.sleep(0.01)
@@ -173,7 +177,7 @@ class Mpu6050Ada:
         gyro_degree = np.array(gyro) * 180 / math.pi
         adj_gyro = self.offset.update(gyro_degree)
         accel_phys = np.array(self.mpu.acceleration)
-        self.ahrs.update_no_magnetometer(adj_gyro, accel_phys/9.81, dt)
+        self.ahrs.update_no_magnetometer(adj_gyro, accel_phys/self.accel_norm, dt)
         if not self.ahrs.flags.initialising:
             self.euler = self.ahrs.quaternion.to_euler()
             self.matrix = self.ahrs.quaternion.to_matrix()
