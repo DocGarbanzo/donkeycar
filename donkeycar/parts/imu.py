@@ -152,7 +152,6 @@ class Mpu6050Ada:
             gyro += self.mpu.gyro
             accel += self.mpu.acceleration
             time.sleep(0.005)
-        logger.info('Determined resting gyro drift...')
         self.gyro_zero = gyro / num_loops
         self.accel_zero = accel / num_loops
         self.accel_norm = np.linalg.norm(self.accel_zero)
@@ -175,7 +174,8 @@ class Mpu6050Ada:
         self.pos = np.zeros(3)
         self.path.clear()
         self.time = now
-        logger.info('Determined speed drift. - Mpu6050 calibrated')
+        logger.info(f'Determined speed drift {self.speed_drift}.  - Mpu6050 '
+                    f'calibrated')
 
     def update(self):
         while self.on:
