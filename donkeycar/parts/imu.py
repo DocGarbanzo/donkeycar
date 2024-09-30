@@ -200,7 +200,7 @@ class Mpu6050Ada:
             # self.lin_accel = np.dot(self.matrix, accel_phys)
             # # remove gravity from world coordinate z-axis
             # self.lin_accel[2] -= self.accel_zero[2]
-            self.lin_accel = self.accel_norm * self.ahrs.linear_acceleration
+            self.lin_accel = self.accel_norm * self.ahrs.earth_acceleration
             delta_v = self.lin_accel * dt
             self.speed += delta_v
             self.pos += (self.speed - self.speed_drift) * dt
