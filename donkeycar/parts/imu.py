@@ -122,6 +122,7 @@ class Mpu6050Ada:
         self.on = True
         self.pos = np.zeros(3)
         self.speed = np.zeros(3)
+        self.speed_drift = np.zeros(3)
         self.time = None
         self.path = [] # [(self.time, *self.pos)]
         self.sample_rate = 100
@@ -144,13 +145,14 @@ class Mpu6050Ada:
 
     def calibrate(self):
         logger.info('Calibrating Mpu6050 ...')
-        num_loops = 400
+        num_loops = 200
         gyro = np.zeros(3)
         accel = np.zeros(3)
         for _ in range(num_loops):
             gyro += self.mpu.gyro
             accel += self.mpu.acceleration
             time.sleep(0.005)
+        logger.info('Determined resting gyro drift...')
         self.gyro_zero = gyro / num_loops
         self.accel_zero = accel / num_loops
         self.accel_norm = np.linalg.norm(self.accel_zero)
@@ -160,7 +162,20 @@ class Mpu6050Ada:
             self.poll()
             time.sleep(0.01)
         self.time = time.time()
-        logger.info('Mpu6050 calibrated')
+        logger.info('Calibrated the Imu algorithm...')
+        # after calibration of gyro and accel, we can start the ahrs measure
+        # speed drift
+        for _ in range(100):
+            self.poll()
+            time.sleep(0.01)
+        now = time.time()
+        self.speed_drift = self.speed / (now - self.time)
+        # reset internal parameters
+        self.speed = np.zeros(3)
+        self.pos = np.zeros(3)
+        self.path.clear()
+        self.time = now
+        logger.info('Determined speed drift. - Mpu6050 calibrated')
 
     def update(self):
         while self.on:
@@ -186,7 +201,7 @@ class Mpu6050Ada:
             self.lin_accel = 9.81 * self.ahrs.earth_acceleration
             delta_v = self.lin_accel * dt
             self.speed += delta_v
-            self.pos += self.speed * dt
+            self.pos += (self.speed - self.speed_drift) * dt
             self.path.append((self.time, *self.pos))
         self.time = new_time
 
