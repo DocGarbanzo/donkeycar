@@ -168,7 +168,7 @@ class Mpu6050Ada:
         # speed drift
         for _ in range(100):
             self.poll()
-            time.sleep(0.01)
+            time.sleep(0.006)
         now = time.time()
         self.speed_drift = 0 # self.speed / (now - self.time)
         # reset internal parameters
