@@ -204,7 +204,7 @@ class Mpu6050Ada:
             accel_ignore = self.ahrs.internal_states.accelerometer_ignored
             if not accel_ignore:
                 delta_v = self.lin_accel * dt
-                self.speed += delta_v
+                self.speed += 0.5 * delta_v
             self.pos += (self.speed - self.speed_drift) * dt
             self.path.append((self.time, *self.pos, np.linalg.norm(self.speed)))
         self.time = new_time
