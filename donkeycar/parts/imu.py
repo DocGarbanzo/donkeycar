@@ -170,7 +170,7 @@ class Mpu6050Ada:
             self.poll()
             time.sleep(0.006)
         now = time.time()
-        self.speed_drift = 0 # self.speed / (now - self.time)
+        self.speed_drift = self.speed / (now - self.time) / 9.81
         # reset internal parameters
         self.speed = np.zeros(3)
         self.pos = np.zeros(3)
@@ -204,7 +204,7 @@ class Mpu6050Ada:
             accel_ignore = self.ahrs.internal_states.accelerometer_ignored
             if not accel_ignore:
                 delta_v = self.lin_accel * dt
-                self.speed += 0.5 * delta_v
+                self.speed += delta_v
             self.pos += (self.speed - self.speed_drift) * dt
             self.path.append((self.time, *self.pos, np.linalg.norm(self.speed)))
         self.time = new_time
