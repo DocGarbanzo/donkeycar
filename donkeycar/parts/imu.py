@@ -206,7 +206,7 @@ class Mpu6050Ada:
                 delta_v = self.lin_accel * dt
                 self.speed += delta_v
             self.pos += (self.speed - self.speed_drift) * dt
-            self.path.append((self.time, *self.pos))
+            self.path.append((self.time, *self.pos, np.linalg.norm(self.speed)))
         self.time = new_time
 
     def run(self):
@@ -218,7 +218,7 @@ class Mpu6050Ada:
 
     def shutdown(self):
         self.on = False
-        df = pd.DataFrame(columns=['t', 'x', 'y', 'z',], data=self.path)
+        df = pd.DataFrame(columns=['t', 'x', 'y', 'z', 'v'], data=self.path)
         df.to_csv('imu.csv', index=False)
         logger.info('Mpu6050 shutdown - saved path to imu.csv')
 
