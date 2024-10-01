@@ -170,7 +170,7 @@ class Mpu6050Ada:
             self.poll()
             time.sleep(0.006)
         now = time.time()
-        self.speed_drift = self.speed / (now - self.time) / 9.81
+        self.speed_drift = self.pos / (now - self.time)
         # reset internal parameters
         self.speed = np.zeros(3)
         self.pos = np.zeros(3)
@@ -246,7 +246,7 @@ if __name__ == "__main__":
                                 suppress_small=True).replace('\n', '')
             stdout.write(out_str)
             stdout.flush()
-            time.sleep(0.01)
+            time.sleep(0.006)
             count += 1
         except KeyboardInterrupt:
             p.shutdown()
