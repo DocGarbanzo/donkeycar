@@ -170,7 +170,7 @@ class Mpu6050Ada:
             self.poll()
             time.sleep(0.006)
         now = time.time()
-        self.speed_drift = self.speed / (now - self.time)
+        self.speed_drift = 0 # self.speed / (now - self.time)
         # reset internal parameters
         self.speed = np.zeros(3)
         self.pos = np.zeros(3)
