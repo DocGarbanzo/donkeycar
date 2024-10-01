@@ -193,16 +193,18 @@ class Mpu6050Ada:
         gyro_degree = np.array(gyro) * 180 / math.pi
         adj_gyro = self.offset.update(gyro_degree)
         accel_phys = np.array(self.mpu.acceleration)
-        self.ahrs.update_no_magnetometer(adj_gyro, accel_phys/self.accel_norm, dt)
+        self.ahrs.update_no_magnetometer(adj_gyro, accel_phys/9.81, dt)
         if not self.ahrs.flags.initialising:
             self.euler = self.ahrs.quaternion.to_euler()
             self.matrix = self.ahrs.quaternion.to_matrix()
             # self.lin_accel = np.dot(self.matrix, accel_phys)
             # # remove gravity from world coordinate z-axis
             # self.lin_accel[2] -= self.accel_zero[2]
-            self.lin_accel = self.accel_norm * self.ahrs.linear_acceleration
-            delta_v = self.lin_accel * dt
-            self.speed += delta_v
+            self.lin_accel = 9.81 * self.ahrs.earth_acceleration
+            accel_ignore = self.ahrs.internal_states.accelerometer_ignored
+            if not accel_ignore:
+                delta_v = self.lin_accel * dt
+                self.speed += delta_v
             self.pos += (self.speed - self.speed_drift) * dt
             self.path.append((self.time, *self.pos))
         self.time = new_time
