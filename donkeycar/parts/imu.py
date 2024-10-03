@@ -161,7 +161,7 @@ class Mpu6050Ada:
                     f'norm: {self.accel_norm}')
         while self.ahrs.flags.initialising:
             self.poll()
-            time.sleep(0.01)
+            time.sleep(0.006)
         self.time = time.time()
         logger.info('Calibrated the Imu algorithm...')
         # after calibration of gyro and accel, we can start the ahrs measure
