@@ -236,6 +236,7 @@ if __name__ == "__main__":
     ax = plt.axes(xlim=(-5, 5), ylim=(-5, 5))
     line, = ax.plot([], [], lw=2)
     print('Go!')
+    tic = time.time()
     while True:
         try:
             euler, matrix, accel = p.run()
@@ -262,6 +263,7 @@ if __name__ == "__main__":
             p.shutdown()
             stdout.write("\n")
             break
+    print(f'Effective sampling time: {(time.time() - tic) * 1000/count:.2f} ms')
     sys.exit(0)
 
     iter = 0
