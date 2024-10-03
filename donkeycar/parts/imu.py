@@ -149,11 +149,19 @@ class Mpu6050Ada:
         gyro = np.zeros(3)
         accel = np.zeros(3)
         accel_norm = 0
+        # run w/o doing anything:
+        for _ in range(num_loops//2):
+            tmp = self.mpu.gyro
+            tmp = self.mpu.acceleration
+        tic = time.time()
         for _ in range(num_loops):
             gyro += self.mpu.gyro
             accel += self.mpu.acceleration
             accel_norm += np.linalg.norm(self.mpu.acceleration)
-            time.sleep(0.005)
+            toc = time.time()
+            if toc - tic < 1 / self.sample_rate:
+                time.sleep(1 / self.sample_rate - (toc - tic))
+            tic = time.time()
         self.gyro_zero = gyro / num_loops
         self.accel_zero = accel / num_loops
         self.accel_norm = accel_norm / num_loops
@@ -161,21 +169,27 @@ class Mpu6050Ada:
                     f'norm: {self.accel_norm}')
         while self.ahrs.flags.initialising:
             self.poll()
-            time.sleep(0.006)
+            toc = time.time()
+            if toc - tic < 1 / self.sample_rate:
+                time.sleep(1 / self.sample_rate - (toc - tic))
+            tic = time.time()
         self.time = time.time()
         logger.info('Calibrated the Imu algorithm...')
         # after calibration of gyro and accel, we can start the ahrs measure
         # speed drift
+        tic = self.time
         for _ in range(100):
             self.poll()
-            time.sleep(0.006)
-        now = time.time()
+            toc = time.time()
+            if toc - tic < 1 / self.sample_rate:
+                time.sleep(1 / self.sample_rate - (toc - tic))
+            tic = time.time()
         # self.speed_drift = self.pos / (now - self.time)
         # reset internal parameters
         self.speed = np.zeros(3)
         self.pos = np.zeros(3)
         self.path.clear()
-        self.time = now
+        self.time = tic
         logger.info(f'Determined speed drift {self.speed_drift}.  - Mpu6050 '
                     f'calibrated')
 
@@ -257,7 +271,10 @@ if __name__ == "__main__":
             line.set_ydata(npp[:,2])
             fig.canvas.draw()
             fig.canvas.flush_events()
-            time.sleep(0.006)
+            toc = time.time()
+            if toc - tic < 1 / p.sample_rate:
+                time.sleep(1 / p.sample_rate - (toc - tic))
+            tic = time.time()
             count += 1
         except KeyboardInterrupt:
             p.shutdown()
