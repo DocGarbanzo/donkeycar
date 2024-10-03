@@ -226,10 +226,15 @@ class Mpu6050Ada:
 if __name__ == "__main__":
     import sys
     from sys import stdout
+    import matplotlib.pyplot as plt
     np.set_printoptions(precision=4, sign='+', floatmode='fixed',
                         suppress=True)
     count = 0
     p = Mpu6050Ada()
+    plt.ion()
+    fig = plt.figure()
+    ax = plt.axes(xlim=(-5, 5), ylim=(-5, 5))
+    line, = ax.plot([], [], lw=2)
     print('Go!')
     while True:
         try:
@@ -240,12 +245,16 @@ if __name__ == "__main__":
                                 sign='+', floatmode='fixed',
                                 suppress_small=True).replace('\n', '')
             out_str += \
-                'a = ' + \
+                ' a = ' + \
                 np.array2string(accel, precision=2, separator=',', sign='+',
                                 floatmode='fixed',
                                 suppress_small=True).replace('\n', '')
             stdout.write(out_str)
             stdout.flush()
+            line.set_xdata(p.path[:,1])
+            line.set_ydata(p.path[:,2])
+            fig.canvas.draw()
+            fig.canvas.flush_events()
             time.sleep(0.006)
             count += 1
         except KeyboardInterrupt:
