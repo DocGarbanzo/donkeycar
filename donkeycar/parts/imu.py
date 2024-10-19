@@ -178,18 +178,18 @@ class Mpu6050Ada:
         # speed drift
         self.pos = np.zeros(3)
         self.speed = np.zeros(3)
-        tic = self.time
-        start_time = tic
-        for _ in range(num_loops):
-            self.poll()
-            toc = time.time()
-            if toc - tic < 1 / self.sample_rate:
-                time.sleep(1 / self.sample_rate - (toc - tic))
-            tic = time.time()
-        self.speed_drift = self.pos / (toc - start_time)
-        # reset internal parameters
-        self.speed = np.zeros(3)
-        self.pos = np.zeros(3)
+        # tic = self.time
+        # start_time = tic
+        # for _ in range(num_loops):
+        #     self.poll()
+        #     toc = time.time()
+        #     if toc - tic < 1 / self.sample_rate:
+        #         time.sleep(1 / self.sample_rate - (toc - tic))
+        #     tic = time.time()
+        # self.speed_drift = self.pos / (toc - start_time)
+        # # reset internal parameters
+        # self.speed = np.zeros(3)
+        # self.pos = np.zeros(3)
         self.path.clear()
         self.time = tic
         logger.info(f'Determined speed drift {self.speed_drift}.  - Mpu6050 '
