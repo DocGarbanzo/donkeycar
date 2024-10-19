@@ -185,7 +185,7 @@ class Mpu6050Ada:
             if toc - tic < 1 / self.sample_rate:
                 time.sleep(1 / self.sample_rate - (toc - tic))
             tic = time.time()
-        self.speed_drift = self.pos / (toc - tic)
+        self.speed_drift = self.pos / (toc - self.time)
         # reset internal parameters
         self.speed = np.zeros(3)
         self.pos = np.zeros(3)
