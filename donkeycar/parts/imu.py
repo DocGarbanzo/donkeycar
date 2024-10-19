@@ -178,7 +178,7 @@ class Mpu6050Ada:
         # speed drift
         self.pos = np.zeros(3)
         tic = self.time
-        for _ in range(100):
+        for _ in range(num_loops):
             self.poll()
             toc = time.time()
             if toc - tic < 1 / self.sample_rate:
