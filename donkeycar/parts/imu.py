@@ -219,7 +219,7 @@ class Mpu6050Ada:
             accel_ignore = self.ahrs.internal_states.accelerometer_ignored
             if not accel_ignore:
                 self.lin_accel = 9.81 * self.ahrs.earth_acceleration
-                if np.linalg.norm(self.lin_accel) > 0.1:
+                if np.linalg.norm(self.lin_accel) > 0.05:
                     delta_v = self.lin_accel * dt
                     self.speed += delta_v
             self.pos += (self.speed - self.speed_drift) * dt
