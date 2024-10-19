@@ -320,6 +320,7 @@ if __name__ == "__main__":
             stdout.write(out_str)
             stdout.flush()
             pos = mpu.pos[:2]
+            pp.append(pos)
             toc = time.time()
             if toc - tic < 1 / mpu.sample_rate:
                 time.sleep(1 / mpu.sample_rate - (toc - tic))
