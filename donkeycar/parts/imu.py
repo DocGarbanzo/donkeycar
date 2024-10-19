@@ -177,6 +177,7 @@ class Mpu6050Ada:
         # after calibration of gyro and accel, we can start the ahrs measure
         # speed drift
         self.pos = np.zeros(3)
+        self.speed = np.zeros(3)
         tic = self.time
         for _ in range(num_loops):
             self.poll()
