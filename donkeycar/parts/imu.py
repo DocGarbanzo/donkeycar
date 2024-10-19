@@ -200,7 +200,7 @@ class Mpu6050Ada:
             self.poll()
 
     def poll(self):
-        alpha = 0.05
+        alpha = 1.0
         new_time = time.time()
         if self.time is None:
             self.time = new_time
@@ -211,7 +211,7 @@ class Mpu6050Ada:
         adj_gyro = self.offset.update(gyro_degree)
         self.accel = ((1-alpha) * self.accel
                       + alpha * np.array(self.mpu.acceleration))
-        self.ahrs.update_no_magnetometer(adj_gyro, self.accel/9.81, dt)
+        self.ahrs.update_no_magnetometer(adj_gyro, self.accel/self.accel_norm, dt)
         if not self.ahrs.flags.initialising:
             self.euler = self.ahrs.quaternion.to_euler()
             self.matrix = self.ahrs.quaternion.to_matrix()
@@ -220,7 +220,7 @@ class Mpu6050Ada:
             # self.lin_accel[2] -= self.accel_zero[2]
             accel_ignore = self.ahrs.internal_states.accelerometer_ignored
             if not accel_ignore:
-                self.lin_accel = 9.81 * self.ahrs.earth_acceleration
+                self.lin_accel = self.accel_norm * self.ahrs.earth_acceleration
                 delta_v = self.lin_accel * dt
                 self.speed += delta_v
             self.pos += (self.speed - self.speed_drift) * dt
