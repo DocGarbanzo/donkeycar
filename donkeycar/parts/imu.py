@@ -200,6 +200,7 @@ class Mpu6050Ada:
             self.poll()
 
     def poll(self):
+        alpha = 0.5
         new_time = time.time()
         if self.time is None:
             self.time = new_time
@@ -208,8 +209,9 @@ class Mpu6050Ada:
         # convert from radians to degrees
         gyro_degree = np.array(gyro) * 180 / math.pi
         adj_gyro = self.offset.update(gyro_degree)
-        accel_phys = np.array(self.mpu.acceleration)
-        self.ahrs.update_no_magnetometer(adj_gyro, accel_phys/9.81, dt)
+        self.accel = ((1-alpha) * self.accel
+                      + alpha * np.array(self.mpu.acceleration))
+        self.ahrs.update_no_magnetometer(adj_gyro, self.accel/9.81, dt)
         if not self.ahrs.flags.initialising:
             self.euler = self.ahrs.quaternion.to_euler()
             self.matrix = self.ahrs.quaternion.to_matrix()
@@ -230,7 +232,7 @@ class Mpu6050Ada:
         return self.euler, self.matrix, self.lin_accel
 
     def run_threaded(self):
-        return self.accel, self.gyro
+        return self.euler, self.matrix, self.lin_accel
 
     def shutdown(self):
         self.on = False
