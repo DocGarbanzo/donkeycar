@@ -7,9 +7,8 @@ import adafruit_mpu6050
 import logging
 import imufusion
 
-import numpy as np
 import pandas as pd
-from tensorflow.python.ops.metrics_impl import precision
+
 
 logger = logging.getLogger(__name__)
 
@@ -237,24 +236,77 @@ class Mpu6050Ada:
         logger.info('Mpu6050 shutdown - saved path to imu.csv')
 
 
+import multiprocessing
+from multiprocessing import Process, Value
+import matplotlib.pyplot as plt
+import time
+import numpy as np
+
+
+def plot(mlist, limit=5, update_freq=0, running=Value('i', 1)):
+    plt.style.use('dark_background')
+    plt.ion()
+    fig = plt.figure()
+    ax = plt.axes(xlim=(-limit, limit), ylim=(-limit, limit))
+    line, = ax.plot([], [], lw=2)
+    fig.canvas.draw()
+    tic = time.time()
+    count = 0
+    while running.value == 1:
+        np_path = np.array(mlist)
+        line.set_xdata(np_path[:, 1])
+        line.set_ydata(np_path[:, 2])
+        fig.canvas.draw()
+        fig.canvas.flush_events()
+        toc = time.time()
+        dtime = toc - tic
+        if update_freq and dtime < 1.0 / update_freq:
+            time.sleep(1.0 / update_freq - dtime)
+        tic = toc
+        count += 1
+    print(f"Ran plot job for {count} iterations")
+
+
+class PathPlotter:
+    def __init__(self, update_freq=0, limit=5):
+        self.manager = multiprocessing.Manager()
+        self.mlist = self.manager.list()
+        self.update_freq = update_freq
+        self.plot_proc = None
+        self.running = Value('i', 1)
+        self.limit = limit
+
+    def start(self):
+        self.plot_proc = Process(
+            target=plot, args=(self.mlist, self.limit,
+                               self.update_freq, self.running))
+        self.plot_proc.start()
+
+    def stop(self):
+        self.running.value = 0
+        self.plot_proc.join()
+
+    def append(self, x):
+        if len(x) != 2:
+            raise ValueError("Input must be a 2-sequence")
+        self.mlist.append((time.time(), *x))
+
+
 if __name__ == "__main__":
     import sys
     from sys import stdout
-    import matplotlib.pyplot as plt
     np.set_printoptions(precision=4, sign='+', floatmode='fixed',
                         suppress=True)
     count = 0
-    p = Mpu6050Ada()
-    plt.ion()
-    fig = plt.figure()
-    ax = plt.axes(xlim=(-5, 5), ylim=(-5, 5))
-    line, = ax.plot([], [], lw=2)
+    mpu = Mpu6050Ada()
+    pp = PathPlotter(update_freq=20, limit=2)
+    pp.start()
     print('Go!')
     start = time.time()
     tic = start
     while True:
         try:
-            euler, matrix, accel = p.run()
+            euler, matrix, accel = mpu.run()
             #out_str = f"\reuler: " + f",".join(f"{x:+5.3f}" for x in matrix)
             out_str = f"\rm = " + \
                 np.array2string(matrix, precision=2, separator=',',
@@ -267,22 +319,20 @@ if __name__ == "__main__":
                                 suppress_small=True).replace('\n', '')
             stdout.write(out_str)
             stdout.flush()
-            npp = np.array(p.path)
-            line.set_xdata(npp[:,1])
-            line.set_ydata(npp[:,2])
-            fig.canvas.draw()
-            fig.canvas.flush_events()
+            pos = mpu.pos[:2]
             toc = time.time()
-            if toc - tic < 1 / p.sample_rate:
-                time.sleep(1 / p.sample_rate - (toc - tic))
+            if toc - tic < 1 / mpu.sample_rate:
+                time.sleep(1 / mpu.sample_rate - (toc - tic))
             tic = time.time()
             count += 1
         except KeyboardInterrupt:
-            p.shutdown()
+            mpu.shutdown()
             stdout.write("\n")
             break
     print(f'Effective sampling time: {(time.time() - start) * 1000/count:.2f} '
           f'ms')
+    inp = input("Press enter to stop plotting")
+    pp.stop()
     sys.exit(0)
 
     iter = 0
@@ -294,9 +344,9 @@ if __name__ == "__main__":
     if len(sys.argv) > 2:
         dlp_setting = int(sys.argv[2])
 
-    p = IMU(sensor=sensor_type)
+    mpu = IMU(sensor=sensor_type)
     while iter < 100:
-        data = p.run()
+        data = mpu.run()
         print(data)
         time.sleep(0.1)
         iter += 1
