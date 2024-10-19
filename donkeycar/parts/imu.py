@@ -144,7 +144,7 @@ class Mpu6050Ada:
 
     def calibrate(self):
         logger.info('Calibrating Mpu6050 ...')
-        num_loops = 400
+        num_loops = 800
         gyro = np.zeros(3)
         accel = np.zeros(3)
         accel_norm = 0
@@ -153,7 +153,7 @@ class Mpu6050Ada:
         #     tmp = self.mpu.gyro
         #     tmp = self.mpu.acceleration
         tic = time.time()
-        for _ in range(2 * num_loops):
+        for _ in range(num_loops):
             gyro += self.mpu.gyro
             accel += self.mpu.acceleration
             accel_norm += np.linalg.norm(self.mpu.acceleration)
