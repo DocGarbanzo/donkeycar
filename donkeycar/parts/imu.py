@@ -176,6 +176,7 @@ class Mpu6050Ada:
         logger.info('Calibrated the Imu algorithm...')
         # after calibration of gyro and accel, we can start the ahrs measure
         # speed drift
+        self.pos = np.zeros(3)
         tic = self.time
         for _ in range(100):
             self.poll()
@@ -183,7 +184,7 @@ class Mpu6050Ada:
             if toc - tic < 1 / self.sample_rate:
                 time.sleep(1 / self.sample_rate - (toc - tic))
             tic = time.time()
-        # self.speed_drift = self.pos / (now - self.time)
+        self.speed_drift = self.pos / (toc - tic)
         # reset internal parameters
         self.speed = np.zeros(3)
         self.pos = np.zeros(3)
@@ -295,6 +296,7 @@ class PathPlotter:
 if __name__ == "__main__":
     import sys
     from sys import stdout
+    logging.basicConfig(level=logging.INFO)
     np.set_printoptions(precision=4, sign='+', floatmode='fixed',
                         suppress=True)
     count = 0
