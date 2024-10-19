@@ -200,7 +200,7 @@ class Mpu6050Ada:
             self.poll()
 
     def poll(self):
-        alpha = 0.5
+        alpha = 0.2
         new_time = time.time()
         if self.time is None:
             self.time = new_time
