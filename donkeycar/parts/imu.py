@@ -153,7 +153,7 @@ class Mpu6050Ada:
         #     tmp = self.mpu.gyro
         #     tmp = self.mpu.acceleration
         tic = time.time()
-        for _ in range(num_loops):
+        for _ in range(2 * num_loops):
             gyro += self.mpu.gyro
             accel += self.mpu.acceleration
             accel_norm += np.linalg.norm(self.mpu.acceleration)
