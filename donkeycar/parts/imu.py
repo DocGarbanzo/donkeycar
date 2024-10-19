@@ -161,7 +161,7 @@ class Mpu6050Ada:
             if toc - tic < 1 / self.sample_rate:
                 time.sleep(1 / self.sample_rate - (toc - tic))
             tic = time.time()
-        self.gyro_zero = gyro / num_loops
+        self.gyro_zero = np.zeros(3) #gyro / num_loops
         self.accel_zero = accel / num_loops
         self.accel_norm = accel_norm / num_loops
         logger.info(f'Initial acceleration: {self.accel_zero}, '
