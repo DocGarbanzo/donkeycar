@@ -3,6 +3,12 @@
 #:set common_height 30
 #:set spacing 10
 #:set layout_height common_height + spacing
+#:set spacing_half spacing // 2
+
+#:set common_height_str str(common_height)+'dp'
+#:set spacing_str str(spacing)+'dp'
+#:set layout_height_str str(layout_height)+'dp'
+#:set spacing_half_str str(spacing_half)+'dp'
 
 
 #:set font_color 0.8, 0.9, 0.9, 1
@@ -55,8 +61,8 @@
 
 <BackgroundBoxLayout>
     background_color: 0,0,0,0  # the last zero is the critical on, make invisible
-    padding: spacing
-    spacing: 5
+    padding: spacing_str
+    spacing: spacing_half_str
     canvas.before:
         Color:
             rgba: 0.10, 0.11, 0.12, 1
@@ -91,18 +97,18 @@
 
 <PaddedBoxLayout>:
     size_hint_y: None
-    height: layout_height
-    padding: [spacing, spacing // 2]
-    spacing: spacing
+    height: layout_height_str
+    padding: [spacing_str, spacing_half_str]
+    spacing: spacing_str
 
 
 <StatusBar>:
     orientation: 'vertical'
-    padding: [10, 0, 10, 10]
+    padding: ['10dp', '0dp', '10dp', '10dp']
     size_hint_y: None
-    height: common_height
+    height: common_height_str
     BackgroundBoxLayout:
-        radius: 6
+        radius: '6dp'
         MyLabel:
             valign: 'middle'
             font_size: '12sp'
@@ -114,7 +120,7 @@
     text_size: self.size
     halign: 'center'
     valign: 'middle'
-    height: common_height
+    height: common_height_str
     background_color: 0,0,0,0  # the last zero is the critical on, make invisible
     canvas.before:
         Color:
@@ -130,7 +136,7 @@
     text_size: self.size
     halign: 'center'
     valign: 'middle'
-    height: common_height
+    height: common_height_str
     background_color: 0,0,0,0  # the last zero is the critical on, make invisible
     canvas.before:
         Color:
@@ -164,9 +170,9 @@
 
         BoxLayout:
             size_hint_y: None
-            height: common_height
+            height: common_height_str
             pos_hint: {'center_x': .5, 'center_y': .5}
-            spacing: 20
+            spacing: '20dp'
             RoundedButton:
                 text: "Cancel"
                 on_release: root.dismiss()
@@ -178,7 +184,7 @@
 
 <LabelBar>:
     orientation: 'horizontal'
-    spacing: 4
+    spacing: '4dp'
     MyLabel:
         id: field_label
         text_size: self.size
@@ -222,12 +228,12 @@
 
 <DataPanel>
     cols: 1
-    spacing: 2
+    spacing: '2dp'
     current_field: data_spinner.text
     BoxLayout:
         size_hint_y: None
-        height: 20
-        spacing: 2
+        height: '20dp'
+        spacing: '2dp'
         MyLabel:
             id: label
             size_hint_x: 0.4
@@ -250,9 +256,9 @@
 
 <ControlPanel>
     orientation: 'vertical'
-    spacing: 5
+    spacing: spacing_half_str
     GridLayout:
-        spacing: 5
+        spacing: spacing_half_str
         cols: 2
         MyLabel:
             id: record_num
