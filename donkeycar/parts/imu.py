@@ -4,6 +4,7 @@ import time
 import board
 import busio
 import adafruit_mpu6050
+import adafruit_bno055
 import logging
 import imufusion
 
@@ -174,22 +175,8 @@ class Mpu6050Ada:
             tic = time.time()
         self.time = time.time()
         logger.info('Calibrated the Imu algorithm...')
-        # after calibration of gyro and accel, we can start the ahrs measure
-        # speed drift
         self.pos = np.zeros(3)
         self.speed = np.zeros(3)
-        # tic = self.time
-        # start_time = tic
-        # for _ in range(num_loops):
-        #     self.poll()
-        #     toc = time.time()
-        #     if toc - tic < 1 / self.sample_rate:
-        #         time.sleep(1 / self.sample_rate - (toc - tic))
-        #     tic = time.time()
-        # self.speed_drift = self.pos / (toc - start_time)
-        # # reset internal parameters
-        # self.speed = np.zeros(3)
-        # self.pos = np.zeros(3)
         self.path.clear()
         self.time = tic
         logger.info(f'Determined speed drift {self.speed_drift}.  - Mpu6050 '
@@ -239,6 +226,72 @@ class Mpu6050Ada:
         df = pd.DataFrame(columns=['t', 'x', 'y', 'z', 'v'], data=self.path)
         df.to_csv('imu.csv', index=False)
         logger.info('Mpu6050 shutdown - saved path to imu.csv')
+
+
+class BNO055Ada:
+    def __init__(self):
+        i2c = board.I2C()  # uses board.SCL and board.SDA
+        self.sensor = adafruit_bno055.BNO055_I2C(i2c)
+        self.last_val = 0xFFFF
+        self.sensor.offsets_accelerometer = (-48, -118, -30)
+        self.sensor.offsets_gyroscope = (0, -1, -1)
+        self.sensor.offsets_magnetometer = (-207, 219, 0)
+        self.speed = np.zeros(3)
+        self.pos = np.zeros(3)
+        self.accel = np.zeros(3)
+        self.path = []
+        self.time = None
+        self.on = True
+
+    def temperature(self):
+        result = self.sensor.temperature
+        if abs(result - self.last_val) == 128:
+            result = self.sensor.temperature
+            if abs(result - self.last_val) == 128:
+                return 0b00111111 & result
+        self.last_val = result
+        return result
+
+    def poll(self):
+        new_time = time.time()
+        if self.time is None:
+            self.time = new_time
+        dt = new_time - self.time
+        gyro = np.array(self.sensor.gyro)
+        self.accel = np.array(self.sensor.linear_acceleration)
+        delta_v = self.accel * dt
+        self.speed += delta_v
+        self.pos += self.speed * dt
+        self.path.append((self.time, *self.pos, np.linalg.norm(self.speed)))
+        self.time = new_time
+
+    def update(self):
+        while self.on:
+            self.poll()
+
+    def run_threaded(self):
+        return self.pos
+
+    def shutdown(self):
+        self.on = False
+        df = pd.DataFrame(columns=['t', 'x', 'y', 'z', 'v'], data=self.path)
+        df.to_csv('imu.csv', index=False)
+        logger.info('BNO055050 shutdown - saved path to imu.csv')
+
+
+    # while True:
+    #     print("Temperature: {} degrees C".format(sensor.temperature))
+    #
+    #     print("Accelerometer (m/s^2): {}".format(sensor.acceleration))
+    #     print("Magnetometer (microteslas): {}".format(sensor.magnetic))
+    #     print("Gyroscope (rad/sec): {}".format(sensor.gyro))
+    #     print("Euler angle: {}".format(sensor.euler))
+    #     print("Quaternion: {}".format(sensor.quaternion))
+    #     print("Linear acceleration (m/s^2): {}".format(
+    #         sensor.linear_acceleration))
+    #     print("Gravity (m/s^2): {}".format(sensor.gravity))
+    #     print()
+
 
 
 import multiprocessing
@@ -304,7 +357,7 @@ if __name__ == "__main__":
     np.set_printoptions(precision=4, sign='+', floatmode='fixed',
                         suppress=True)
     count = 0
-    mpu = Mpu6050Ada()
+    mpu = BNO055Ada()
     pp = PathPlotter(update_freq=20, limit=2)
     pp.start()
     print('Go!')
