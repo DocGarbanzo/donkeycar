@@ -272,6 +272,10 @@ class BNO055Ada:
     def run_threaded(self):
         return self.pos
 
+    def run(self):
+        self.poll()
+        return self.pos
+
     def shutdown(self):
         self.on = False
         df = pd.DataFrame(columns=['t', 'x', 'y', 'z', 'v'], data=self.path)
