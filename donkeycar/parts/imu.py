@@ -233,9 +233,9 @@ class BNO055Ada:
         i2c = board.I2C()  # uses board.SCL and board.SDA
         self.sensor = adafruit_bno055.BNO055_I2C(i2c)
         self.last_val = 0xFFFF
-        self.sensor.offsets_accelerometer = (-48, -118, -30)
-        self.sensor.offsets_gyroscope = (0, -1, -1)
-        self.sensor.offsets_magnetometer = (-207, 219, 0)
+        self.sensor.offsets_accelerometer = (-47, -88, -24)
+        self.sensor.offsets_gyroscope = (-1, -1, -1)
+        self.sensor.offsets_magnetometer = (-185, 201, 10)
         self.speed = np.zeros(3)
         self.pos = np.zeros(3)
         self.accel = np.zeros(3)
