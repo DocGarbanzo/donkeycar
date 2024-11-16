@@ -107,7 +107,7 @@ class IMU:
 
 
 class Mpu6050Ada:
-    def __init__(self):
+    def __init__(self, sample_rate=100):
         logger.info("Creating Adafruit Mpu6050 ...")
         i2c = busio.I2C(board.SCL, board.SDA)
         self.mpu = adafruit_mpu6050.MPU6050(i2c)
@@ -125,7 +125,7 @@ class Mpu6050Ada:
         self.speed_drift = np.zeros(3)
         self.time = None
         self.path = [] # [(self.time, *self.pos)]
-        self.sample_rate = 100
+        self.sample_rate = sample_rate
         self.ahrs = imufusion.Ahrs()
         self.ahrs.settings = imufusion.Settings(
             # imufusion.CONVENTION_NWU,
@@ -242,6 +242,9 @@ class BNO055Ada:
         self.path = []
         self.time = None
         self.on = True
+        self.euler = None
+        self.matrix = None
+
 
     def temperature(self):
         result = self.sensor.temperature
@@ -258,6 +261,7 @@ class BNO055Ada:
             self.time = new_time
         dt = new_time - self.time
         gyro = np.array(self.sensor.gyro)
+        self.euler = np.array(self.sensor.euler)
         self.accel = np.array(self.sensor.linear_acceleration)
         delta_v = self.accel * dt
         self.speed += delta_v
@@ -274,7 +278,7 @@ class BNO055Ada:
 
     def run(self):
         self.poll()
-        return self.pos
+        return self.euler, self.matrix, self.accel
 
     def shutdown(self):
         self.on = False
@@ -361,6 +365,7 @@ if __name__ == "__main__":
     np.set_printoptions(precision=4, sign='+', floatmode='fixed',
                         suppress=True)
     count = 0
+    sample_rate = 100
     mpu = BNO055Ada()
     pp = PathPlotter(update_freq=20, limit=2)
     pp.start()
@@ -385,8 +390,8 @@ if __name__ == "__main__":
             pos = mpu.pos[:2]
             pp.append(pos)
             toc = time.time()
-            if toc - tic < 1 / mpu.sample_rate:
-                time.sleep(1 / mpu.sample_rate - (toc - tic))
+            if toc - tic < 1 / sample_rate:
+                time.sleep(1 / sample_rate - (toc - tic))
             tic = time.time()
             count += 1
         except KeyboardInterrupt:
