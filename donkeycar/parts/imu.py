@@ -388,7 +388,7 @@ if __name__ == "__main__":
             euler, matrix, accel = mpu.run_threaded()
             #out_str = f"\reuler: " + f",".join(f"{x:+5.3f}" for x in matrix)
             out_str = f"\reu = " + \
-                np.array2string(euler, precision=1, separator=',',
+                np.array2string(euler, precision=0, separator=',',
                                 sign='+', floatmode='fixed',
                                 suppress_small=True).replace('\n', '')
             out_str += \
