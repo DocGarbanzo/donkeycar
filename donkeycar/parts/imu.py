@@ -238,7 +238,7 @@ class BNO055Ada:
         self.sensor.offsets_magnetometer = (-176, 196, 17)
         self.speed = np.zeros(3)
         self.pos = np.zeros(3)
-        self.accel = np.array(self.sensor.linear_acceleration)
+        self.accel = np.zeros(3) # np.array(self.sensor.linear_acceleration)
         self.path = []
         self.time = None
         self.on = True
