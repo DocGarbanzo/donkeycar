@@ -233,16 +233,17 @@ class BNO055Ada:
         i2c = board.I2C()  # uses board.SCL and board.SDA
         self.sensor = adafruit_bno055.BNO055_I2C(i2c)
         self.last_val = 0xFFFF
-        self.sensor.offsets_accelerometer = (-47, -88, -24)
+        self.sensor.offsets_accelerometer = (39, -110, -19)
         self.sensor.offsets_gyroscope = (-1, -1, -1)
-        self.sensor.offsets_magnetometer = (-185, 201, 10)
+        self.sensor.offsets_magnetometer = (-176, 196, 17)
         self.speed = np.zeros(3)
         self.pos = np.zeros(3)
         self.accel = np.array(self.sensor.linear_acceleration)
         self.path = []
         self.time = None
         self.on = True
-        self.euler = np.array(self.sensor.euler)
+        # euler angles are in z, y, x order in the sensor
+        self.euler = np.array(self.sensor.euler[::-1])
         self.matrix = None
         self.alpha = alpha
 
@@ -263,7 +264,8 @@ class BNO055Ada:
         dt = new_time - self.time
         gyro = np.array(self.sensor.gyro)
         self.euler *= (1.0 - self.alpha)
-        self.euler += self.alpha * np.array(self.sensor.euler)
+        # euler angles are in z, y, x order in the sensor
+        self.euler += self.alpha * np.array(self.sensor.euler[::-1])
         self.accel *= (1.0 - self.alpha)
         self.accel += self.alpha * np.array(self.sensor.linear_acceleration)
         delta_v = self.accel * dt
@@ -329,7 +331,7 @@ def plot(mlist, limit=5, update_freq=0, running=Value('i', 1)):
             fig.canvas.draw()
             fig.canvas.flush_events()
         except Exception as e:
-            raise e
+            pass
         toc = time.time()
         dtime = toc - tic
         if update_freq and dtime < 1.0 / update_freq:
