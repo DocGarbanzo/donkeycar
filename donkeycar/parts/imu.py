@@ -279,7 +279,7 @@ class BNO055Ada:
             self.poll()
 
     def run_threaded(self):
-        return self.pos
+        return self.euler, self.matrix, self.accel
 
     def run(self):
         self.poll()
@@ -369,12 +369,15 @@ class PathPlotter:
 if __name__ == "__main__":
     import sys
     from sys import stdout
+    import threading
     logging.basicConfig(level=logging.INFO)
     np.set_printoptions(precision=4, sign='+', floatmode='fixed',
                         suppress=True)
     count = 0
-    sample_rate = 100
+    sample_rate = 40
     mpu = BNO055Ada(alpha=0.5)
+    t = threading.Thread(target=mpu.update, daemon=True)
+    t.start()
     pp = PathPlotter(update_freq=20, limit=2)
     pp.start()
     print('Go!')
@@ -382,7 +385,7 @@ if __name__ == "__main__":
     tic = start
     while True:
         try:
-            euler, matrix, accel = mpu.run()
+            euler, matrix, accel = mpu.run_threaded()
             #out_str = f"\reuler: " + f",".join(f"{x:+5.3f}" for x in matrix)
             out_str = f"\reu = " + \
                 np.array2string(euler, precision=2, separator=',',
@@ -403,13 +406,13 @@ if __name__ == "__main__":
             tic = time.time()
             count += 1
         except KeyboardInterrupt:
+            pp.stop()
             mpu.shutdown()
             stdout.write("\n")
             break
     print(f'Effective sampling time: {(time.time() - start) * 1000/count:.2f} '
           f'ms')
     inp = input("Press enter to stop plotting")
-    pp.stop()
     sys.exit(0)
 
     iter = 0
