@@ -229,7 +229,7 @@ class Mpu6050Ada:
 
 
 class BNO055Ada:
-    def __init__(self):
+    def __init__(self, alpha=1.0):
         i2c = board.I2C()  # uses board.SCL and board.SDA
         self.sensor = adafruit_bno055.BNO055_I2C(i2c)
         self.last_val = 0xFFFF
@@ -238,12 +238,13 @@ class BNO055Ada:
         self.sensor.offsets_magnetometer = (-185, 201, 10)
         self.speed = np.zeros(3)
         self.pos = np.zeros(3)
-        self.accel = np.zeros(3)
+        self.accel = np.array(self.sensor.linear_acceleration)
         self.path = []
         self.time = None
         self.on = True
-        self.euler = None
+        self.euler = np.array(self.sensor.euler)
         self.matrix = None
+        self.alpha = alpha
 
 
     def temperature(self):
@@ -261,8 +262,10 @@ class BNO055Ada:
             self.time = new_time
         dt = new_time - self.time
         gyro = np.array(self.sensor.gyro)
-        self.euler = np.array(self.sensor.euler)
-        self.accel = np.array(self.sensor.linear_acceleration)
+        self.euler *= (1.0 - self.alpha)
+        self.euler += self.alpha * np.array(self.sensor.euler)
+        self.accel *= (1.0 - self.alpha)
+        self.accel += self.alpha * np.array(self.sensor.linear_acceleration)
         delta_v = self.accel * dt
         self.speed += delta_v
         self.pos += self.speed * dt
@@ -366,7 +369,7 @@ if __name__ == "__main__":
                         suppress=True)
     count = 0
     sample_rate = 100
-    mpu = BNO055Ada()
+    mpu = BNO055Ada(alpha=0.1)
     pp = PathPlotter(update_freq=20, limit=2)
     pp.start()
     print('Go!')
