@@ -374,7 +374,7 @@ if __name__ == "__main__":
                         suppress=True)
     count = 0
     sample_rate = 100
-    mpu = BNO055Ada(alpha=0.1)
+    mpu = BNO055Ada(alpha=0.5)
     pp = PathPlotter(update_freq=20, limit=2)
     pp.start()
     print('Go!')
