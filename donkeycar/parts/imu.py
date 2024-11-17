@@ -322,11 +322,14 @@ def plot(mlist, limit=5, update_freq=0, running=Value('i', 1)):
     tic = time.time()
     count = 0
     while running.value == 1:
-        np_path = np.array(mlist)
-        line.set_xdata(np_path[:, 1])
-        line.set_ydata(np_path[:, 2])
-        fig.canvas.draw()
-        fig.canvas.flush_events()
+        try:
+            np_path = np.array(mlist)
+            line.set_xdata(np_path[:, 1])
+            line.set_ydata(np_path[:, 2])
+            fig.canvas.draw()
+            fig.canvas.flush_events()
+        except Exception as e:
+            raise e
         toc = time.time()
         dtime = toc - tic
         if update_freq and dtime < 1.0 / update_freq:
