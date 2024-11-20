@@ -202,9 +202,6 @@ class Mpu6050Ada:
         if not self.ahrs.flags.initialising:
             self.euler = self.ahrs.quaternion.to_euler()
             self.matrix = self.ahrs.quaternion.to_matrix()
-            # self.lin_accel = np.dot(self.matrix, accel_phys)
-            # # remove gravity from world coordinate z-axis
-            # self.lin_accel[2] -= self.accel_zero[2]
             accel_ignore = self.ahrs.internal_states.accelerometer_ignored
             if not accel_ignore:
                 self.lin_accel = self.accel_norm * self.ahrs.earth_acceleration
@@ -216,10 +213,10 @@ class Mpu6050Ada:
 
     def run(self):
         self.poll()
-        return self.euler, self.matrix, self.lin_accel
+        return self.euler, self.lin_accel, self.matrix
 
     def run_threaded(self):
-        return self.euler, self.matrix, self.lin_accel
+        return self.euler, self.lin_accel, self.matrix
 
     def shutdown(self):
         self.on = False
@@ -229,7 +226,7 @@ class Mpu6050Ada:
 
 
 class BNO055Ada:
-    def __init__(self, alpha=1.0):
+    def __init__(self, alpha=1.0, record_path=False):
         i2c = board.I2C()  # uses board.SCL and board.SDA
         self.sensor = adafruit_bno055.BNO055_I2C(i2c)
         self.last_val = 0xFFFF
@@ -244,9 +241,8 @@ class BNO055Ada:
         self.on = True
         # euler angles are in z, y, x order in the sensor
         self.euler = np.array(self.sensor.euler[::-1])
-        self.matrix = None
         self.alpha = alpha
-
+        self.record_path = record_path
 
     def temperature(self):
         result = self.sensor.temperature
@@ -268,10 +264,11 @@ class BNO055Ada:
         self.euler += self.alpha * np.array(self.sensor.euler[::-1])
         self.accel *= (1.0 - self.alpha)
         self.accel += self.alpha * np.array(self.sensor.linear_acceleration)
-        delta_v = self.accel * dt
-        self.speed += delta_v
-        self.pos += self.speed * dt
-        self.path.append((self.time, *self.pos, np.linalg.norm(self.speed)))
+        if self.record_path:
+            delta_v = self.accel * dt
+            self.speed += delta_v
+            self.pos += self.speed * dt
+            self.path.append((self.time, *self.pos, np.linalg.norm(self.speed)))
         self.time = new_time
 
     def update(self):
@@ -279,32 +276,18 @@ class BNO055Ada:
             self.poll()
 
     def run_threaded(self):
-        return self.euler, self.matrix, self.accel
+        return self.euler, self.accel
 
     def run(self):
         self.poll()
-        return self.euler, self.matrix, self.accel
+        return self.euler, self.accel
 
     def shutdown(self):
         self.on = False
-        df = pd.DataFrame(columns=['t', 'x', 'y', 'z', 'v'], data=self.path)
-        df.to_csv('imu.csv', index=False)
-        logger.info('BNO055050 shutdown - saved path to imu.csv')
-
-
-    # while True:
-    #     print("Temperature: {} degrees C".format(sensor.temperature))
-    #
-    #     print("Accelerometer (m/s^2): {}".format(sensor.acceleration))
-    #     print("Magnetometer (microteslas): {}".format(sensor.magnetic))
-    #     print("Gyroscope (rad/sec): {}".format(sensor.gyro))
-    #     print("Euler angle: {}".format(sensor.euler))
-    #     print("Quaternion: {}".format(sensor.quaternion))
-    #     print("Linear acceleration (m/s^2): {}".format(
-    #         sensor.linear_acceleration))
-    #     print("Gravity (m/s^2): {}".format(sensor.gravity))
-    #     print()
-
+        if self.record_path:
+            df = pd.DataFrame(columns=['t', 'x', 'y', 'z', 'v'], data=self.path)
+            df.to_csv('imu.csv', index=False)
+            logger.info('BNO055050 shutdown - saved path to imu.csv')
 
 
 import multiprocessing
@@ -385,10 +368,10 @@ if __name__ == "__main__":
     tic = start
     while True:
         try:
-            euler, matrix, accel = mpu.run_threaded()
+            euler, accel = mpu.run_threaded()
             #out_str = f"\reuler: " + f",".join(f"{x:+5.3f}" for x in matrix)
             out_str = f"\reu = " + \
-                np.array2string(euler, precision=0, separator=',',
+                np.array2string(euler, precision=1, separator=',',
                                 sign='+', floatmode='fixed',
                                 suppress_small=True).replace('\n', '')
             out_str += \
