@@ -289,6 +289,42 @@ class BNO055Ada:
             df.to_csv('imu.csv', index=False)
             logger.info('BNO055050 shutdown - saved path to imu.csv')
 
+class ArtemisOpenLog:
+    def __init__(self, port, baudrate, timeout):
+        self.port = port
+        self.baudrate= baudrate
+        self.timeout = timeout
+        self.accel = {}
+        self.gyro = {}
+        self.magn = {}
+    
+    def connect(self, port, baudrate, timeout):
+        """
+        Sets up the serial communication of the OpenLog IMU
+        via UART with the given port, baudrate, and the timeout.
+        """
+        pass
+
+    def read_imu_data(self):
+        """
+        Read the data from the ICM20948 IMU
+        that is on the Artemis OpenLog.
+        """
+        pass
+
+    def poll(self):
+        """
+        Calls the read_imu_data() method and polls
+        the IMU to read the data that it records.
+        """
+        pass
+
+    def shutdown(self):
+        """
+        Terminates communcation and the
+        serial port on the Artemis OpenLog.
+        """
+
 
 import multiprocessing
 from multiprocessing import Process, Value
