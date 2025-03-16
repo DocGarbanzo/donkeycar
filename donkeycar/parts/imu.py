@@ -290,6 +290,8 @@ class BNO055Ada:
             logger.info('BNO055050 shutdown - saved path to imu.csv')
 
 import serial
+import matplotlib.animation as animation
+from collections import deque
 
 class ArtemisOpenLog:
     def __init__(self, port, baudrate, timeout):
@@ -301,8 +303,16 @@ class ArtemisOpenLog:
         self.timeout = timeout
         self.ser = None
         self.on = True
+        # Acceleration is in milli g
         self.accel = { 'x' : 0., 'y' : 0., 'z' : 0. }
+        self.accel_x = deque(maxlen=100)
+        self.accel_y = deque(maxlen=100)
+        self.accel_z = deque(maxlen=100)
+        # Gyroscope data is in degrees per second
         self.gyro = { 'x' : 0., 'y' : 0., 'z' : 0. }
+        self.gyro_x = deque(maxlen=100)
+        self.gyro_y = deque(maxlen=100)
+        self.gyro_z = deque(maxlen=100)
         self.temp = 0.0
 
         self.connect()
@@ -326,11 +336,17 @@ class ArtemisOpenLog:
             self.shutdown()
             
 
-    def read_imu_data(self):
+    def read_imu_data(self, log_data: bool = None, log_type: str = None):
         """
         Read the data from the ICM20948 IMU
         that is on the Artemis OpenLog.
+
+        :param log_data: Boolean to determine if we want to also log the data in matplotlib figure.
+        :param log_type: String to determine what to log on the matplotlib figure if we want to plot.
         """
+        assert(isinstance(log_data, bool)), "log_data must be True or False"
+        assert(isinstance(log_type, str) and (log_type == "accel" or log_type == "gyro" or log_type is None)), "log_type must be 'accel' or 'gyro'"
+
         if self.ser is None or not self.on:
             logger.error("Serial connection not initialized")
             return
@@ -340,11 +356,70 @@ class ArtemisOpenLog:
             # points are stored in which indices in the data array when reading 
             data = self.ser.readline().decode('utf-8').strip().split(",")
             if len(data) >= 12:
+                # For integration with the GPS
                 self.accel = { 'x' : float(data[2]) * 0.00981, 'y' : float(data[3]) * 0.00981, 'z' : float(data[4]) * 0.00981}
+                # For logging the previous 100 points if necessary
+                self.accel_x.append(self.accel['x'])
+                self.accel_y.append(self.accel['y'])
+                self.accel_z.append(self.accel['z'])
+                # For integration with the GPS
                 self.gyro = { 'x' : float(data[5]), 'y' : float(data[6]), 'z' : float(data[7]) }
+                # For logging the previous 100 points if necessary
+                self.gyro_x.append(self.gyro['x'])
+                self.gyro_y.append(self.gyro['y'])
+                self.gyro_z.append(self.gyro['z'])
                 self.temp = float(data[11])
+            if log_data and log_type is not None:
+                self.log_data(10, log_type=log_type)
+
         except Exception as e:
             logger.error(f"Error reading data from Artemis IMU: {e}")
+
+    def log_data(self, interval_time, log_type):
+        """
+        Logs the recorded data from Artemis OpenLog IMU
+        into a matplotlib plot in real time for debugging purposes. 
+
+        :param interval_time: The time between each data log in the matplotlib
+        """
+        assert((isinstance(interval_time, int) or isinstance(interval_time, float)) and interval_time > 0), "Interval time must be a valid number"
+        
+        fig, ax = plt.subplots()
+        ax.set_xlabel("Time")
+        ax.set_ylim(-10, 10) 
+
+        if log_type == "accel":
+            ax.set_ylabel("Acceleration (mm/s²)")
+            line_ax, = ax.plot([], [], label="aX", color="r")
+            line_ay, = ax.plot([], [], label="aY", color="g")
+            line_az, = ax.plot([], [], label="aZ", color="b")
+            ax.legend()
+
+            def update_plot(_):
+                line_ax.set_data(range(len(self.accel_x)), self.accel_x)
+                line_ay.set_data(range(len(self.accel_y)), self.accel_y)
+                line_az.set_data(range(len(self.accel_z)), self.accel_z)
+
+                ax.set_xlim(0, len(self.accel_x))
+                return line_ax, line_ay, line_az
+        
+        elif log_type == "gyro":
+            ax.set_ylabel("Gyroscope (deg/s)")
+            line_gx, = ax.plot([], [], label="gX", color="r")
+            line_gy, = ax.plot([], [], label="gY", color="g")
+            line_gz, = ax.plot([], [], label="gZ", color="b")
+            ax.legend()
+
+            def update_plot(_):
+                line_gx.set_data(range(len(self.gyro_x)), self.gyro_x)
+                line_gy.set_data(range(len(self.gyro_y)), self.gyro_y)
+                line_gz.set_data(range(len(self.gyro_z)), self.gyro_z)
+
+                ax.set_xlim(0, len(self.gyro_x)) 
+                return line_gx, line_gy, line_gz
+
+        ani = animation.FuncAnimation(fig, update_plot, interval=interval_time, cache_frame_data=False)
+        plt.show()
 
     def poll(self):
         """
@@ -353,7 +428,7 @@ class ArtemisOpenLog:
         """
         self.read_imu_data()
 
-    def run(self, sleep_time: float):
+    def run(self, sleep_time):
         """
         Calls poll() method to poll, read, and record
         data from the IMU on Artemis OpenLog every 
