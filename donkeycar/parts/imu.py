@@ -289,42 +289,90 @@ class BNO055Ada:
             df.to_csv('imu.csv', index=False)
             logger.info('BNO055050 shutdown - saved path to imu.csv')
 
+import serial
+
 class ArtemisOpenLog:
     def __init__(self, port, baudrate, timeout):
-        self.port = port
-        self.baudrate= baudrate
+        assert(isinstance(port, str)), "Port must be a valid string input"
+        assert(isinstance(baudrate, int) and baudrate > 0), "Baudrate must be valid int"
+        assert((isinstance(timeout, int) or isinstance(timeout, float)) and timeout > 0), "timeout time must be valid number greater than 0" 
+        self.serial_port = port
+        self.baudrate = baudrate
         self.timeout = timeout
-        self.accel = {}
-        self.gyro = {}
-        self.magn = {}
+        self.ser = None
+        self.on = True
+        self.accel = { 'x' : 0., 'y' : 0., 'z' : 0. }
+        self.gyro = { 'x' : 0., 'y' : 0., 'z' : 0. }
+        self.temp = 0.0
+
+        self.connect()
     
-    def connect(self, port, baudrate, timeout):
+    def connect(self):
         """
         Sets up the serial communication of the OpenLog IMU
         via UART with the given port, baudrate, and the timeout.
+
+        :param port: The serial port to communicate through
+        :param baudrate: The baudrate of the serial communcation
+        :param timeout: The timeout
         """
-        pass
+        try:
+            self.ser = serial.Serial(self.serial_port, self.baudrate, timeout=self.timeout)
+            logger.info(f"Connected to {self.serial_port}")
+        except serial.SerialException as e:
+            logger.error(f"Error: {e}")
+        except KeyboardInterrupt:
+            logger.info("\nExiting...")
+            self.shutdown()
+            
 
     def read_imu_data(self):
         """
         Read the data from the ICM20948 IMU
         that is on the Artemis OpenLog.
         """
-        pass
+        if self.ser is None or not self.on:
+            logger.error("Serial connection not initialized")
+            return
+        try:
+            # Artemis OpenLog already records data in CSV format for us
+            # Look at datasheet for Artemis OpenLog Sparkfun to see what data
+            # points are stored in which indices in the data array when reading 
+            data = self.ser.readline().decode('utf-8').strip().split(",")
+            if len(data) >= 12:
+                self.accel = { 'x' : float(data[2]) * 0.00981, 'y' : float(data[3]) * 0.00981, 'z' : float(data[4]) * 0.00981}
+                self.gyro = { 'x' : float(data[5]), 'y' : float(data[6]), 'z' : float(data[7]) }
+                self.temp = float(data[11])
+        except Exception as e:
+            logger.error(f"Error reading data from Artemis IMU: {e}")
 
     def poll(self):
         """
         Calls the read_imu_data() method and polls
         the IMU to read the data that it records.
         """
-        pass
+        self.read_imu_data()
+
+    def run(self, sleep_time: float):
+        """
+        Calls poll() method to poll, read, and record
+        data from the IMU on Artemis OpenLog every 
+        sleep_time interval.
+
+        :param sleep_time: The time interval (in seconds) between each IMU poll()
+        """
+        assert((isinstance(sleep_time, int) or isinstance(sleep_time, float)) and sleep_time > 0), "Sleep time must be greater than 0" 
+        self.poll()
+        time.sleep(sleep_time)
 
     def shutdown(self):
         """
         Terminates communcation and the
         serial port on the Artemis OpenLog.
         """
-
+        self.on = False
+        if self.ser:
+            self.ser.close()
 
 import multiprocessing
 from multiprocessing import Process, Value
