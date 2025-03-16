@@ -291,6 +291,7 @@ class BNO055Ada:
 
 import serial
 import matplotlib.animation as animation
+import matplotlib.pyplot as plt
 from collections import deque
 
 class ArtemisOpenLog:
@@ -451,7 +452,6 @@ class ArtemisOpenLog:
 
 import multiprocessing
 from multiprocessing import Process, Value
-import matplotlib.pyplot as plt
 import time
 import numpy as np
 
