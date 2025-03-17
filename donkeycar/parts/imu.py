@@ -8,7 +8,15 @@ import adafruit_bno055
 import logging
 import imufusion
 
+import serial
+import matplotlib.animation as animation
+import matplotlib.pyplot as plt
+from collections import deque
+import time
+import threading
+import csv
 import pandas as pd
+import numpy as np
 from scipy.signal import butter, filtfilt
 
 
@@ -290,11 +298,6 @@ class BNO055Ada:
             df.to_csv('imu.csv', index=False)
             logger.info('BNO055050 shutdown - saved path to imu.csv')
 
-import serial
-import matplotlib.animation as animation
-import matplotlib.pyplot as plt
-from collections import deque
-
 class ArtemisOpenLog:
     def __init__(self, port, baudrate, timeout):
         assert(isinstance(port, str)), "Port must be a valid string input"
@@ -304,7 +307,8 @@ class ArtemisOpenLog:
         self.baudrate = baudrate
         self.timeout = timeout
         self.ser = None
-        self.on = True
+        self.running = False
+        self.read_imu_thread = None
         # Acceleration is in milli g
         self.accel = { 'x' : 0., 'y' : 0., 'z' : 0. }
         self.accel_x = deque(maxlen=100)
@@ -346,82 +350,71 @@ class ArtemisOpenLog:
         :param log_data: Boolean to determine if we want to also log the data in matplotlib figure.
         :param log_type: String to determine what to log on the matplotlib figure if we want to plot.
         """
-        assert(isinstance(log_data, bool)), "log_data must be True or False"
-        assert(isinstance(log_type, str) and (log_type == "accel" or log_type == "gyro" or log_type is None)), "log_type must be 'accel' or 'gyro'"
+        assert(isinstance(log_data, bool) or log_data is None), "log_data must be True or False"
+        assert((isinstance(log_type, str) or log_type is None) and (log_type == "accel" or log_type == "gyro" or log_type is None)), "log_type must be 'accel' or 'gyro'"
 
-        if self.ser is None or not self.on:
+        if self.ser is None:
             logger.error("Serial connection not initialized")
             return
-        try:
-            # Artemis OpenLog already records data in CSV format for us
-            # Look at datasheet for Artemis OpenLog Sparkfun to see what data
-            # points are stored in which indices in the data array when reading 
-            data = self.ser.readline().decode('utf-8').strip().split(",")
-            if len(data) >= 12:
-                # For integration with the GPS
-                self.accel = { 'x' : float(data[2]) * 0.00981, 'y' : float(data[3]) * 0.00981, 'z' : float(data[4]) * 0.00981}
-                # For logging the previous 100 points if necessary
-                self.accel_x.append(self.accel['x'])
-                self.accel_y.append(self.accel['y'])
-                self.accel_z.append(self.accel['z'])
-                # For integration with the GPS
-                self.gyro = { 'x' : float(data[5]), 'y' : float(data[6]), 'z' : float(data[7]) }
-                # For logging the previous 100 points if necessary
-                self.gyro_x.append(self.gyro['x'])
-                self.gyro_y.append(self.gyro['y'])
-                self.gyro_z.append(self.gyro['z'])
-                self.temp = float(data[11])
-            if log_data and log_type is not None:
-                self.log_data(10, log_type=log_type)
 
-        except Exception as e:
-            logger.error(f"Error reading data from Artemis IMU: {e}")
+        while self.running:
 
-    def log_data(self, interval_time, log_type):
+            #with open('imu_data_threaded.csv', 'w', newline='') as fp_imu:
+                
+            try:
+                # Artemis OpenLog already records data in CSV format for us
+                # Look at datasheet for Artemis OpenLog Sparkfun to see what data
+                # points are stored in which indices in the data array when reading 
+                data = self.ser.readline().decode('utf-8').strip().split(",")
+                str_vals = ['rtcDate', 'rtcTime', 'aX', 'aY', 'aZ', 'gX', 'gY', 'gZ', 'mX', 'mY', 'mZ', 'imu_degC', 'output_Hz']
+                if len(data) >= 12:
+
+                    data_array = data[0:len(data)-1]
+                    
+                    print(data_array)
+
+                    # This if statement is critical for plotting the data in real time.
+                    if data_array != str_vals:
+                        # For integration with the GPS
+                        self.accel = { 'x' : float(data_array[2]) * 0.00981, 'y' : float(data_array[3]) * 0.00981, 'z' : float(data_array[4]) * 0.00981}
+                        # For logging the previous 100 points if necessary
+                        self.accel_x.append(self.accel['x'])
+                        self.accel_y.append(self.accel['y'])
+                        self.accel_z.append(self.accel['z'])
+                        # For integration with the GPS
+                        self.gyro = { 'x' : float(data_array[5]), 'y' : float(data_array[6]), 'z' : float(data_array[7]) }
+                        # For logging the previous 100 points if necessary
+                        self.gyro_x.append(self.gyro['x'])
+                        self.gyro_y.append(self.gyro['y'])
+                        self.gyro_z.append(self.gyro['z'])
+                        self.temp = float(data_array[11])
+
+            except Exception as e:
+                logger.error(f"Error reading data from Artemis IMU: {e}")
+                time.sleep(0.1)
+
+    def start_imu_threading(self):
         """
-        Logs the recorded data from Artemis OpenLog IMU
-        into a matplotlib plot in real time for debugging purposes. 
-
-        :param interval_time: The time between each data log in the matplotlib
+        Starts the thread for reading the IMU data to
+        run in the backround while also being connected.
         """
-        assert((isinstance(interval_time, int) or isinstance(interval_time, float)) and interval_time > 0), "Interval time must be a valid number"
-        
-        fig, ax = plt.subplots()
-        ax.set_xlabel("Time")
-        ax.set_ylim(-10, 10) 
+        if self.running and self.read_imu_thread is not None:
+            logger.info("IMU data reading thread is already running")
+            return
+        if self.read_imu_thread is None or not self.read_imu_thread.is_alive():
+            self.running = True
+            self.read_imu_thread = threading.Thread(target=self.read_imu_data, daemon=True)
+            self.read_imu_thread.start()
+            logger.info("Started IMU data reading thread")
 
-        if log_type == "accel":
-            ax.set_ylabel("Acceleration (mm/s²)")
-            line_ax, = ax.plot([], [], label="aX", color="r")
-            line_ay, = ax.plot([], [], label="aY", color="g")
-            line_az, = ax.plot([], [], label="aZ", color="b")
-            ax.legend()
-
-            def update_plot(_):
-                line_ax.set_data(range(len(self.accel_x)), self.accel_x)
-                line_ay.set_data(range(len(self.accel_y)), self.accel_y)
-                line_az.set_data(range(len(self.accel_z)), self.accel_z)
-
-                ax.set_xlim(0, len(self.accel_x))
-                return line_ax, line_ay, line_az
-        
-        elif log_type == "gyro":
-            ax.set_ylabel("Gyroscope (deg/s)")
-            line_gx, = ax.plot([], [], label="gX", color="r")
-            line_gy, = ax.plot([], [], label="gY", color="g")
-            line_gz, = ax.plot([], [], label="gZ", color="b")
-            ax.legend()
-
-            def update_plot(_):
-                line_gx.set_data(range(len(self.gyro_x)), self.gyro_x)
-                line_gy.set_data(range(len(self.gyro_y)), self.gyro_y)
-                line_gz.set_data(range(len(self.gyro_z)), self.gyro_z)
-
-                ax.set_xlim(0, len(self.gyro_x)) 
-                return line_gx, line_gy, line_gz
-
-        ani = animation.FuncAnimation(fig, update_plot, interval=interval_time, cache_frame_data=False)
-        plt.show()
+    def stop_imu_threading(self):
+        """
+        Stops the thread for reading the IMU data.
+        """
+        self.running = False
+        if self.read_imu_thread:
+            self.read_imu_thread.join()
+            logger.info("Stopped IMU data readingt thread")
 
     def kalman_filter_gyro(self, x, P, z, Q, R):
         
@@ -482,6 +475,7 @@ class ArtemisOpenLog:
         """
         Calls the read_imu_data() method and polls
         the IMU to read the data that it records.
+        Non-threaded polling.
         """
         self.read_imu_data()
 
@@ -489,7 +483,7 @@ class ArtemisOpenLog:
         """
         Calls poll() method to poll, read, and record
         data from the IMU on Artemis OpenLog every 
-        sleep_time interval.
+        sleep_time interval. Non-threaded.
 
         :param sleep_time: The time interval (in seconds) between each IMU poll()
         """
@@ -502,14 +496,66 @@ class ArtemisOpenLog:
         Terminates communcation and the
         serial port on the Artemis OpenLog.
         """
-        self.on = False
+        self.stop_imu_threading()
         if self.ser:
             self.ser.close()
+            logger.info("Closed serial connection")
+
+def log_data(imu: ArtemisOpenLog, interval_time, log_type: str):
+    """
+    Logs the recorded data from the given imu object parameter
+    into a matplotlib plot in real time for debugging purposes. 
+
+    :param imu: The imu object to plot data fram
+    :param interval_time: The time between each data log in the matplotlib
+    :param log_type: The type to plot against time. "accel" or "gyro" strings.
+
+    """
+    assert(isinstance(imu, ArtemisOpenLog)), "imu parameter must be an ArtemisOpenLog object"
+    assert((isinstance(interval_time, int) or isinstance(interval_time, float)) and interval_time > 0), "Interval time must be a valid number"
+    assert(isinstance(log_type, str) and (log_type == 'accel' or log_type == 'gyro')), "log_type argument must be a string of either 'accel' or 'gyro'"
+
+    fig, ax = plt.subplots()
+    ax.set_xlabel("Time")
+    ax.set_ylim(-10, 10) 
+
+    if log_type == "accel":
+        ax.set_ylabel("Acceleration (mm/s²)")
+        line_ax, = ax.plot([], [], label="aX", color="r")
+        line_ay, = ax.plot([], [], label="aY", color="g")
+        line_az, = ax.plot([], [], label="aZ", color="b")
+        ax.legend()
+
+        def update_plot(_):
+            line_ax.set_data(range(len(imu.accel_x)), imu.accel_x)
+            line_ay.set_data(range(len(imu.accel_y)), imu.accel_y)
+            line_az.set_data(range(len(imu.accel_z)), imu.accel_z)
+
+            ax.set_xlim(0, len(imu.accel_x))
+            return line_ax, line_ay, line_az
+    
+    elif log_type == "gyro":
+        ax.set_ylabel("Gyroscope (deg/s)")
+        line_gx, = ax.plot([], [], label="gX", color="r")
+        line_gy, = ax.plot([], [], label="gY", color="g")
+        line_gz, = ax.plot([], [], label="gZ", color="b")
+        ax.legend()
+
+        def update_plot(_):
+            line_gx.set_data(range(len(imu.gyro_x)), imu.gyro_x)
+            line_gy.set_data(range(len(imu.gyro_y)), imu.gyro_y)
+            line_gz.set_data(range(len(imu.gyro_z)), imu.gyro_z)
+
+            ax.set_xlim(0, len(imu.gyro_x)) 
+            return line_gx, line_gy, line_gz
+
+    ani = animation.FuncAnimation(fig, update_plot, interval=interval_time, cache_frame_data=False)
+    plt.show()
+
 
 import multiprocessing
 from multiprocessing import Process, Value
 import time
-import numpy as np
 
 
 def plot(mlist, limit=5, update_freq=0, running=Value('i', 1)):
