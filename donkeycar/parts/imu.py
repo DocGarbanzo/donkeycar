@@ -309,6 +309,10 @@ class ArtemisOpenLog:
         self.ser = None
         self.running = False
         self.read_imu_thread = None
+
+        self.gyro_offset = None
+        self.accel_offset = None
+
         # Acceleration is in milli g
         self.accel = { 'x' : 0., 'y' : 0., 'z' : 0. }
         self.accel_x = deque(maxlen=100)
@@ -375,14 +379,37 @@ class ArtemisOpenLog:
 
                     # This if statement is critical for plotting the data in real time.
                     if data_array != str_vals:
-                        # For integration with the GPS
-                        self.accel = { 'x' : float(data_array[2]) * 0.00981, 'y' : float(data_array[3]) * 0.00981, 'z' : float(data_array[4]) * 0.00981}
+                        # Apply accel offset if available
+                        if self.accel_offset:
+                            self.accel = {
+                                'x' : float(data_array[2]) * 0.00981 - self.accel_offset['x'],
+                                'y' : float(data_array[3]) * 0.00981 - self.accel_offset['y'],
+                                'z' : float(data_array[4]) * 0.00981 - self.accel_offset['z']
+                            }
+                        else:
+                            self.accel = {
+                                'x' : float(data_array[2]) * 0.00981,
+                                'y' : float(data_array[3]) * 0.00981,
+                                'z' : float(data_array[4]) * 0.00981
+                            }
                         # For logging the previous 100 points if necessary
                         self.accel_x.append(self.accel['x'])
                         self.accel_y.append(self.accel['y'])
                         self.accel_z.append(self.accel['z'])
-                        # For integration with the GPS
-                        self.gyro = { 'x' : float(data_array[5]), 'y' : float(data_array[6]), 'z' : float(data_array[7]) }
+                        
+                        # Apply gyro offset if available
+                        if self.gyro_offset:
+                            self.gyro = { 
+                                'x' : float(data_array[5]) - self.gyro_offset['x'], 
+                                'y' : float(data_array[6]) - self.gyro_offset['y'], 
+                                'z' : float(data_array[7]) - self.gyro_offset['z'] 
+                            }
+                        else:
+                            self.gyro = { 
+                                'x' : float(data_array[5]), 
+                                'y' : float(data_array[6]), 
+                                'z' : float(data_array[7]) 
+                            }
                         # For logging the previous 100 points if necessary
                         self.gyro_x.append(self.gyro['x'])
                         self.gyro_y.append(self.gyro['y'])
@@ -501,6 +528,71 @@ class ArtemisOpenLog:
             self.ser.close()
             logger.info("Closed serial connection")
 
+
+#---------- Free Functions ----------#
+
+def calibrate_artemis(imu: ArtemisOpenLog, period: int, calibrate_gyro: bool = True, calibrate_accel: bool = True):
+    """
+    Runs the IMU for a given period time to calculate
+    and set the gyro and/or accel offset of the Artemis.
+
+    :param imu: The ArtemisOpenLog IMU to run for a given period of time.
+    :param period: The given amount of time to collect samples.
+    :param calibrate_gyro: Boolean to determine if gyro calibration is needed.
+    :param calibrate_accel: Boolean to determine if accel calibration is needed.
+
+    :return: The gyro and/or accel offset/bias that will be used to calibrate the IMU.
+    """
+    assert(isinstance(imu, ArtemisOpenLog)), "The imu must be an ArtemisOpenLog object"
+    assert(isinstance(period, int) and period > 0), "The period must be a valid int"
+    assert(isinstance(calibrate_gyro, bool)), "calibrate_gyro must be a boolean"
+    assert(isinstance(calibrate_accel, bool)), "calibrate_accel must be a boolean"
+    
+    imu.start_imu_threading()
+
+    gyro_x_samples = []
+    gyro_y_samples = []
+    gyro_z_samples = []
+    accel_x_samples = []
+    accel_y_samples = []
+    accel_z_samples = []
+
+    start_time = time.time()
+    while period > time.time() - start_time:
+        if calibrate_gyro and imu.gyro_x and imu.gyro_y and imu.gyro_z:
+            gyro_x_samples.append(imu.gyro['x'])
+            gyro_y_samples.append(imu.gyro['y'])
+            gyro_z_samples.append(imu.gyro['z'])
+        if calibrate_accel and imu.accel_x and imu.accel_y and imu.accel_z:
+            accel_x_samples.append(imu.accel['x'])
+            accel_y_samples.append(imu.accel['y'])
+            accel_z_samples.append(imu.accel['z'])
+        time.sleep(0.01)  # Small delay to avoid excessive CPU usage
+
+    imu.stop_imu_threading()
+
+    if calibrate_gyro:
+        gyro_offset = {
+            'x': np.mean(gyro_x_samples),
+            'y': np.mean(gyro_y_samples),
+            'z': np.mean(gyro_z_samples)
+        }
+        imu.gyro_offset = gyro_offset
+    else:
+        gyro_offset = None
+
+    if calibrate_accel:
+        accel_offset = {
+            'x': np.mean(accel_x_samples),
+            'y': np.mean(accel_y_samples),
+            'z': np.mean(accel_z_samples)
+        }
+        imu.accel_offset = accel_offset
+    else:
+        accel_offset = None
+
+    return gyro_offset, accel_offset
+
 def log_data(imu: ArtemisOpenLog, interval_time, log_type: str):
     """
     Logs the recorded data from the given imu object parameter
@@ -520,7 +612,7 @@ def log_data(imu: ArtemisOpenLog, interval_time, log_type: str):
     ax.set_ylim(-10, 10) 
 
     if log_type == "accel":
-        ax.set_ylabel("Acceleration (mm/s²)")
+        ax.set_ylabel("Acceleration (m/s²)")
         line_ax, = ax.plot([], [], label="aX", color="r")
         line_ay, = ax.plot([], [], label="aY", color="g")
         line_az, = ax.plot([], [], label="aZ", color="b")
