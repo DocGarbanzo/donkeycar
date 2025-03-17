@@ -325,6 +325,11 @@ class ArtemisOpenLog:
         self.gyro_z = deque(maxlen=100)
         self.temp = 0.0
 
+        self.yaw = 0.0
+        self.yaw_values = deque(maxlen=100)  # Deque to store yaw values
+        self.ekf_state = np.zeros(2)  # [yaw, yaw_rate]
+        self.ekf_covariance = np.eye(2)  # Initial covariance matrix
+
         self.connect()
     
     def connect(self):
@@ -399,13 +404,13 @@ class ArtemisOpenLog:
                         
                         # Apply gyro offset if available
                         if self.gyro_offset:
-                            self.gyro = { 
+                            raw_gyro = { 
                                 'x' : float(data_array[5]) - self.gyro_offset['x'], 
                                 'y' : float(data_array[6]) - self.gyro_offset['y'], 
                                 'z' : float(data_array[7]) - self.gyro_offset['z'] 
                             }
                         else:
-                            self.gyro = { 
+                            raw_gyro = { 
                                 'x' : float(data_array[5]), 
                                 'y' : float(data_array[6]), 
                                 'z' : float(data_array[7]) 
@@ -415,6 +420,36 @@ class ArtemisOpenLog:
                         self.gyro_y.append(self.gyro['y'])
                         self.gyro_z.append(self.gyro['z'])
                         self.temp = float(data_array[11])
+
+
+                        # Kalman Filter parameters to smoothen the gyroscope data
+                        # Depending on your system, may need to tune Q and R by trial-and-error
+                        # Found the below parameters to work really well
+                        x = np.zeros(3) 
+                        P = np.eye(3)  
+                        Q = np.eye(3) * 0.001  
+                        R = np.eye(3) * 10 
+                        z = np.array([raw_gyro['x'], raw_gyro['y'], raw_gyro['z']])
+                        x, P = self.kalman_filter_gyro(x, P, z, Q, R)
+
+                        self.gyro = {
+                            'x': x[0],
+                            'y': x[1],
+                            'z': x[2]
+                        }
+
+                        self.gyro_x.append(self.gyro['x'])
+                        self.gyro_y.append(self.gyro['y'])
+                        self.gyro_z.append(self.gyro['z'])
+                        self.temp = float(data_array[11])
+
+                        dt = 0.01  # Assuming a fixed time step for simplicity
+                        mag_yaw = np.arctan2(float(data_array[9]), float(data_array[8]))
+                        # Use the EKF sensor fusion between gyroscope
+                        # and magnometer to get the yaw angle 
+                        self.ekf_gyro_mag(dt, mag_yaw)
+                        self.yaw = self.ekf_state[0]
+                        self.yaw_values.append(self.yaw)
 
             except Exception as e:
                 logger.error(f"Error reading data from Artemis IMU: {e}")
@@ -443,8 +478,35 @@ class ArtemisOpenLog:
             self.read_imu_thread.join()
             logger.info("Stopped IMU data readingt thread")
 
+    def ekf_gyro_mag(self, dt, mag_yaw):
+        """
+        Extended Kalman Filter to predict and update the state based on gyroscope and magnetometer data.
+
+        :param dt: Time step between predictions.
+        :param mag_yaw: Yaw angle from the magnetometer.
+        """
+        assert((isinstance(dt, int) or isinstance(dt, float)) and dt > 0), "dt must be a valid number for EKF"
+        assert(isinstance(mag_yaw, float)), "The yaw angle must be a valid float"
+
+        # Prediction step
+        F = np.array([[1, dt], [0, 1]]) 
+        Q = np.array([[0.01, 0], [0, 0.01]]) 
+
+        self.ekf_state = np.dot(F, self.ekf_state)
+        self.ekf_covariance = np.dot(np.dot(F, self.ekf_covariance), F.T) + Q
+
+        # Update/Correct the yaw angle 
+        H = np.array([[1, 0]])
+        R = np.array([[0.1]]) 
+
+        y = mag_yaw - np.dot(H, self.ekf_state)
+        S = np.dot(np.dot(H, self.ekf_covariance), H.T) + R 
+        K = np.dot(np.dot(self.ekf_covariance, H.T), np.linalg.inv(S))
+
+        self.ekf_state = self.ekf_state + np.dot(K, y)
+        self.ekf_covariance = np.dot((np.eye(2) - np.dot(K, H)), self.ekf_covariance)
+
     def kalman_filter_gyro(self, x, P, z, Q, R):
-        
         """
         Applies 3D Kalman Filter to smoothen the gyroscope data. Must smoothen
         the gyroscope data to get better sensor fusion with the GPS.
@@ -643,7 +705,6 @@ def log_data(imu: ArtemisOpenLog, interval_time, log_type: str):
 
     ani = animation.FuncAnimation(fig, update_plot, interval=interval_time, cache_frame_data=False)
     plt.show()
-
 
 import multiprocessing
 from multiprocessing import Process, Value
