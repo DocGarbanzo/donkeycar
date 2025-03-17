@@ -422,6 +422,41 @@ class ArtemisOpenLog:
         ani = animation.FuncAnimation(fig, update_plot, interval=interval_time, cache_frame_data=False)
         plt.show()
 
+    def kalman_filter_gyro(self, x, P, z, Q, R):
+        
+        """
+        Applies 3D Kalman Filter to smoothen the gyroscope data. Must smoothen
+        the gyroscope data to get better sensor fusion with the GPS.
+
+        :param x: The Initial state that we want to predict (3x1 vector)
+        :param P: The initial uncertainty covariance of our initial data readings (3x3 matrix)
+        :param z: The noisy gyroscope data to smoothen out (3x1 vector)
+        :param Q: Process noise covariance (3x3 matrix)
+        :param R: Measurement noise covariance (3x3 matrix)
+
+        :return: Updated/corrected gyroscope data and covariance uncertainty (x_updated, P_updated)
+        """
+        assert(isinstance(x, np.ndarray) and x.shape == (3,)), "x must be a 3x1 numpy array"
+        assert(isinstance(P, np.ndarray) and P.shape == (3, 3)), "P must be a 3x3 numpy array"
+        assert(isinstance(z, np.ndarray) and z.shape == (3,)), "z must be a 3x1 numpy array"
+        assert(isinstance(Q, np.ndarray) and Q.shape == (3, 3)), "Q must be a 3x3 numpy array"
+        assert(isinstance(R, np.ndarray) and R.shape == (3, 3)), "R must be a 3x3 numpy array"
+
+        # Predict the new gyroscope data
+        F = np.eye(3)
+        x_pred = np.dot(F, x)
+        P_pred = np.dot(np.dot(F,P), F.T) + Q
+
+        # Update/Correct the raw gyroscope data
+        H = np.eye(3)
+        y_residual = z - np.dot(H, x_pred)
+        S = np.dot(np.dot(H, P_pred), H.T) + R
+        K_gain = np.dot(np.dot(P_pred, H.T), np.linalg.inv(S))
+        x_updated = x_pred + np.dot(K_gain, y_residual)
+        P_updated = P_pred - np.dot(np.dot(K_gain, H), P_pred)
+
+        return x_updated, P_updated
+
     def poll(self):
         """
         Calls the read_imu_data() method and polls
