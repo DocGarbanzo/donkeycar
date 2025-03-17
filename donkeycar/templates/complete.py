@@ -266,7 +266,13 @@ def drive(cfg, model_path=None, use_joystick=False, model_type=None,
         s = Sombrero()
 
     #IMU
-    add_imu(V, cfg)
+    imu = add_imu(V, cfg)
+
+    # Add TubWriter to record data
+    inputs = ['cam/image_array', 'imu/acl_x', 'imu/acl_y', 'imu/acl_z', 'imu/gyr_x', 'imu/gyr_y', 'imu/gyr_z', 'imu/yaw']
+    types = ['image_array', 'float', 'float', 'float', 'float', 'float', 'float', 'float']
+    tub = TubWriter(path=cfg.TUB_PATH, inputs=inputs, types=types)
+    V.add(tub, inputs=inputs, outputs=['tub/num_records'], run_condition='recording')
 
 
     # Use the FPV preview, which will show the cropped image output, or the full frame.
@@ -499,12 +505,12 @@ def drive(cfg, model_path=None, use_joystick=False, model_type=None,
         inputs += ['cam/depth_array']
         types += ['gray16_array']
 
-    if cfg.HAVE_IMU or (cfg.CAMERA_TYPE == "D435" and cfg.REALSENSE_D435_IMU):
+    if (cfg.HAVE_IMU and cfg.IMU_SENSOR == 'artemis') or (cfg.CAMERA_TYPE == "D435" and cfg.REALSENSE_D435_IMU):
         inputs += ['imu/acl_x', 'imu/acl_y', 'imu/acl_z',
-            'imu/gyr_x', 'imu/gyr_y', 'imu/gyr_z']
+            'imu/gyr_x', 'imu/gyr_y', 'imu/gyr_z', 'imu/yaw']
 
         types +=['float', 'float', 'float',
-           'float', 'float', 'float']
+           'float', 'float', 'float', 'float']
 
     # rbx
     if cfg.DONKEY_GYM:
@@ -911,13 +917,10 @@ def add_odometry(V, cfg, threaded=True):
 #
 def add_imu(V, cfg):
     imu = None
-    if cfg.HAVE_IMU:
-        from donkeycar.parts.imu import IMU
-
-        imu = IMU(sensor=cfg.IMU_SENSOR, addr=cfg.IMU_ADDRESS,
-                  dlp_setting=cfg.IMU_DLP_CONFIG)
-        V.add(imu, outputs=['imu/acl_x', 'imu/acl_y', 'imu/acl_z',
-                            'imu/gyr_x', 'imu/gyr_y', 'imu/gyr_z'], threaded=True)
+    if cfg.HAVE_IMU and cfg.IMU_SENSOR == 'artemis':
+        from donkeycar.parts.imu import ArtemisOpenLog
+        imu = ArtemisOpenLog(port=cfg.IMU_PORT, baudrate=cfg.IMU_BAUDRATE, timeout=cfg.IMU_TIMEOUT)
+        V.add(imu, outputs=['imu/acl_x', 'imu/acl_y', 'imu/acl_z', 'imu/gyr_x', 'imu/gyr_y', 'imu/gyr_z', 'imu/yaw'], threaded=True)
     return imu
 
 

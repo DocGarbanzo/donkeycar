@@ -8,6 +8,13 @@
 # The update operation will not touch this file.
 # """
 
+# IMU
+HAVE_IMU = True
+IMU_SENSOR = 'artemis'
+IMU_PORT = '/dev/ttyUSB0'
+IMU_BAUDRATE = 115200
+IMU_TIMEOUT = 1
+
 # IMAGE
 IMAGE_W = 192
 IMAGE_H = 144
