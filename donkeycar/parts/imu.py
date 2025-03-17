@@ -9,6 +9,7 @@ import logging
 import imufusion
 
 import pandas as pd
+from scipy.signal import butter, filtfilt
 
 
 logger = logging.getLogger(__name__)
@@ -456,6 +457,26 @@ class ArtemisOpenLog:
         P_updated = P_pred - np.dot(np.dot(K_gain, H), P_pred)
 
         return x_updated, P_updated
+
+    def low_pass_filter_gyro(self, cutoff, freq, data, order=5):
+        """
+        Applies a lowpass filter for the imu gyro data.
+
+        :param cutoff: The cutoff frequency for the low-pass filter (in Hz).  
+        :param freq: The sampling frequency of the data (in Hz).  
+        :param data: A list of gyroscope data to be filtered.   
+        :param order: The order of the Butterworth filter (higher values give a steeper filter).
+            
+        :return: The filtered gyroscope data with high-frequency noise removed.
+        """
+        assert((isinstance(cutoff, int) or isinstance(cutoff, float)) and cutoff > 0), "The cutoff for filter must be valid number"
+        assert((isinstance(freq, int) or isinstance(freq, float)) and freq > 0), "The frequency for filter must be valid number"
+        assert(isinstance(data, list) and len(data) > 0), "The input data must be a valid list"
+        assert(isinstance(order, int) and order > 0), "Order must be an int greater than 5"
+        nyquist = 0.5 * freq
+        normal_cuttoff = cutoff / nyquist
+        b, a = butter(order, normal_cuttoff, btype='low', analog=False)
+        return filtfilt(b, a, data)
 
     def poll(self):
         """
