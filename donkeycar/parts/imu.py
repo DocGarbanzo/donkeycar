@@ -667,7 +667,7 @@ def log_data(imu: ArtemisOpenLog, interval_time, log_type: str):
     """
     assert(isinstance(imu, ArtemisOpenLog)), "imu parameter must be an ArtemisOpenLog object"
     assert((isinstance(interval_time, int) or isinstance(interval_time, float)) and interval_time > 0), "Interval time must be a valid number"
-    assert(isinstance(log_type, str) and (log_type == 'accel' or log_type == 'gyro')), "log_type argument must be a string of either 'accel' or 'gyro'"
+    assert(isinstance(log_type, str) and (log_type == 'accel' or 'gyro')), "log_type argument must be a string of either 'accel' or 'gyro'"
 
     fig, ax = plt.subplots()
     ax.set_xlabel("Time")
@@ -681,9 +681,9 @@ def log_data(imu: ArtemisOpenLog, interval_time, log_type: str):
         ax.legend()
 
         def update_plot(_):
-            line_ax.set_data(range(len(imu.accel_x)), imu.accel_x)
-            line_ay.set_data(range(len(imu.accel_y)), imu.accel_y)
-            line_az.set_data(range(len(imu.accel_z)), imu.accel_z)
+            line_ax.set_data(range(len(imu.accel_x)), list(imu.accel_x))
+            line_ay.set_data(range(len(imu.accel_y)), list(imu.accel_y))
+            line_az.set_data(range(len(imu.accel_z)), list(imu.accel_z))
 
             ax.set_xlim(0, len(imu.accel_x))
             return line_ax, line_ay, line_az
@@ -696,14 +696,14 @@ def log_data(imu: ArtemisOpenLog, interval_time, log_type: str):
         ax.legend()
 
         def update_plot(_):
-            line_gx.set_data(range(len(imu.gyro_x)), imu.gyro_x)
-            line_gy.set_data(range(len(imu.gyro_y)), imu.gyro_y)
-            line_gz.set_data(range(len(imu.gyro_z)), imu.gyro_z)
+            line_gx.set_data(range(len(imu.gyro_x)), list(imu.gyro_x))
+            line_gy.set_data(range(len(imu.gyro_y)), list(imu.gyro_y))
+            line_gz.set_data(range(len(imu.gyro_z)), list(imu.gyro_z))
 
             ax.set_xlim(0, len(imu.gyro_x)) 
             return line_gx, line_gy, line_gz
 
-    ani = animation.FuncAnimation(fig, update_plot, interval=interval_time, cache_frame_data=False)
+    ani = animation.FuncAnimation(fig, update_plot, interval=interval_time, blit=True, cache_frame_data=False)
     plt.show()
 
 import multiprocessing
