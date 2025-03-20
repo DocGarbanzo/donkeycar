@@ -331,6 +331,70 @@ class ArtemisOpenLog:
         except KeyboardInterrupt:
             logger.info("\nExiting...")
 
+    def calibrate(self):
+    logger.info('Calibrating Artemis IMU ...')
+    num_loops = 200
+    gyro = np.zeros(3)
+    accel = np.zeros(3)
+    accel_norm = 0
+    mag_samples = []  # Collect raw magnetometer readings
+    
+    # Warm-up phase: discard initial readings
+    for _ in range(num_loops // 2):
+        self.poll()
+    
+    tic = time.time()
+    for _ in range(num_loops):
+        self.poll()
+        # Accumulate gyroscope readings
+        gyro += np.array([self.gyro['x'], self.gyro['y'], self.gyro['z']])
+        # Accumulate accelerometer readings
+        accel += np.array([self.accel['x'], self.accel['y'], self.accel['z']])
+        # Accumulate the norm of the acceleration
+        accel_norm += np.linalg.norm([self.accel['x'], self.accel['y'], self.accel['z']])
+        # Save current (raw calibrated in poll() but before magnetometer calibration is applied) magnetometer reading
+        mag_samples.append(np.array([self.mag['x'], self.mag['y'], self.mag['z']]))
+        
+        toc = time.time()
+        if toc - tic < 1 / self.sample_rate:
+            time.sleep(1 / self.sample_rate - (toc - tic))
+        tic = time.time()
+    
+    # Compute biases for gyroscope and accelerometer
+    self.gyro_bias = gyro / num_loops
+    self.accel_bias = accel / num_loops
+    self.accel_norm = accel_norm / num_loops
+    logger.info(f'Initial acceleration bias: {self.accel_bias}, norm: {self.accel_norm}')
+    
+    # Magnetometer calibration:
+    # Compute hard iron bias using the median of collected samples
+    mag_array = np.array(mag_samples)
+    self.mag_bias = np.median(mag_array, axis=0)
+    # Bias-correct the magnetometer readings
+    corrected = mag_array - self.mag_bias
+    # Calculate half-range for each axis
+    max_vals = np.max(corrected, axis=0)
+    min_vals = np.min(corrected, axis=0)
+    half_range = (max_vals - min_vals) / 2.0
+    # Compute an average half-range as the target radius
+    avg_half_range = np.mean(half_range)
+    # Scale factors: target divided by each axis' half-range
+    scale_factors = avg_half_range / half_range
+    # Build the soft iron correction matrix (diagonal)
+    self.mag_scale_matrix = np.diag(scale_factors)
+    
+    logger.info(f'Magnetometer bias: {self.mag_bias}')
+    logger.info(f'Magnetometer scale matrix: {self.mag_scale_matrix}')
+    
+    # Reset kinematic variables (if used elsewhere in your code)
+    self.pos = np.zeros(3)
+    self.speed = np.zeros(3)
+    if hasattr(self, 'path'):
+        self.path.clear()
+    self.time = time.time()
+    
+    logger.info('Artemis IMU calibrated.')
+
     def poll(self):
         """
         Reads the IMU data. Sets the Artemis IMU object fields to the data readings.
