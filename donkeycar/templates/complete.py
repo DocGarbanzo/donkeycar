@@ -922,8 +922,13 @@ def add_imu(V: Vehicle, cfg):
     imu = None
     if cfg.HAVE_IMU and cfg.IMU_SENSOR == 'artemis':
         from donkeycar.parts.imu import ArtemisOpenLog
-        # Might have to add the MAG_OFFSET
-        imu = ArtemisOpenLog(port=cfg.IMU_PORT, baudrate=cfg.IMU_BAUDRATE, timeout=cfg.IMU_TIMEOUT)
+        imu = ArtemisOpenLog(
+            port=cfg.IMU_PORT,
+            baudrate=cfg.IMU_BAUDRATE,
+            timeout=cfg.IMU_TIMEOUT,
+            mag_bias=cfg.IMU_MAG_BIAS,
+            mag_scale_matrix=cfg.IMU_MAG_SCALE_MATRIX
+        )
         V.add(imu, outputs=['imu/euler', 'imu/accel', 'imu/gyro'], threaded=True)
     return imu
 

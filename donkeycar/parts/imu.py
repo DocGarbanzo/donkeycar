@@ -301,7 +301,7 @@ class BNO055Ada:
             logger.info('BNO055050 shutdown - saved path to imu.csv')
 
 class ArtemisOpenLog:
-    def __init__(self, port, baudrate, timeout):
+    def __init__(self, port, baudrate, timeout, mag_bias=None, mag_scale_matrix=None):
         assert(isinstance(port, str)), "Port must be a valid string input"
         assert(isinstance(baudrate, int) and baudrate > 0), "Baudrate must be valid int"
         assert((isinstance(timeout, int) or isinstance(timeout, float)) and timeout > 0), "timeout time must be valid number greater than 0" 
@@ -311,6 +311,8 @@ class ArtemisOpenLog:
         self.gyro_smooth = { 'x' : 0, 'y': 0, 'z': 0}
         self.euler = { 'x': 0, 'y': 0, 'z': 0}
         self.mag = { 'x': 0, 'y': 0, 'z': 0}
+        self.mag_bias = np.array(mag_bias) if mag_bias else np.zeros(3)
+        self.mag_scale_matrix = np.array(mag_scale_matrix) if mag_scale_matrix else np.eye(3)
         self.accel_x = deque(maxlen=100)
         self.accel_y = deque(maxlen=100)
         self.accel_z = deque(maxlen=100)
@@ -337,7 +339,10 @@ class ArtemisOpenLog:
         try:
             self.accel = { 'x' : float(data[2]) * 0.00981, 'y' : float(data[3]) * 0.00981, 'z' : float(data[4]) * 0.00981 }
             self.gyro = { 'x': float(data[5]), 'y': float(data[6]), 'z': float(data[7]) }
-            self.mag = { 'x': float(data[8]), 'y': float(data[9]), 'z': float(data[10]) }
+            raw_mag = np.array([float(data[8]), float(data[9]), float(data[10])])
+            # Apply calibration to magnetometer data
+            calibrated_mag = np.dot(self.mag_scale_matrix, raw_mag - self.mag_bias)
+            self.mag = { 'x': calibrated_mag[0], 'y': calibrated_mag[1], 'z': calibrated_mag[2] }
             # Noisy gyroscope data
             self.gyro_x.append(self.gyro['x'])
             self.gyro_y.append(self.gyro['y'])

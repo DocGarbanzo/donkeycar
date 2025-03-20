@@ -12,7 +12,10 @@
 HAVE_IMU = True
 IMU_SENSOR = 'artemis'
 IMU_PORT = '/dev/ttyUSB0'
-IMU_MAG_OFFSET = [0.0,0.0,0.0]
+# M_cal = A^-1 * (M - b)
+# A is scale factor
+IMU_MAG_BIAS = [0.0,0.0,0.0]
+IMU_MAG_SCALE_MATRIX = [[0.0,0.0,0.0],[0.0,0.0,0.0],[0.0,0.0,0.0]]
 IMU_BAUDRATE = 115200
 IMU_TIMEOUT = 1
 
