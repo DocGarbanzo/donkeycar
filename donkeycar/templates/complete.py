@@ -42,6 +42,7 @@ from donkeycar.parts.explode import ExplodeDict
 from donkeycar.parts.transform import Lambda
 from donkeycar.parts.pipe import Pipe
 from donkeycar.utils import *
+from donkeycar.vehicle import Vehicle
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -269,8 +270,8 @@ def drive(cfg, model_path=None, use_joystick=False, model_type=None,
     imu = add_imu(V, cfg)
 
     # Add TubWriter to record data
-    inputs = ['cam/image_array', 'imu/acl_x', 'imu/acl_y', 'imu/acl_z', 'imu/gyr_x', 'imu/gyr_y', 'imu/gyr_z', 'imu/yaw']
-    types = ['image_array', 'float', 'float', 'float', 'float', 'float', 'float', 'float']
+    inputs = ['cam/image_array', 'imu/euler', 'imu/accel', 'imu/gyro']
+    types = ['image_array', 'dict[str, float]', 'dict[str, float]', 'dict[str, float]']
     tub = TubWriter(path=cfg.TUB_PATH, inputs=inputs, types=types)
     V.add(tub, inputs=inputs, outputs=['tub/num_records'], run_condition='recording')
 
@@ -387,7 +388,8 @@ def drive(cfg, model_path=None, use_joystick=False, model_type=None,
                 def run(self, *components):
                     return components
 
-            V.add(Vectorizer, inputs=['imu/acl_x', 'imu/acl_y', 'imu/acl_z',
+            V.add(Vectorizer, inputs=['imu/euler_x', 'imu/euler_y', 'imu/euler_z',
+                                      'imu/acl_x', 'imu/acl_y', 'imu/acl_z',
                                       'imu/gyr_x', 'imu/gyr_y', 'imu/gyr_z'],
                   outputs=['imu_array'])
 
@@ -506,10 +508,11 @@ def drive(cfg, model_path=None, use_joystick=False, model_type=None,
         types += ['gray16_array']
 
     if (cfg.HAVE_IMU and cfg.IMU_SENSOR == 'artemis') or (cfg.CAMERA_TYPE == "D435" and cfg.REALSENSE_D435_IMU):
-        inputs += ['imu/acl_x', 'imu/acl_y', 'imu/acl_z',
+        inputs += ['imu/euler_x', 'imu/euler_y', 'imu/euler_z',
+            'imu/acl_x', 'imu/acl_y', 'imu/acl_z',
             'imu/gyr_x', 'imu/gyr_y', 'imu/gyr_z', 'imu/yaw']
 
-        types +=['float', 'float', 'float',
+        types +=['float', 'float', 'float', 'float', 'float', 'float',
            'float', 'float', 'float', 'float']
 
     # rbx
@@ -915,12 +918,13 @@ def add_odometry(V, cfg, threaded=True):
 #
 # IMU setup
 #
-def add_imu(V, cfg):
+def add_imu(V: Vehicle, cfg):
     imu = None
     if cfg.HAVE_IMU and cfg.IMU_SENSOR == 'artemis':
         from donkeycar.parts.imu import ArtemisOpenLog
+        # Might have to add the MAG_OFFSET
         imu = ArtemisOpenLog(port=cfg.IMU_PORT, baudrate=cfg.IMU_BAUDRATE, timeout=cfg.IMU_TIMEOUT)
-        V.add(imu, outputs=['imu/acl_x', 'imu/acl_y', 'imu/acl_z', 'imu/gyr_x', 'imu/gyr_y', 'imu/gyr_z', 'imu/yaw'], threaded=True)
+        V.add(imu, outputs=['imu/euler', 'imu/accel', 'imu/gyro'], threaded=True)
     return imu
 
 

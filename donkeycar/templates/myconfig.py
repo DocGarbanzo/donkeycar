@@ -12,6 +12,7 @@
 HAVE_IMU = True
 IMU_SENSOR = 'artemis'
 IMU_PORT = '/dev/ttyUSB0'
+IMU_MAG_OFFSET = [0.0,0.0,0.0]
 IMU_BAUDRATE = 115200
 IMU_TIMEOUT = 1
 
