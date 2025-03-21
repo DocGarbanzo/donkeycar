@@ -301,30 +301,36 @@ class BNO055Ada:
             logger.info('BNO055050 shutdown - saved path to imu.csv')
 
 class ArtemisOpenLog:
-    def __init__(self, port, baudrate, timeout, mag_bias=None, mag_scale_matrix=None):
+    def __init__(self, port, baudrate, timeout, mag_bias=None, mag_scale_matrix=None, sample_rate=40):
         assert(isinstance(port, str)), "Port must be a valid string input"
         assert(isinstance(baudrate, int) and baudrate > 0), "Baudrate must be valid int"
-        assert((isinstance(timeout, int) or isinstance(timeout, float)) and timeout > 0), "timeout time must be valid number greater than 0" 
+        assert((isinstance(timeout, int) or isinstance(timeout, float)) and timeout > 0), "Timeout must be a valid number greater than 0"
         self.ser = None
-        self.accel = { 'x': 0, 'y': 0, 'z': 0}
-        self.gyro = { 'x' : 0, 'y': 0, 'z': 0}
-        self.gyro_smooth = { 'x' : 0, 'y': 0, 'z': 0}
-        self.euler = { 'x': 0, 'y': 0, 'z': 0}
-        self.mag = { 'x': 0, 'y': 0, 'z': 0}
-        self.mag_bias = np.array(mag_bias) if mag_bias else np.zeros(3)
-        self.mag_scale_matrix = np.array(mag_scale_matrix) if mag_scale_matrix else np.eye(3)
+        self.accel = {'x': 0, 'y': 0, 'z': 0}
+        self.gyro = {'x': 0, 'y': 0, 'z': 0}
+        self.gyro_smooth = {'x': 0, 'y': 0, 'z': 0}
+        self.euler = {'x': 0, 'y': 0, 'z': 0}
+        self.mag = {'x': 0, 'y': 0, 'z': 0}
+        self.mag_bias = np.array(mag_bias) if mag_bias is not None else np.zeros(3)
+        self.mag_scale_matrix = np.array(mag_scale_matrix) if mag_scale_matrix is not None else np.eye(3)
         self.accel_x = deque(maxlen=100)
         self.accel_y = deque(maxlen=100)
         self.accel_z = deque(maxlen=100)
-        # Gyroscope data is in degrees per second
-        self.gyro_x_s = deque(maxlen=100)
-        self.gyro_y_s = deque(maxlen=100)
-        self.gyro_z_s = deque(maxlen=100)
         self.gyro_x = deque(maxlen=100)
         self.gyro_y = deque(maxlen=100)
         self.gyro_z = deque(maxlen=100)
+        self.gyro_x_s = deque(maxlen=100)
+        self.gyro_y_s = deque(maxlen=100)
+        self.gyro_z_s = deque(maxlen=100)
+        self.pos = np.zeros(3)
+        self.speed = np.zeros(3)
+        self.speed_drift = np.zeros(3)
+        self.path = []
+        self.time = None
+        self.sample_rate = sample_rate
+
         try:
-            self.ser = serial.Serial(port, baudrate, timeout=timeout)  # Fix: pass timeout as a keyword argument
+            self.ser = serial.Serial(port, baudrate, timeout=timeout)
             logger.info(f"Connected to {port}")
         except serial.SerialException as e:
             logger.error(f"Error: {e}")
@@ -332,103 +338,123 @@ class ArtemisOpenLog:
             logger.info("\nExiting...")
 
     def calibrate(self):
-    logger.info('Calibrating Artemis IMU ...')
-    num_loops = 200
-    gyro = np.zeros(3)
-    accel = np.zeros(3)
-    accel_norm = 0
-    mag_samples = []  # Collect raw magnetometer readings
-    
-    # Warm-up phase: discard initial readings
-    for _ in range(num_loops // 2):
-        self.poll()
-    
-    tic = time.time()
-    for _ in range(num_loops):
-        self.poll()
-        # Accumulate gyroscope readings
-        gyro += np.array([self.gyro['x'], self.gyro['y'], self.gyro['z']])
-        # Accumulate accelerometer readings
-        accel += np.array([self.accel['x'], self.accel['y'], self.accel['z']])
-        # Accumulate the norm of the acceleration
-        accel_norm += np.linalg.norm([self.accel['x'], self.accel['y'], self.accel['z']])
-        # Save current (raw calibrated in poll() but before magnetometer calibration is applied) magnetometer reading
-        mag_samples.append(np.array([self.mag['x'], self.mag['y'], self.mag['z']]))
+        logger.info('Calibrating Artemis IMU ...')
+        num_loops = 200
+        gyro = np.zeros(3)
+        accel = np.zeros(3)
+        accel_norm = 0
+        mag_samples = []  # Collect raw magnetometer readings
         
-        toc = time.time()
-        if toc - tic < 1 / self.sample_rate:
-            time.sleep(1 / self.sample_rate - (toc - tic))
+        # Warm-up phase: discard initial readings
+        for _ in range(num_loops // 2):
+            self.poll()
+            time.sleep(1.0 / self.sample_rate)
+        
         tic = time.time()
-    
-    # Compute biases for gyroscope and accelerometer
-    self.gyro_bias = gyro / num_loops
-    self.accel_bias = accel / num_loops
-    self.accel_norm = accel_norm / num_loops
-    logger.info(f'Initial acceleration bias: {self.accel_bias}, norm: {self.accel_norm}')
-    
-    # Magnetometer calibration:
-    # Compute hard iron bias using the median of collected samples
-    mag_array = np.array(mag_samples)
-    self.mag_bias = np.median(mag_array, axis=0)
-    # Bias-correct the magnetometer readings
-    corrected = mag_array - self.mag_bias
-    # Calculate half-range for each axis
-    max_vals = np.max(corrected, axis=0)
-    min_vals = np.min(corrected, axis=0)
-    half_range = (max_vals - min_vals) / 2.0
-    # Compute an average half-range as the target radius
-    avg_half_range = np.mean(half_range)
-    # Scale factors: target divided by each axis' half-range
-    scale_factors = avg_half_range / half_range
-    # Build the soft iron correction matrix (diagonal)
-    self.mag_scale_matrix = np.diag(scale_factors)
-    
-    logger.info(f'Magnetometer bias: {self.mag_bias}')
-    logger.info(f'Magnetometer scale matrix: {self.mag_scale_matrix}')
-    
-    # Reset kinematic variables (if used elsewhere in your code)
-    self.pos = np.zeros(3)
-    self.speed = np.zeros(3)
-    if hasattr(self, 'path'):
+        for _ in range(num_loops):
+            self.poll()
+            # Accumulate gyroscope readings
+            gyro += np.array([self.gyro['x'], self.gyro['y'], self.gyro['z']])
+            # Accumulate accelerometer readings
+            accel += np.array([self.accel['x'], self.accel['y'], self.accel['z']])
+            # Accumulate the norm of the acceleration
+            accel_norm += np.linalg.norm([self.accel['x'], self.accel['y'], self.accel['z']])
+            # Save raw magnetometer reading
+            mag_samples.append(np.array([self.mag['x'], self.mag['y'], self.mag['z']]))
+            
+            toc = time.time()
+            if toc - tic < 1.0 / self.sample_rate:
+                time.sleep(1.0 / self.sample_rate - (toc - tic))
+            tic = time.time()
+        
+        # Compute biases for gyroscope and accelerometer
+        self.gyro_bias = gyro / num_loops
+        self.accel_bias = accel / num_loops
+        self.accel_norm = accel_norm / num_loops
+        logger.info(f'Initial acceleration bias: {self.accel_bias}, norm: {self.accel_norm}')
+        
+        # Magnetometer calibration:
+        mag_array = np.array(mag_samples)
+        # Hard iron correction: use the median for each axis
+        self.mag_bias = np.median(mag_array, axis=0)
+        # Bias-correct the magnetometer readings
+        corrected = mag_array - self.mag_bias
+        # Calculate half-range for each axis
+        max_vals = np.max(corrected, axis=0)
+        min_vals = np.min(corrected, axis=0)
+        half_range = (max_vals - min_vals) / 2.0
+        # Average half-range as the target sphere radius
+        avg_half_range = np.mean(half_range)
+        # Scale factors: target divided by each axis' half-range
+        scale_factors = avg_half_range / half_range
+        # Build the diagonal soft iron correction matrix
+        self.mag_scale_matrix = np.diag(scale_factors)
+        
+        logger.info(f'Magnetometer bias: {self.mag_bias}')
+        logger.info(f'Magnetometer scale matrix: {self.mag_scale_matrix}')
+        
+        # Reset kinematic variables
+        self.pos = np.zeros(3)
+        self.speed = np.zeros(3)
         self.path.clear()
-    self.time = time.time()
-    
-    logger.info('Artemis IMU calibrated.')
+        self.time = time.time()
+        
+        logger.info('Artemis IMU calibrated.')
 
     def poll(self):
         """
-        Reads the IMU data. Sets the Artemis IMU object fields to the data readings.
+        Reads the IMU data from the serial port and updates the internal fields.
         """
         data = self.ser.readline().decode('utf-8').strip().split(",")
         try:
-            self.accel = { 'x' : float(data[2]) * 0.00981, 'y' : float(data[3]) * 0.00981, 'z' : float(data[4]) * 0.00981 }
-            self.gyro = { 'x': float(data[5]), 'y': float(data[6]), 'z': float(data[7]) }
+            self.accel = {
+                'x': float(data[2]) * 0.00981,
+                'y': float(data[3]) * 0.00981,
+                'z': float(data[4]) * 0.00981
+            }
+            self.gyro = {
+                'x': float(data[5]),
+                'y': float(data[6]),
+                'z': float(data[7])
+            }
             raw_mag = np.array([float(data[8]), float(data[9]), float(data[10])])
-            # Apply calibration to magnetometer data
+            # Apply calibration to magnetometer data:
             calibrated_mag = np.dot(self.mag_scale_matrix, raw_mag - self.mag_bias)
-            self.mag = { 'x': calibrated_mag[0], 'y': calibrated_mag[1], 'z': calibrated_mag[2] }
-            # Noisy gyroscope data
+            self.mag = {
+                'x': calibrated_mag[0],
+                'y': calibrated_mag[1],
+                'z': calibrated_mag[2]
+            }
             self.gyro_x.append(self.gyro['x'])
             self.gyro_y.append(self.gyro['y'])
             self.gyro_z.append(self.gyro['z'])
-
+    
+            # EKF sensor fusion for orientation
             ekf = ekf_imu.EKF_IMU(dt=0.01)
-            g = np.array([v for v in self.gyro.values()])
+            g = np.array(list(self.gyro.values()))
             ekf.predict(g)
-            a = np.array([v for v in self.accel.values()])
-            m = np.array([v for v in self.mag.values()])
-            ekf.update(a, m) 
+            a = np.array(list(self.accel.values()))
+            m = np.array(list(self.mag.values()))
+            ekf.update(a, m)
             euls = ekf.get_euler_angles()
-            self.euler = { 'x' : float(euls[0]), 'y': float(euls[1]), 'z': float(euls[2])}
-
-            # Smooth gyroscope data
-            x = np.zeros(3) 
-            P = np.eye(3)  
-            Q = np.eye(3) * 0.001  
-            R = np.eye(3) * 10 
+            self.euler = {
+                'x': float(euls[0]),
+                'y': float(euls[1]),
+                'z': float(euls[2])
+            }
+    
+            # Smooth gyroscope data using a 3D Kalman filter
+            x = np.zeros(3)
+            P = np.eye(3)
+            Q = np.eye(3) * 0.001
+            R = np.eye(3) * 10
             z = np.array([self.gyro['x'], self.gyro['y'], self.gyro['z']])
             x, P = self.kalman_filter_gyro(x, P, z, Q, R)
-            self.gyro_smooth = { 'x': x[0], 'y': x[1], 'z': x[2] }
+            self.gyro_smooth = {
+                'x': x[0],
+                'y': x[1],
+                'z': x[2]
+            }
             self.gyro_x_s.append(self.gyro_smooth['x'])
             self.gyro_y_s.append(self.gyro_smooth['y'])
             self.gyro_z_s.append(self.gyro_smooth['z'])
@@ -440,61 +466,60 @@ class ArtemisOpenLog:
     
     def kalman_filter_gyro(self, x, P, z, Q, R):
         """
-        Applies 3D Kalman Filter to smoothen the gyroscope data. Must smoothen
-        the gyroscope data to get better sensor fusion with the GPS.
-
-        :param x: The Initial state that we want to predict (3x1 vector)
-        :param P: The initial uncertainty covariance of our initial data readings (3x3 matrix)
-        :param z: The noisy gyroscope data to smoothen out (3x1 vector)
-        :param Q: Process noise covariance (3x3 matrix)
-        :param R: Measurement noise covariance (3x3 matrix)
-
-        :return: Updated/corrected gyroscope data and covariance uncertainty (x_updated, P_updated)
+        Applies a 3D Kalman Filter to smooth the gyroscope data.
+    
+        :param x: Initial state (3x1 vector) as a NumPy array.
+        :param P: Initial covariance matrix (3x3).
+        :param z: Measured gyro data (3x1 vector) as a NumPy array.
+        :param Q: Process noise covariance (3x3).
+        :param R: Measurement noise covariance (3x3).
+        :return: Tuple (x_updated, P_updated) with updated state and covariance.
         """
-        assert(isinstance(x, np.ndarray) and x.shape == (3,)), "x must be a 3x1 numpy array"
-        assert(isinstance(P, np.ndarray) and P.shape == (3, 3)), "P must be a 3x3 numpy array"
-        assert(isinstance(z, np.ndarray) and z.shape == (3,)), "z must be a 3x1 numpy array"
-        assert(isinstance(Q, np.ndarray) and Q.shape == (3, 3)), "Q must be a 3x3 numpy array"
-        assert(isinstance(R, np.ndarray) and R.shape == (3, 3)), "R must be a 3x3 numpy array"
-
-        # Predict the new gyroscope data
+        assert(isinstance(x, np.ndarray) and x.shape == (3,))
+        assert(isinstance(P, np.ndarray) and P.shape == (3, 3))
+        assert(isinstance(z, np.ndarray) and z.shape == (3,))
+        assert(isinstance(Q, np.ndarray) and Q.shape == (3, 3))
+        assert(isinstance(R, np.ndarray) and R.shape == (3, 3))
+    
         F = np.eye(3)
         x_pred = np.dot(F, x)
-        P_pred = np.dot(np.dot(F,P), F.T) + Q
-
-        # Update/Correct the raw gyroscope data
+        P_pred = np.dot(np.dot(F, P), F.T) + Q
         H = np.eye(3)
         y_residual = z - np.dot(H, x_pred)
         S = np.dot(np.dot(H, P_pred), H.T) + R
         K_gain = np.dot(np.dot(P_pred, H.T), np.linalg.inv(S))
         x_updated = x_pred + np.dot(K_gain, y_residual)
         P_updated = P_pred - np.dot(np.dot(K_gain, H), P_pred)
-
         return x_updated, P_updated
-
+    
+    def get_linear_acceleration_earth(self):
+        """
+        Converts the accelerometer reading from the body frame to the Earth frame
+        and subtracts gravity to yield the net (linear) acceleration.
+    
+        Returns:
+            linear_acc (numpy array): The net acceleration vector in the Earth frame.
+        """
+        # Create a numpy array from body-frame acceleration values.
+        acc_body = np.array([self.accel['x'], self.accel['y'], self.accel['z']])
+        # Use the rotation matrix from the EKF if available (self.matrix); else, assume identity.
+        if hasattr(self, 'matrix') and self.matrix is not None:
+            acc_earth = np.dot(self.matrix, acc_body)
+        else:
+            acc_earth = acc_body.copy()
+        # Gravity vector: assuming Down is positive in Earth frame.
+        gravity = np.array([0, 0, 9.81])
+        linear_acc = acc_earth - gravity
+        return linear_acc
+    
     def run(self):
-        """
-        Calls the poll() method to read the IMU data.
-
-        :return: dict of floats, dict of floats
-            Gyroscope readings as a dictionary, Acceleration readings as a dictionary
-        """
         self.poll()
         return self.euler, self.accel, self.gyro
-
+    
     def run_threaded(self):
-        """
-        Returns the gyroscope readings and the acceleration readings in a thread.
-
-        :return: dict of floats, dict of floats
-            Gyroscope readings as a dictionary, Acceleration readings as a dictionary
-        """
         return self.euler, self.accel, self.gyro
-
+    
     def shutdown(self):
-        """
-        Closes the serial communication with the Artemis IMU.
-        """
         if self.ser:
             self.ser.close()
             logger.info("Closed serial connection")
