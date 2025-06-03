@@ -255,7 +255,7 @@ class LEDStatusPi:
         if mode == 0:
             self.pulse_color = ColorRGB.GREEN
         elif mode == 1:
-            self.pulse_color = ColorRGB.ORANGE
+            self.pulse_color = ColorRGB.YELLOW
         logger.info((f"Mode changed to {mode}"))
         self.blink_continuous()
         self.mode = mode
