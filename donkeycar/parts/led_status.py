@@ -269,7 +269,7 @@ class LEDStatusPi:
             t = dict(on_color=ColorRGB.RED, on_time=0.2, off_time=0.2, n=3)
         if wipe:
             logger.info(f"Wipe detected")
-            t = dict(on_color=ColorRGB.PURPLE, on_time=0.1, off_time=0.1, n=4)
+            t = dict(on_color=ColorRGB.BLUE, on_time=0.05, off_time=0.05, n=5)
         if t:
             self.queue.put(t)
 
