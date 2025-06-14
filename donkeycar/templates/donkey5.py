@@ -31,16 +31,17 @@ import logging
 
 import donkeycar as dk
 import donkeycar.parts
-from donkeycar.parts.actuator import RCReceiver, PulseController, PWMSteering, \
-    PWMThrottle, ModeSwitch
+from donkeycar.parts.actuator import EStop, RCReceiver, PulseController, PWMSteering, \
+    PWMThrottle, ModeSwitch, ThrottleOffSwitch
 from donkeycar.parts.led_status import LEDStatusPi
 from donkeycar.parts.pico import OdometerPico
 from donkeycar.parts.pins import pwm_pin_by_id, output_pin_by_id
-from donkeycar.parts.sensor import LapTimer
+from donkeycar.parts.sensor import IsThrottledChecker, LapTimer
 from donkeycar.parts.controller import WebFpv
+from donkeycar.parts.tub_v2 import TubWiper, TubWriter
 from donkeycar.pipeline.database import update_config_from_database
 from donkeycar.parts.file_watcher import FileWatcher
-from donkeycar.parts.transform import ControlSwitch, ImuCombinerNormaliser, \
+from donkeycar.parts.transform import ControlSwitch, ImuCombinerNormaliser, RecordingCondition, \
     SimplePidController, SpeedRescaler
 from donkeycar.parts.image_transformations import ImageTransformations
 
@@ -81,7 +82,6 @@ class SliderSorter:
 CAM_IMG = 'cam/image_array'
 
 
-# noinspection LanguageDetectionInspection
 def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
           web=False, fpv=False, no_tub=False, verbose=False):
     if verbose:
@@ -90,6 +90,8 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     car = dk.vehicle.Vehicle()
     car.mem['mode'] = 0
     car_frequency = cfg.DRIVE_LOOP_HZ
+    # handle record on ai: only record if cam and auto-pilot is on
+    record_on_ai = getattr(cfg, 'RECORD_DURING_AI', False)
 
     # add camera ---------------------------------------------------------------
     if not no_cam:
@@ -119,6 +121,10 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     # # add mpu ------------------------------------------------------------------
     # mpu = Mpu6050Ada()
     # car.add(mpu, outputs=['car/accel', 'car/gyro'], threaded=True)
+
+    # add fpv parts ------------------------------------------------------------
+    if web:
+        car.add(WebFpv(), inputs=[CAM_IMG], threaded=True)
 
     # load model if present ----------------------------------------------------
     if model_path is not None:
@@ -190,7 +196,8 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     pwm_steering = PWMSteering(controller=steering_pulse,
                                left_pulse=cfg.STEERING_LEFT_PWM,
                                right_pulse=cfg.STEERING_RIGHT_PWM)
-    car.add(pwm_steering, inputs=['user/angle'])
+    steering_in = 'pilot/angle' if model_path else 'user/angle'
+    car.add(pwm_steering, inputs=[steering_in], threaded=True)
 
     throttle_pin = pwm_pin_by_id(cfg.THROTTLE_CHANNEL)
     throttle_pulse = PulseController(pwm_pin=throttle_pin)
@@ -198,10 +205,63 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
                                max_pulse=cfg.THROTTLE_FORWARD_PWM,
                                zero_pulse=cfg.THROTTLE_STOPPED_PWM,
                                min_pulse=cfg.THROTTLE_REVERSE_PWM)
-    car.add(pwm_throttle, inputs=['user/throttle'])
+    # feed signal which is either rc (user) or ai
+    throttle_input = 'pid/throttle' if use_pid else 'throttle'
+    car.add(pwm_throttle, inputs=[throttle_input], threaded=True)
+
+    car.add(EStop(car_frequency),
+            inputs=[throttle_input, 'user/mode'],
+            outputs=[throttle_input, 'user/estop'])
+    
+    # if we want to record a tub -----------------------------------------------
+    if not no_cam and (model_path is None or record_on_ai) and not no_tub:
+        static_condition = None if model_path is None else record_on_ai
+        rec_cond = RecordingCondition(static_condition=static_condition)
+        rec_inputs = ['user/throttle_on', 'user/throttle'] \
+            if model_path is None else ['dummy', 'pilot_or_user/speed']
+        car.add(rec_cond, inputs=rec_inputs, outputs=['recording'])
+
+        # add tub to save data
+        inputs = [CAM_IMG, 'user/angle', 'user/throttle', 'pilot/angle',
+                  'pilot/throttle', 'user/wiper_on', 'user/mode',
+                  'car/speed', 'car/inst_speed', 'car/distance',
+                  'car/m_in_lap', 'car/lap', 'car/accel', 'car/gyro']
+        types = ['image_array', 'float', 'float', 'float',
+                 'float', 'bool', 'int',
+                 'float', 'float', 'float',
+                 'float', 'int', 'vector', 'vector']
+        # for backward compatibility remove user/wiper_on which was not in
+        tub_writer = TubWriter(base_path=cfg.DATA_PATH, inputs=inputs,
+                               types=types, lap_timer=lap)
+        car.add(tub_writer, inputs=inputs, outputs=["tub/num_records"],
+                run_condition='recording')
+
+        # add a tub wiper that is triggered by channel 3 on the RC, but only
+        # if we don't use channel 3 for switching between ai & manual
+        if model_path is None:
+            tub_wiper = TubWiper(tub_writer.tub, num_records=car_frequency)
+            car.add(tub_wiper, inputs=['user/wiper_on'],
+                    outputs=['user/wiper_triggered'])
+        elif record_on_ai:
+            class Combiner:
+                def run(self, signal, mode):
+                    """ Clean at switching back from auto pilot b/c there was a
+                    mistake """
+                    return signal and mode == 0
+            car.add(Combiner(), inputs=['user/wiper_on', 'user/mode'],
+                    outputs=['user/clean'])
+            # delete last two seconds when we go from pilot speed to manual
+            tub_wiper = TubWiper(tub_writer.tub, num_records=2 * car_frequency)
+            car.add(tub_wiper, inputs=['user/clean'])
+
+    # pressing full break for 1s will stop the car (even when wifi disconnects)
+    kill_switch = ThrottleOffSwitch(min_loops=car_frequency)
+    car.add(kill_switch, inputs=["user/throttle"], outputs=['user/stop'])
 
     car.add(LEDStatusPi(), inputs=['mode', 'car/lap_updated', 'wipe'],
             threaded=True)
+    car.add(IsThrottledChecker(), outputs=['car/throttled'], threaded=True)
+
     car.start(rate_hz=car_frequency, max_loop_count=cfg.MAX_LOOPS)
 
 
