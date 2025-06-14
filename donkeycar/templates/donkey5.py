@@ -39,7 +39,7 @@ from donkeycar.parts.pins import pwm_pin_by_id, output_pin_by_id
 from donkeycar.parts.sensor import LapTimer
 from donkeycar.parts.controller import WebFpv
 from donkeycar.pipeline.database import update_config_from_database
-from donkeycar.pipeline.file_watcher import FileWatcher
+from donkeycar.parts.file_watcher import FileWatcher
 from donkeycar.pipeline.model_loader import ModelLoader
 from donkeycar.pipeline.mode_switch import ModeSwitch
 from donkeycar.pipeline.control_switch import ControlSwitch
