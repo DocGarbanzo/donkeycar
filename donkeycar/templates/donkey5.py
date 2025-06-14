@@ -32,7 +32,7 @@ import logging
 import donkeycar as dk
 import donkeycar.parts
 from donkeycar.parts.actuator import RCReceiver, PulseController, PWMSteering, \
-    PWMThrottle
+    PWMThrottle, ModeSwitch
 from donkeycar.parts.led_status import LEDStatusPi
 from donkeycar.parts.pico import OdometerPico
 from donkeycar.parts.pins import pwm_pin_by_id, output_pin_by_id
@@ -40,13 +40,13 @@ from donkeycar.parts.sensor import LapTimer
 from donkeycar.parts.controller import WebFpv
 from donkeycar.pipeline.database import update_config_from_database
 from donkeycar.parts.file_watcher import FileWatcher
-from donkeycar.parts.mode_switch import ModeSwitch
-from donkeycar.parts.control_switch import ControlSwitch
-from donkeycar.parts.transform import ImageTransformations, LapPct, ImuCombinerNormaliser
+from donkeycar.parts.transform import ControlSwitch, ImuCombinerNormaliser, \
+    SimplePidController, SpeedRescaler
+from donkeycar.parts.image_transformations import ImageTransformations
+
 from donkeycar.parts.imu import Mpu6050Ada
-from donkeycar.parts.pico import Renamer
-from donkeycar.parts.pid import SimplePidController, SpeedRescaler
-from donkeycar.parts.web import LocalWebController, SliderSorter
+from donkeycar.parts.keras_2 import ModelLoader
+from donkeycar.parts.web_controller.web import LocalWebController 
 
 
 file_handler = logging.handlers.RotatingFileHandler(
@@ -59,6 +59,23 @@ logging.basicConfig(handlers=[file_handler, logging.StreamHandler()],
                     force=True)
 
 logger = logging.getLogger(__name__)
+
+class Renamer:
+    def run(self, data):
+        return data
+
+class SliderSorter:
+    def __init__(self, cfg):
+        self.lap_pct = cfg.LAP_PCT
+
+    def run(self, sliders):
+        if sliders:
+            d = dict(sorted(sliders.items()))
+            new_lap_pct = list(d.values())
+            if new_lap_pct != self.lap_pct:
+                logger.info(f'Updating lap_pct {new_lap_pct}')
+            self.lap_pct = new_lap_pct
+        return self.lap_pct
 
 # define some strings that are used in the vehicle data flow
 CAM_IMG = 'cam/image_array'
@@ -125,21 +142,16 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
                     outputs=['car/imu'])
             kl_inputs.append('car/imu')
         elif kl.use_lap_pct():
-            random = False
-            if random:
-                car.add(LapPct(cfg), inputs=['car/lap', 'game_over'],
-                        outputs=['lap_pct'])
-            else:
-                ctr = LocalWebController(port=cfg.WEB_CONTROL_PORT,
-                                         mode=cfg.WEB_INIT_MODE)
-                car.add(ctr,
-                        inputs=[CAM_IMG, 'tub/num_records'],
-                        outputs=['ctr/user/angle', 'ctr/user/throttle',
-                                 'ctr/user/mode',
-                                 'ctr/recording', 'ctr/buttons', 'ctr/sliders'],
-                        threaded=True)
-                car.add(SliderSorter(cfg), inputs=['ctr/sliders'],
-                        outputs=['lap_pct'])
+            ctr = LocalWebController(port=cfg.WEB_CONTROL_PORT,
+                                        mode=cfg.WEB_INIT_MODE)
+            car.add(ctr,
+                    inputs=[CAM_IMG, 'tub/num_records'],
+                    outputs=['ctr/user/angle', 'ctr/user/throttle',
+                                'ctr/user/mode',
+                                'ctr/recording', 'ctr/buttons', 'ctr/sliders'],
+                    threaded=True)
+            car.add(SliderSorter(cfg), inputs=['ctr/sliders'],
+                    outputs=['lap_pct'])
             kl_inputs.append('lap_pct')
         # add auto pilot and model reloader ------------------------------------
         kl_outputs = ['pilot/angle', 'pilot/throttle']
@@ -172,9 +184,6 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
         pid = SimplePidController(p=cfg.PID_P, i=cfg.PID_I, d=cfg.PID_D)
         car.add(pid, inputs=['speed', 'car/inst_speed', 'user/estop'],
                 outputs=['pid/throttle'])
-
-
-
 
     steering_pin = pwm_pin_by_id(cfg.STEERING_CHANNEL)
     steering_pulse = PulseController(pwm_pin=steering_pin)
