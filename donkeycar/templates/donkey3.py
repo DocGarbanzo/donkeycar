@@ -38,7 +38,7 @@ from donkeycar.parts.sensor import Odometer, LapTimer, IsThrottledChecker
 from donkeycar.parts.controller import WebFpv
 from donkeycar.parts.web_controller.web import LocalWebController
 from donkeycar.parts.image_transformations import ImageTransformations
-from donkeycar.pipeline.database import PilotDatabase
+from donkeycar.pipeline.database import update_config_from_database
 
 
 file_handler = logging.handlers.RotatingFileHandler(
@@ -92,28 +92,6 @@ class SliderSorter:
         return self.lap_pct
 
 
-def update_from_database(cfg, model_path, model_type):
-    """ Load model database to overwrite some configs parameters with the
-        values that were used in the trained model and also imply model_type
-        from the trained model. """
-    if not model_path:
-        return model_type
-    overwrite = ['TRANSFORMATIONS', 'POST_TRANSFORMATIONS', 'ROI_CROP_BOTTOM',
-                 'ROI_CROP_LEFT', 'ROI_CROP_RIGHT', 'ROI_CROP_TOP',
-                 'SEQUENCE_LENGTH']
-    model_prefix_map = {'.tflite': 'tflite_', '.trt': 'tensorrt_',
-                        '.savedmodel': '', 'h5': ''}
-    db = PilotDatabase(cfg)
-    model_basename, model_ext \
-        = os.path.splitext(os.path.basename(model_path))
-    pilot_entry = db.get_entry(model_basename)
-    if pilot_entry:
-        logger.info(f'Found {model_basename} in database')
-        cfg_train_dict = pilot_entry['Config']
-        cfg.from_dict(cfg_train_dict, overwrite)
-        model_type = model_prefix_map[model_ext] + pilot_entry['Type']
-
-    return model_type
 
 
 # define some strings that are used in the vehicle data flow
@@ -194,7 +172,7 @@ def drive(cfg, use_pid=False, no_cam=False, model_path=None, model_type=None,
     # load model if present ----------------------------------------------------
     if model_path is not None:
         logger.info("Using auto-pilot")
-        model_type = update_from_database(cfg, model_path, model_type)
+        model_type = update_config_from_database(cfg, model_path, model_type)
         kl = dk.utils.get_model_by_type(model_type, cfg)
         kl.load(model_path)
         kl_inputs = [CAM_IMG]

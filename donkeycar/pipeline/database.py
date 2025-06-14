@@ -147,3 +147,25 @@ class PilotDatabase:
 
     def get_pilot_names(self):
         return [entry['Name'] for entry in self.entries]
+
+
+def update_config_from_database(cfg, model_path, model_type):
+    """ Load model database to overwrite some configs parameters with the
+        values that were used in the trained model and also imply model_type
+        from the trained model. """
+    overwrite = ['TRANSFORMATIONS', 'POST_TRANSFORMATIONS', 'ROI_CROP_BOTTOM',
+                 'ROI_CROP_LEFT', 'ROI_CROP_RIGHT', 'ROI_CROP_TOP',
+                 'SEQUENCE_LENGTH']
+    model_prefix_map = {'.tflite': 'tflite_', '.trt': 'tensorrt_',
+                        '.savedmodel': '', 'h5': ''}
+    db = PilotDatabase(cfg)
+    model_basename, model_ext \
+        = os.path.splitext(os.path.basename(model_path))
+    pilot_entry = db.get_entry(model_basename)
+    if pilot_entry:
+        logger.info(f'Found {model_basename} in database')
+        cfg_train_dict = pilot_entry['Config']
+        cfg.from_dict(cfg_train_dict, overwrite)
+        model_type = model_prefix_map[model_ext] + pilot_entry['Type']
+
+    return model_type

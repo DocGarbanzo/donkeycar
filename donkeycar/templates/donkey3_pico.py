@@ -38,6 +38,16 @@ from donkeycar.parts.pico import OdometerPico
 from donkeycar.parts.pins import pwm_pin_by_id, output_pin_by_id
 from donkeycar.parts.sensor import LapTimer
 from donkeycar.parts.controller import WebFpv
+from donkeycar.pipeline.database import update_config_from_database
+from donkeycar.pipeline.file_watcher import FileWatcher
+from donkeycar.pipeline.model_loader import ModelLoader
+from donkeycar.pipeline.mode_switch import ModeSwitch
+from donkeycar.pipeline.control_switch import ControlSwitch
+from donkeycar.parts.transform import ImageTransformations, LapPct, ImuCombinerNormaliser
+from donkeycar.parts.imu import Mpu6050Ada
+from donkeycar.parts.pico import Renamer
+from donkeycar.parts.pid import SimplePidController, SpeedRescaler
+from donkeycar.parts.web import LocalWebController, SliderSorter
 
 
 file_handler = logging.handlers.RotatingFileHandler(
@@ -93,6 +103,79 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     # # add mpu ------------------------------------------------------------------
     # mpu = Mpu6050Ada()
     # car.add(mpu, outputs=['car/accel', 'car/gyro'], threaded=True)
+
+    # load model if present ----------------------------------------------------
+    if model_path is not None:
+        logger.info("Using auto-pilot")
+        model_type = update_config_from_database(cfg, model_path, model_type)
+        kl = dk.utils.get_model_by_type(model_type, cfg)
+        kl.load(model_path)
+        kl_inputs = [CAM_IMG]
+        # Add image transformations like crop or trapezoidal mask
+        if hasattr(cfg, 'TRANSFORMATIONS') and cfg.TRANSFORMATIONS or \
+                hasattr(cfg, 'POST_TRANSFORMATIONS') and cfg.POST_TRANSFORMATIONS:
+            car.add(ImageTransformations(cfg, 'TRANSFORMATIONS',
+                                         'POST_TRANSFORMATIONS'),
+                    inputs=[CAM_IMG], outputs=[CAM_IMG])
+        # imu transformation and addition AI input -----------------------------
+        use_imu = 'imu' in model_path
+        if use_imu:
+            logger.info('Using IMU in pilot')
+            imu_prep = ImuCombinerNormaliser(cfg)
+            car.add(imu_prep, inputs=['car/accel', 'car/gyro'],
+                    outputs=['car/imu'])
+            kl_inputs.append('car/imu')
+        elif kl.use_lap_pct():
+            random = False
+            if random:
+                car.add(LapPct(cfg), inputs=['car/lap', 'game_over'],
+                        outputs=['lap_pct'])
+            else:
+                ctr = LocalWebController(port=cfg.WEB_CONTROL_PORT,
+                                         mode=cfg.WEB_INIT_MODE)
+                car.add(ctr,
+                        inputs=[CAM_IMG, 'tub/num_records'],
+                        outputs=['ctr/user/angle', 'ctr/user/throttle',
+                                 'ctr/user/mode',
+                                 'ctr/recording', 'ctr/buttons', 'ctr/sliders'],
+                        threaded=True)
+                car.add(SliderSorter(cfg), inputs=['ctr/sliders'],
+                        outputs=['lap_pct'])
+            kl_inputs.append('lap_pct')
+        # add auto pilot and model reloader ------------------------------------
+        kl_outputs = ['pilot/angle', 'pilot/throttle']
+        car.add(kl, inputs=kl_inputs, outputs=kl_outputs)
+        # add file watcher and model loader so model can be reloaded
+        f = FileWatcher(model_path)
+        car.add(f, outputs=['model/update'])
+        ml = ModelLoader(kl, model_path=model_path)
+        car.add(ml, inputs=['model/update'], outputs=['model/loaded'],
+                threaded=True)
+
+        # if driving w/ ai switch between user throttle or pilot throttle by
+        # pressing channel 3 on the remote control we have 2 modes,
+        # pilot/steering + user/speed, or pilot/steering + pilot/speed
+        mode_switch = ModeSwitch(num_modes=2, min_loops=2)
+        car.add(mode_switch, inputs=['user/wiper_on'], outputs=['user/mode'])
+
+        # This part dispatches between user or ai depending on the switch state
+        switch = ControlSwitch(cfg)
+        car.add(switch, inputs=['user/mode', 'user/throttle',
+                                'pilot/throttle', 'pilot/angle'],
+                outputs=['pilot/angle', 'throttle'])
+    else:
+        # rename the usr throttle
+        car.add(Renamer(), inputs=['user/throttle'], outputs=['throttle'])
+    if use_pid:
+        # drive by pid: first convert throttle to speed
+        car.add(SpeedRescaler(cfg), inputs=['throttle'], outputs=['speed'])
+        # add pid controller to convert (user/pilot) speed into throttle
+        pid = SimplePidController(p=cfg.PID_P, i=cfg.PID_I, d=cfg.PID_D)
+        car.add(pid, inputs=['speed', 'car/inst_speed', 'user/estop'],
+                outputs=['pid/throttle'])
+
+
+
 
     steering_pin = pwm_pin_by_id(cfg.STEERING_CHANNEL)
     steering_pulse = PulseController(pwm_pin=steering_pin)
