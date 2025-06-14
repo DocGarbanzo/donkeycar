@@ -40,9 +40,8 @@ from donkeycar.parts.sensor import LapTimer
 from donkeycar.parts.controller import WebFpv
 from donkeycar.pipeline.database import update_config_from_database
 from donkeycar.parts.file_watcher import FileWatcher
-from donkeycar.pipeline.model_loader import ModelLoader
-from donkeycar.pipeline.mode_switch import ModeSwitch
-from donkeycar.pipeline.control_switch import ControlSwitch
+from donkeycar.parts.mode_switch import ModeSwitch
+from donkeycar.parts.control_switch import ControlSwitch
 from donkeycar.parts.transform import ImageTransformations, LapPct, ImuCombinerNormaliser
 from donkeycar.parts.imu import Mpu6050Ada
 from donkeycar.parts.pico import Renamer
