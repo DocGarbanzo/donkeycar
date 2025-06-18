@@ -171,8 +171,11 @@ class Pico:
                 # send the setup dictionary
                 pack = json.dumps(setup_dict) + '\n'
                 logger.debug(f"Sending setup dict: {pack}")
+                logger.debug(f"Reset input buffer.")
                 self.serial.reset_input_buffer()
+                logger.debug(f"Reset output buffer.")
                 self.serial.reset_output_buffer()
+                logger.debug(f"Writing setup dict to serial.")
                 self.serial.write(pack.encode())
         except SerialTimeoutException as e:
             logger.error(f"Input pin {gpio} setup failed to send setup dict "
