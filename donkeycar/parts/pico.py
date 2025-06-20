@@ -79,6 +79,9 @@ class Pico:
         except SerialTimeoutException as e:
             logger.error(f"Failed to initialise Pi Pico dict because of {e}")
             raise RuntimeError("Failed to initialise Pi Pico.")
+        except Exception as e:
+            logger.error(f"Failed to initialise Pi Pico dict because of {e}")
+            raise RuntimeError("Failed to initialise Pi Pico.")
         logger.info(f"...Pico communication initialised.")
 
     def loop(self):
