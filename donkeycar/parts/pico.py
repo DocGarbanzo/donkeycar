@@ -217,24 +217,24 @@ class Pico:
         """
         setup_dict = dict()
         logger.info(f"Removing pin {gpio}")
-        if gpio in self.receive_dict:
-            setup_dict['input_pins'] = {gpio: {}}
-            del self.receive_dict[gpio]
-            logger.info(f"Removed input pin {gpio} on pico.")
-        elif gpio in self.send_dict:
-            setup_dict['output_pins'] = {gpio: {}}
-            del self.send_dict[gpio]
-            logger.info(f"Removed output pin {gpio} on pico.")
-        else:
-            logger.warning(f"Pin {gpio} not in send or receive dict.")
-            return
         try:
             with self.lock:
-                # send the setup dictionary
-                pack = json.dumps(setup_dict) + '\n'
-                self.serial.reset_input_buffer()
-                self.serial.reset_output_buffer()
-                self.serial.write(pack.encode())
+                if gpio in self.receive_dict:
+                    setup_dict['input_pins'] = {gpio: {}}
+                    del self.receive_dict[gpio]
+                    logger.info(f"Removed input pin {gpio} on pico.")
+                elif gpio in self.send_dict:
+                    setup_dict['output_pins'] = {gpio: {}}
+                    del self.send_dict[gpio]
+                    logger.info(f"Removed output pin {gpio} on pico.")
+                else:
+                    logger.warning(f"Pin {gpio} not in send or receive dict.")
+                    return
+            # send the setup dictionary
+            pack = json.dumps(setup_dict) + '\n'
+            self.serial.reset_input_buffer()
+            self.serial.reset_output_buffer()
+            self.serial.write(pack.encode())
         except Exception as e:
             logger.error(f"Remove pin {gpio} failed with exception {e}, "
                          f"skipping.")
