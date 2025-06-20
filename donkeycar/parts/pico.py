@@ -112,7 +112,8 @@ class Pico:
                              f'because of {e}. Expected json, but got: '
                              f'+++{str_in}+++')
             except Exception as e:
-                logger.error(f'Problem with serial comms {e}')
+                logger.error(f'Problem with serial comms {e} '
+                             f'in loop {self.counter}')
             self.counter += 1
         logger.info('Pico loop stopped.')
 
@@ -170,16 +171,15 @@ class Pico:
         logger.info(f"Setting up input pin {gpio} in mode {mode} using "
                     f"setup dict {setup_dict}")
         try:
-            with self.lock:
-                # send the setup dictionary
-                pack = json.dumps(setup_dict) + '\n'
-                logger.debug(f"Sending setup dict: {pack}")
-                logger.debug(f"Reset input buffer.")
-                self.serial.reset_input_buffer()
-                logger.debug(f"Reset output buffer.")
-                self.serial.reset_output_buffer()
-                logger.debug(f"Writing setup dict to serial.")
-                self.serial.write(pack.encode())
+            # send the setup dictionary
+            pack = json.dumps(setup_dict) + '\n'
+            logger.debug(f"Sending setup dict: {pack}")
+            logger.debug(f"Reset input buffer.")
+            self.serial.reset_input_buffer()
+            logger.debug(f"Reset output buffer.")
+            self.serial.reset_output_buffer()
+            logger.debug(f"Writing setup dict to serial.")
+            self.serial.write(pack.encode())
         except Exception as e:
             logger.error(f"Input pin {gpio} setup failed to send setup dict "
                          f"because of {e}, skipping.")
