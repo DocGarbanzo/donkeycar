@@ -235,7 +235,10 @@ class Pico:
         except SerialTimeoutException as e:
             logger.error(f"Remove pin {gpio} failed to send setup dict "
                          f"because of {e}, skipping.")
-
+        except Exception as e:
+            logger.error(f"Remove pin {gpio} failed with exception {e}, "
+                         f"skipping.")
+            
 
 instance = Pico()
 
