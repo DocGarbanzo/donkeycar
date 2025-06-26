@@ -1,6 +1,7 @@
 import atexit
 import time
 from collections import deque
+from typing import Union
 
 import serial
 import json
@@ -117,7 +118,7 @@ class Pico:
             self.counter += 1
         logger.info('Pico loop stopped.')
 
-    def write(self, gpio: str, value: float or int) -> None:
+    def write(self, gpio: str, value: Union[float, int]) -> None:
         """
         :param gpio:    the gpio pin to write to
         :param value:   the value to write

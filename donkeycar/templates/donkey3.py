@@ -444,7 +444,7 @@ def gym(cfg, model_path=None, model_type=None, no_tub=False,
         if not model_type:
             model_type = 'tflite_linear'
 
-        model_type = update_from_database(cfg, model_path, model_type)
+        model_type = update_config_from_database(cfg, model_path, model_type)
         kl = dk.utils.get_model_by_type(model_type, cfg)
         kl.load(model_path)
         kl_inputs = [CAM_IMG]
@@ -567,7 +567,7 @@ def benchmark(cfg, model_path, verbose=False):
             threaded=True)
 
     if model_path:
-        model_type = update_from_database(cfg, model_path, "")
+        model_type = update_config_from_database(cfg, model_path, "")
         kl = dk.utils.get_model_by_type(model_type, cfg)
         kl.load(model_path)
         kl_inputs = [CAM_IMG]

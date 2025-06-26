@@ -31,11 +31,8 @@ from typing import Any, Callable
 from enum import Enum
 import logging
 
-import donkeycar.parts.pico
-from donkeycar.parts.pico import Pico
 
 logger = logging.getLogger(__name__)
-
 
 class PinState:
     LOW: int = 0
@@ -538,7 +535,7 @@ try:
     gpio_pin_pull = [None, GPIO.PUD_OFF, GPIO.PUD_DOWN, GPIO.PUD_UP]
     gpio_pin_scheme = {PinScheme.BOARD: GPIO.BOARD, PinScheme.BCM: GPIO.BCM}
 except ImportError:
-    logger.warn("RPi.GPIO was not imported.")
+    logger.warning("RPi.GPIO was not imported.")
     globals()["GPIO"] = None
 
 
@@ -896,7 +893,7 @@ try:
     pigpio_pin_edge = [None, pigpio.RISING_EDGE, pigpio.FALLING_EDGE, pigpio.EITHER_EDGE]
     pigpio_pin_pull = [None, pigpio.PUD_OFF, pigpio.PUD_DOWN, pigpio.PUD_UP]
 except ImportError:
-    logger.warn("pigpio was not imported.")
+    logger.warning("pigpio was not imported.")
     globals()["pigpio"] = None
 
 
@@ -1185,10 +1182,11 @@ class InputPinPico(InputPin):
         :param pull: enable a pull up or down resistor on pin.  Default is
                         PinPull.PULL_NONE
         """
+        from donkeycar.parts.pico import instance as pico_instance
         super().__init__()
+        self.pico = pico_instance
         self.pin_number = f'GP{pin_number}'
         self.pull = pull
-        self.pico = donkeycar.parts.pico.instance
         self._state = PinState.NOT_STARTED
 
     def __del__(self):
@@ -1200,6 +1198,7 @@ class InputPinPico(InputPin):
         :param on_input: must be None because we don't have callbacks on Pico
         :param edge: must be None because we don't have callbacks on Pico
         """
+        from donkeycar.parts.pico import Pico
         if self.state() != PinState.NOT_STARTED:
             raise RuntimeError(f"Attempt to start InputPinPico("
                                f"{self.pin_number}) that is already started.")
@@ -1240,11 +1239,13 @@ class AnalogInputPinPico(AnalogInputPin):
         Analog input pin using Pi Pico
         :param pin_number: PICO.BCM pin number, only 26, 27 or 28 are working.
         """
+        from donkeycar.parts.pico import instance as pico_instance
+
         if pin_number not in (26, 27, 28):
             raise ValueError(f"Analog pin {pin_number} is not supported on Pico")
         super().__init__()
         self.pin_number = f'GP{pin_number}'
-        self.pico = donkeycar.parts.pico.instance
+        self.pico = pico_instance
         self._state = PinState.NOT_STARTED
 
     def __del__(self):
@@ -1290,9 +1291,10 @@ class OutputPinPico(OutputPin):
         Input pin ttl HIGH/LOW using pico connection
         :param pin_number: PICO.BCM pin number, like 2 or 15.
         """
+        from donkeycar.parts.pico import instance as pico_instance
         super().__init__()
         self.pin_number = f'GP{pin_number}'
-        self.pico = donkeycar.parts.pico.instance
+        self.pico = pico_instance
         self._state = PinState.NOT_STARTED
 
     def __del__(self):
@@ -1339,7 +1341,8 @@ class InputPwmPinPico(InputPwmPin):
     """
     def __init__(self, pin_number: int, duty: float = 0.09) -> None:
         super().__init__()
-        self.pico = donkeycar.parts.pico.instance
+        from donkeycar.parts.pico import instance as pico_instance
+        self.pico = pico_instance
         self.pin_number = f'GP{pin_number}'
         self.duty = duty
         self._state = PinState.NOT_STARTED
@@ -1382,9 +1385,10 @@ class PwmPinPico(PwmPin):
     """
     def __init__(self, pin_number: int, frequency_hz: int = 60) -> None:
         super().__init__()
+        from donkeycar.parts.pico import instance as pico_instance
         self.pin_number: str = f'GP{pin_number}'
         self.frequency: int = frequency_hz
-        self.pico = donkeycar.parts.pico.instance
+        self.pico = pico_instance
         self._state: int = PinState.NOT_STARTED
 
     def start(self, duty=0.09) -> None:
