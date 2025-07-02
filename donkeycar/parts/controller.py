@@ -1593,12 +1593,12 @@ class RC3ChanJoystickController(JoystickController):
         return self.js is not None
 
     def on_steering(self, val, reverse = True):
-        if reversed:
+        if reverse:
             val *= -1
         self.set_steering(val)
 
     def on_throttle(self, val, reverse = True):
-        if reversed:
+        if reverse:
             val *= -1
         self.set_throttle(val)
 

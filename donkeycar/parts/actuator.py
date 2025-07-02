@@ -873,10 +873,10 @@ class TwoWheelSteeringThrottle(object):
         """
         if throttle is None:
             logger.warning("TwoWheelSteeringThrottle throttle is None")
-            return
+            return 0.0, 0.0
         if steering is None:
             logger.warning("TwoWheelSteeringThrottle steering is None")
-            return
+            return 0.0, 0.0
         if throttle > 1 or throttle < -1:
             logger.warning( f"TwoWheelSteeringThrottle throttle is {throttle}, "
                           f"but it must be between 1(forward) and -1(reverse)")

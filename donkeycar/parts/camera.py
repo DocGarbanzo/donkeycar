@@ -169,7 +169,7 @@ class Webcam(BaseCamera):
                 snapshot1 = pygame.transform.scale(snapshot, self.resolution)
                 self.frame = pygame.surfarray.pixels3d(pygame.transform.rotate(pygame.transform.flip(snapshot1, True, False), 90))
                 if self.image_d == 1:
-                    self.frame = rgb2gray(frame)
+                    self.frame = rgb2gray(self.frame)
 
         return self.frame
 
