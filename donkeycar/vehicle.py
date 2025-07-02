@@ -109,7 +109,7 @@ class Vehicle:
         """
         self.parts.remove(part)
 
-    def start(self, rate_hz=10, max_loop_count=None):
+    def start(self, rate_hz: int=10, max_loop_count: int=None) -> (int, float):
         """
         Start vehicle's main drive loop.
 
@@ -142,11 +142,12 @@ class Vehicle:
             # wait until the parts warm up.
             logger.info(f'Starting vehicle at {rate_hz} Hz')
 
+            loop_start_time = time.time()
             while self.on:
                 start_time = time.time()
                 self.update_parts()
                 # stop drive loop if loop_count exceeds max_loop_count
-                if max_loop_count and self.loop_count > max_loop_count:
+                if max_loop_count and self.loop_count >= max_loop_count - 1:
                     self.on = False
                 # stop drive loop if a part publishes a 'user/stop' entry
                 stop = self.mem.get(['user/stop'])
@@ -168,6 +169,8 @@ class Vehicle:
                     if avg_exceed_time > 1:
                         logger.warning(f'jitter violation in vehicle loop with '
                                        f'{avg_exceed_time:5.1f}ms')
+                
+            return self.loop_count, time.time() - loop_start_time   
 
         except KeyboardInterrupt:
             pass

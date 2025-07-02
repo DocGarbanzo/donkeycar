@@ -1,6 +1,7 @@
 import atexit
 import time
 from collections import deque
+from typing import Union
 
 import serial
 import json
@@ -68,7 +69,7 @@ class Pico:
         self.receive_dict = dict()
         self.lock = Lock()
         self.start = None
-        logger.info(f"Creating Pico on port: {port}...initialising comms, ...")
+        logger.info(f"Creating Pico on port: {port}, initialising comms...")
         # send the initial setup dictionary to clear all pins
         pack = json.dumps(dict(input_pins={}, output_pins={})) + '\n'
         try:
@@ -77,6 +78,9 @@ class Pico:
             self.t.start()
             atexit.register(self.stop)
         except SerialTimeoutException as e:
+            logger.error(f"Failed to initialise Pi Pico dict because of {e}")
+            raise RuntimeError("Failed to initialise Pi Pico.")
+        except Exception as e:
             logger.error(f"Failed to initialise Pi Pico dict because of {e}")
             raise RuntimeError("Failed to initialise Pi Pico.")
         logger.info(f"...Pico communication initialised.")
@@ -109,11 +113,12 @@ class Pico:
                              f'because of {e}. Expected json, but got: '
                              f'+++{str_in}+++')
             except Exception as e:
-                logger.error(f'Problem with serial comms {e}')
+                logger.error(f'Problem with serial comms {e} '
+                             f'in loop {self.counter}')
             self.counter += 1
         logger.info('Pico loop stopped.')
 
-    def write(self, gpio: str, value: float or int) -> None:
+    def write(self, gpio: str, value: Union[float, int]) -> None:
         """
         :param gpio:    the gpio pin to write to
         :param value:   the value to write
@@ -167,14 +172,16 @@ class Pico:
         logger.info(f"Setting up input pin {gpio} in mode {mode} using "
                     f"setup dict {setup_dict}")
         try:
-            with self.lock:
-                # send the setup dictionary
-                pack = json.dumps(setup_dict) + '\n'
-                logger.debug(f"Sending setup dict: {pack}")
-                self.serial.reset_input_buffer()
-                self.serial.reset_output_buffer()
-                self.serial.write(pack.encode())
-        except SerialTimeoutException as e:
+            # send the setup dictionary
+            pack = json.dumps(setup_dict) + '\n'
+            logger.debug(f"Sending setup dict: {pack}")
+            logger.debug(f"Reset input buffer.")
+            self.serial.reset_input_buffer()
+            logger.debug(f"Reset output buffer.")
+            self.serial.reset_output_buffer()
+            logger.debug(f"Writing setup dict to serial.")
+            self.serial.write(pack.encode())
+        except Exception as e:
             logger.error(f"Input pin {gpio} setup failed to send setup dict "
                          f"because of {e}, skipping.")
 
@@ -201,7 +208,7 @@ class Pico:
                 self.serial.write(pack.encode())
                 time.sleep(0.2)
                 self.send_dict[gpio] = 0 if mode == 'OUTPUT' else kwargs['duty']
-        except SerialTimeoutException as e:
+        except Exception as e:
             logger.error(f"Output pin {gpio} setup failed to send setup dict "
                          f"because of {e}, skipping.")
 
@@ -211,28 +218,28 @@ class Pico:
         """
         setup_dict = dict()
         logger.info(f"Removing pin {gpio}")
-        if gpio in self.receive_dict:
-            setup_dict['input_pins'] = {gpio: {}}
-            del self.receive_dict[gpio]
-            logger.info(f"Removed input pin {gpio} on pico.")
-        elif gpio in self.send_dict:
-            setup_dict['output_pins'] = {gpio: {}}
-            del self.send_dict[gpio]
-            logger.info(f"Removed output pin {gpio} on pico.")
-        else:
-            logger.warning(f"Pin {gpio} not in send or receive dict.")
-            return
         try:
             with self.lock:
-                # send the setup dictionary
-                pack = json.dumps(setup_dict) + '\n'
-                self.serial.reset_input_buffer()
-                self.serial.reset_output_buffer()
-                self.serial.write(pack.encode())
-        except SerialTimeoutException as e:
-            logger.error(f"Remove pin {gpio} failed to send setup dict "
-                         f"because of {e}, skipping.")
-
+                if gpio in self.receive_dict:
+                    setup_dict['input_pins'] = {gpio: {}}
+                    del self.receive_dict[gpio]
+                    logger.info(f"Removed input pin {gpio} on pico.")
+                elif gpio in self.send_dict:
+                    setup_dict['output_pins'] = {gpio: {}}
+                    del self.send_dict[gpio]
+                    logger.info(f"Removed output pin {gpio} on pico.")
+                else:
+                    logger.warning(f"Pin {gpio} not in send or receive dict.")
+                    return
+            # send the setup dictionary
+            pack = json.dumps(setup_dict) + '\n'
+            self.serial.reset_input_buffer()
+            self.serial.reset_output_buffer()
+            self.serial.write(pack.encode())
+        except Exception as e:
+            logger.error(f"Remove pin {gpio} failed with exception {e}, "
+                         f"skipping.")
+            
 
 instance = Pico()
 

@@ -431,7 +431,7 @@ class Manifest(object):
         if cat_lines:
             last_rec_str = cat_lines[0]
             last_rec = json.loads(last_rec_str)
-            if last_rec['_session_id'] == new_full_id:
+            if '_session_id' in last_rec and last_rec['_session_id'] == new_full_id:
                 raise RuntimeError(
                     f'Session {new_full_id} already found in last '
                     f'record of existing tub at {self.base_path}. '

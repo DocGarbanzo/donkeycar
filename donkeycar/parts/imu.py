@@ -6,7 +6,6 @@ import busio
 import adafruit_mpu6050
 import adafruit_bno055
 import logging
-import imufusion
 
 import pandas as pd
 
@@ -108,6 +107,7 @@ class IMU:
 
 class Mpu6050Ada:
     def __init__(self, sample_rate=100):
+        import imufusion
         logger.info("Creating Adafruit Mpu6050 ...")
         i2c = busio.I2C(board.SCL, board.SDA)
         self.mpu = adafruit_mpu6050.MPU6050(i2c)

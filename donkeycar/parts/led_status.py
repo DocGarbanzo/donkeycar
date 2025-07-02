@@ -255,7 +255,7 @@ class LEDStatusPi:
         if mode == 0:
             self.pulse_color = ColorRGB.GREEN
         elif mode == 1:
-            self.pulse_color = ColorRGB.ORANGE
+            self.pulse_color = ColorRGB.YELLOW
         logger.info((f"Mode changed to {mode}"))
         self.blink_continuous()
         self.mode = mode
@@ -269,7 +269,7 @@ class LEDStatusPi:
             t = dict(on_color=ColorRGB.RED, on_time=0.2, off_time=0.2, n=3)
         if wipe:
             logger.info(f"Wipe detected")
-            t = dict(on_color=ColorRGB.PURPLE, on_time=0.1, off_time=0.1, n=4)
+            t = dict(on_color=ColorRGB.BLUE, on_time=0.05, off_time=0.05, n=5)
         if t:
             self.queue.put(t)
 

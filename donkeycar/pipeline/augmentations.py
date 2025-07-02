@@ -2,7 +2,7 @@ import albumentations.core.transforms_interface
 import logging
 import albumentations as A
 from albumentations import GaussianBlur
-from albumentations.augmentations.transforms import RandomBrightnessContrast
+from albumentations import RandomBrightnessContrast
 
 from donkeycar.config import Config
 
