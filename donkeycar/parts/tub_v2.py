@@ -122,7 +122,7 @@ class Tub(object):
     @classmethod
     def _image_file_name(cls, index, key, extension='.jpg'):
         key_prefix = key.replace('/', '_')
-        name = '_'.join([str(index), key_prefix, extension])
+        name = '_'.join([str(index), key_prefix]) + extension
         # Return relative paths to maintain portability
         return name
 
