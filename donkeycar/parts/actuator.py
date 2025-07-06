@@ -956,6 +956,7 @@ class RCReceiver:
         else:
             signal += self.min_out
         signal = clamp(signal, self.min_out, self.max_out)
+        logger.debug(f'RCReceiver run: signal={signal}, is_action={is_action}')
         return signal, is_action
 
     def shutdown(self):
