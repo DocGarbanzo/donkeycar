@@ -41,7 +41,7 @@ from donkeycar.parts.controller import WebFpv
 from donkeycar.parts.tub_v2 import TubWiper, TubWriter
 from donkeycar.pipeline.database import update_config_from_database
 from donkeycar.parts.file_watcher import FileWatcher
-from donkeycar.parts.transform import ControlSwitch, ImuCombinerNormaliser, RecordingCondition, \
+from donkeycar.parts.transform import ChangeDetector, ControlSwitch, ImuCombinerNormaliser, RecordingCondition, \
     SimplePidController, SpeedRescaler
 from donkeycar.parts.image_transformations import ImageTransformations
 
@@ -104,10 +104,10 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     car.add(rc_steering, outputs=['user/angle', 'user/angle_on'])
 
     rc_throttle = RCReceiver(gpio=cfg.THROTTLE_RC_GPIO)
-    car.add(rc_throttle, outputs=['user/throttle', 'user/rc_throttle_on'])
+    car.add(rc_throttle, outputs=['user/throttle', 'user/throttle_on'])
 
     rc_ch_3 = RCReceiver(min_out=0, gpio=cfg.CH3_RC_GPIO)
-    car.add(rc_ch_3, outputs=['user/ch_3', 'user/rc_ch_3_on'])
+    car.add(rc_ch_3, outputs=['user/wiper', 'user/wiper_on'])
 
     odo = OdometerPico(tick_per_meter=cfg.TICK_PER_M, weight=0.5)
     car.add(odo, inputs=['pico/read_odo'],
@@ -239,8 +239,11 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
         # add a tub wiper that is triggered by channel 3 on the RC, but only
         # if we don't use channel 3 for switching between ai & manual
         if model_path is None:
-            tub_wiper = TubWiper(tub_writer.tub, num_records=car_frequency)
-            car.add(tub_wiper, inputs=['user/wiper_on'],
+            chgange_detector = ChangeDetector()
+            car.add(chgange_detector, inputs=['user/wiper_on'],
+                    outputs=['user/wiper_changed'])
+            tub_wiper = TubWiper(tub_writer.tub, min_loops=1, num_records=car_frequency)
+            car.add(tub_wiper, inputs=['user/wiper_changed'],
                     outputs=['user/wiper_triggered'])
         elif record_on_ai:
             class Combiner:

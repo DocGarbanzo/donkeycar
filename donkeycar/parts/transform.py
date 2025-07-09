@@ -250,3 +250,18 @@ class RecordingCondition:
             return dynamic_condition and throttle_val > 0
         else:
             return self.condition and throttle_val > 0
+
+
+class ChangeDetector:
+    """ Class to detect changes in boolean input values """
+    def __init__(self):
+        self.previous_value = None
+
+    def run(self, input_value):
+        if self.previous_value is None:
+            self.previous_value = input_value
+            return False
+        
+        changed = input_value != self.previous_value
+        self.previous_value = input_value
+        return changed
