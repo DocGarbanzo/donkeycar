@@ -244,6 +244,8 @@ class RecordingCondition:
         self.condition = static_condition
 
     def run(self, dynamic_condition, throttle_val):
+        logger.debug(f"RecordingCondition: static={self.condition}, "
+                     f"dynamic={dynamic_condition}, throttle={throttle_val}")
         if self.condition is None:
             return dynamic_condition and throttle_val > 0
         else:
