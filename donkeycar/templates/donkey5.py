@@ -26,6 +26,7 @@ Options:
     --type=MODEL_TYPE       type of the model to load [default: linear]
 """
 
+import os
 from docopt import docopt
 import logging
 
@@ -49,6 +50,11 @@ from donkeycar.parts.imu import Mpu6050Ada
 from donkeycar.parts.keras_2 import ModelLoader
 from donkeycar.parts.web_controller.web import LocalWebController 
 
+
+# Check for logging configuration file in current working directory
+logging_config_path = os.path.join(os.getcwd(), 'logging.conf')
+if os.path.exists(logging_config_path):
+    logging.config.fileConfig(logging_config_path)
 
 file_handler = logging.handlers.RotatingFileHandler(
     filename='./logs/log.txt', mode='a',
