@@ -29,6 +29,7 @@ Options:
 import os
 from docopt import docopt
 import logging
+import logging.config
 
 import donkeycar as dk
 import donkeycar.parts
