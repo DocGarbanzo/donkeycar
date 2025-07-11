@@ -107,13 +107,13 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
                        image_d=cfg.IMAGE_DEPTH)
         car.add(cam, outputs=[CAM_IMG], threaded=True)
 
-    rc_steering = RCReceiver(gpio=cfg.STEERING_RC_GPIO)
+    rc_steering = RCReceiver(gpio=cfg.STEERING_RC_GPIO, name='steering')
     car.add(rc_steering, outputs=['user/angle', 'user/angle_on'])
 
-    rc_throttle = RCReceiver(gpio=cfg.THROTTLE_RC_GPIO)
+    rc_throttle = RCReceiver(gpio=cfg.THROTTLE_RC_GPIO, name='throttle',)
     car.add(rc_throttle, outputs=['user/throttle', 'user/throttle_on'])
 
-    rc_ch_3 = RCReceiver(min_out=0, gpio=cfg.CH3_RC_GPIO)
+    rc_ch_3 = RCReceiver(min_out=0, gpio=cfg.CH3_RC_GPIO, name='ch3')
     car.add(rc_ch_3, outputs=['user/wiper', 'user/wiper_on'])
 
     odo = OdometerPico(tick_per_meter=cfg.TICK_PER_M, weight=0.5)
@@ -325,13 +325,13 @@ def calibrate(cfg, verbose=False):
         donkeycar.logger.setLevel(logging.DEBUG)
 
     car = dk.vehicle.Vehicle()
-    rc_steering = RCReceiver(gpio=cfg.STEERING_RC_GPIO)
+    rc_steering = RCReceiver(gpio=cfg.STEERING_RC_GPIO, name='steering')
     car.add(rc_steering, outputs=['user/angle', 'user/angle_on'])
 
-    rc_throttle = RCReceiver(gpio=cfg.THROTTLE_RC_GPIO)
+    rc_throttle = RCReceiver(gpio=cfg.THROTTLE_RC_GPIO, name='throttle')
     car.add(rc_throttle, outputs=['user/throttle', 'user/rc_throttle_on'])
 
-    rc_ch_3 = RCReceiver(min_out=0, gpio=cfg.CH3_RC_GPIO)
+    rc_ch_3 = RCReceiver(min_out=0, gpio=cfg.CH3_RC_GPIO, name='ch3')
     car.add(rc_ch_3, outputs=['user/ch_3', 'user/rc_ch_3_on'])
 
     car.add(Plotter(), inputs=['user/angle', 'user/throttle', 'user/ch_3'])

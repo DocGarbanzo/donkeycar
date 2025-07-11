@@ -554,7 +554,8 @@ class RCReceiver:
     """
 
     def __init__(self, gpio, min_out=-1, max_out=1, min_duty=0.06,
-                 max_duty=0.12, invert=False, jitter=0.025, no_action=None):
+                 max_duty=0.12, invert=False, jitter=0.025, no_action=None,
+                 name=""):
         """
         :param gpio: gpio pin connected to RC channel
         :param invert: invert value of run() within [MIN_OUT,MAX_OUT]
@@ -563,6 +564,12 @@ class RCReceiver:
                           sent. This is usually zero for throttle and steering
                           being the center values when the controls are not
                           pressed.
+        :param min_out: minimum output value, default -1
+        :param max_out: maximum output value, default 1
+        :param min_duty: minimum duty cycle, default 0.06 (6% duty cycle)
+        :param max_duty: maximum duty cycle, default 0.12 (12% duty cycle)
+        :param name: name of the receiver, used for logging
+        
         """
         self.min_out = min_out
         self.max_out = max_out
@@ -579,7 +586,8 @@ class RCReceiver:
                        / (self.max_duty - self.min_duty))
         self.pin = input_pwm_pin_by_id(gpio)
         self.pin.start()
-        logger.info(f'RCReceiver gpio {gpio} created')
+        self.name = name
+        logger.info(f'RCReceiver {self.name} on gpio {gpio} created')
 
     def run(self):
         """
@@ -599,7 +607,7 @@ class RCReceiver:
         else:
             signal += self.min_out
         signal = clamp(signal, self.min_out, self.max_out)
-        logger.debug(f'RCReceiver run: signal={signal}, is_action={is_action}')
+        logger.debug(f'RCReceiver {self.name} run: signal={signal}, is_action={is_action}')
         return signal, is_action
 
     def shutdown(self):
