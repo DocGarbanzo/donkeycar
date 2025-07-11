@@ -113,7 +113,7 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     rc_throttle = RCReceiver(gpio=cfg.THROTTLE_RC_GPIO, name='throttle',)
     car.add(rc_throttle, outputs=['user/throttle', 'user/throttle_on'])
 
-    rc_ch_3 = RCReceiver(min_out=0, gpio=cfg.CH3_RC_GPIO, name='ch3')
+    rc_ch_3 = RCReceiver(min_out=0, no_action=0, gpio=cfg.CH3_RC_GPIO, name='ch3')
     car.add(rc_ch_3, outputs=['user/wiper', 'user/wiper_on'])
 
     odo = OdometerPico(tick_per_meter=cfg.TICK_PER_M, weight=0.5)

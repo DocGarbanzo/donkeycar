@@ -242,6 +242,7 @@ class RecordingCondition:
     """ Class to switch recording based on static or dynamic condition """
     def __init__(self, static_condition=None):
         self.condition = static_condition
+        logger.info(f"Creating RecordingCondition with static condition: {self.condition}")
 
     def run(self, dynamic_condition, throttle_val):
         logger.debug(f"RecordingCondition: static={self.condition}, "

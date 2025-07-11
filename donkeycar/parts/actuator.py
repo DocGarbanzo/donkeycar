@@ -392,6 +392,7 @@ class EStop:
         self.count = 0
         self.is_triggerd = False
         self.last_user_mode = 0
+        logger.info(f'EStop initialized with car_freq={car_freq}, brake={brake}')
 
     def run(self, in_throttle: float, user_mode: int = 0):
         # E-stop gets triggered when user mode is shifted from 1 to 0
