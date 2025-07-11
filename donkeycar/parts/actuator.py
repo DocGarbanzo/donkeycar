@@ -594,8 +594,9 @@ class RCReceiver:
         Donkey parts interface, returns pulse mapped into [MIN_OUT,MAX_OUT] or
         [MAX_OUT,MIN_OUT]
         """
+        duty_cycle = self.pin.duty_cycle()
         # signal is a value in [0, (MAX_OUT-MIN_OUT)]
-        signal = (self.pin.duty_cycle() - self.min_duty) * self.factor
+        signal = (duty_cycle - self.min_duty) * self.factor
         # Assuming non-activity if the pulse is at no_action point
         is_action = abs(signal - self.no_action) > self.jitter
         # if deemed noise assume no signal
@@ -607,7 +608,7 @@ class RCReceiver:
         else:
             signal += self.min_out
         signal = clamp(signal, self.min_out, self.max_out)
-        logger.debug(f'RCReceiver {self.name} run: signal={signal}, is_action={is_action}')
+        logger.debug(f'RCReceiver {self.name} run: duty={duty_cycle} signal={signal}, is_action={is_action}')
         return signal, is_action
 
     def shutdown(self):
