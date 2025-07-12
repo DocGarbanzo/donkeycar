@@ -64,7 +64,15 @@ logging.basicConfig(handlers=[file_handler, logging.StreamHandler()],
 # Check for logging configuration file in current working directory
 logging_config_path = os.path.join(os.getcwd(), 'logging.conf')
 if os.path.exists(logging_config_path):
+    # Store existing handlers before fileConfig
+    root_logger = logging.getLogger()
+    existing_handlers = root_logger.handlers[:]
+    
     logging.config.fileConfig(logging_config_path, disable_existing_loggers=False)
+    
+    # Restore handlers if fileConfig removed them
+    if not root_logger.handlers:
+        root_logger.handlers = existing_handlers
 
 logger = logging.getLogger(__name__)
 
