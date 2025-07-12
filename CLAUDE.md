@@ -236,15 +236,16 @@ When developing for Raspberry Pi deployment, use this workflow:
 4. **Iterate:** Repeat steps 1-3 until functionality works correctly
 
 **Logging Configuration:**
-- Car app uses rotating file handler + console output
+- Car app uses rotating file handler + console output with timestamps
 - Optional `logging.conf` in car directory for module-specific debug levels
+- Uses configparser approach (not fileConfig) to preserve console/file handlers
 - Example working logging.conf:
   ```ini
   [loggers]
   keys=root,actuator,transform
 
-  [handlers] 
-  keys=nullHandler
+  [handlers]
+  keys=
 
   [formatters]
   keys=
@@ -252,20 +253,19 @@ When developing for Raspberry Pi deployment, use this workflow:
   [logger_root]
   level=INFO
 
-  [logger_actuator] 
+  [logger_actuator]
   level=DEBUG
   qualname=donkeycar.parts.actuator
 
   [logger_transform]
-  level=DEBUG  
+  level=DEBUG
   qualname=donkeycar.parts.transform
-
-  [handler_nullHandler]
-  class=NullHandler
   ```
 
 **Key Points:**
-- Never include empty `handlers=` lines in logging.conf
+- **CRITICAL:** Never use `handlers=` lines in logger sections - they override console/file output
+- **CRITICAL:** donkey5.py uses configparser, not fileConfig(), to avoid handler disruption
 - The `donkey update` command copies template files to car directory
 - Changes to core library require git pull + update cycle
+- Working logging shows: `2025-07-12 12:47:40,939 [INFO] donkeycar.parts.actuator __init__: RCReceiver created`
 - Documentation at docs.donkeycar.com covers main branch; new_dev may differ
