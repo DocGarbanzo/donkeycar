@@ -176,6 +176,8 @@ class TubWiper:
         self._num_records = num_records
         self._active_loop_count = 0  # for debouncing
         self._min_loops = min_loops
+        logger.info(f'Created TubWiper for {self._tub.base_path} '
+                    f'to delete {self._num_records} records')
 
     def run(self, is_delete):
         """
@@ -194,7 +196,7 @@ class TubWiper:
                 # action command
                 self._tub.delete_last_n_records(self._num_records)
                 # only trigger if it was released before
-                logger.debug(f"Wiper triggered")
+                logger.info(f"Wiper triggered")
                 return True
         else:
             # trigger released, reset active loop count

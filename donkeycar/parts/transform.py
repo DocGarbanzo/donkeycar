@@ -257,6 +257,7 @@ class ChangeDetector:
     """ Class to detect changes in boolean input values """
     def __init__(self):
         self.previous_value = None
+        logger.info("ChangeDetector created")
 
     def run(self, input_value):
         if self.previous_value is None:
