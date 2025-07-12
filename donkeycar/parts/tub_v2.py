@@ -139,6 +139,9 @@ class TubWriter(object):
         self.tub = Tub(base_path, inputs, types, metadata, max_catalog_len)
         self.lap_timer = lap_timer
         print(f'Created TubWriter for {self.tub.base_path}')
+        logger.info(f'Created TubWriter for {self.tub.base_path}')
+        logger.warning(f'Created TubWriter for {self.tub.base_path}')
+        logger.error(f'Created TubWriter for {self.tub.base_path}')
 
     def run(self, *args):
         assert len(self.tub.manifest.inputs) == len(args), \

@@ -63,7 +63,7 @@ file_handler = logging.handlers.RotatingFileHandler(
 file_handler.doRollover()
 
 logging.basicConfig(handlers=[file_handler, logging.StreamHandler()],
-                    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+                    format="%(asctime)s [%(levelname)s] %(name)s %(funcName)s: %(message)s",
                     force=True)
 
 logger = logging.getLogger(__name__)
