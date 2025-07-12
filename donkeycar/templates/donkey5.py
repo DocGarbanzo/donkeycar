@@ -80,6 +80,11 @@ if os.path.exists(logging_config_path):
 
 logger = logging.getLogger(__name__)
 
+# Test logging right after setup
+logger.info("=== LOGGING TEST: This should appear ===")
+logger.warning("=== LOGGING TEST WARNING: This should also appear ===")
+print("=== PRINT TEST: This should definitely appear ===")
+
 class Renamer:
     def __init__(self):
         logger.info('Renamer initialized')
