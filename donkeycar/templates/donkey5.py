@@ -69,6 +69,8 @@ logging.basicConfig(handlers=[file_handler, logging.StreamHandler()],
 logger = logging.getLogger(__name__)
 
 class Renamer:
+    def __init__(self):
+        logger.info('Renamer initialized')
     def run(self, data):
         return data
 

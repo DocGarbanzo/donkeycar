@@ -99,6 +99,9 @@ class PulseController:
         self.scale = pwm_scale
         self.inverted = pwm_inverted
         self.pwm_pin.start()
+        logger.info(f'PulseController created with scale={self.scale}, '
+                    f'pwm_pin={self.pwm_pin}, '
+                    f'inverted={self.inverted}')
 
     def set_pulse(self, pulse: int) -> None:
         """
