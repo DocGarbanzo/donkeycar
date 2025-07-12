@@ -29,6 +29,7 @@ class Tub(object):
         # Create images folder if necessary
         if not os.path.exists(self.images_base_path):
             os.makedirs(self.images_base_path, exist_ok=True)
+        logger.info(f'Created Tub at {self.base_path}')
 
     def write_record(self, record=None):
         """
