@@ -65,25 +65,25 @@ logging.basicConfig(handlers=[file_handler, logging.StreamHandler()],
 logging_config_path = os.path.join(os.getcwd(), 'logging.conf')
 if os.path.exists(logging_config_path):
     try:
-        # Store existing handlers before fileConfig
-        root_logger = logging.getLogger()
-        existing_handlers = root_logger.handlers[:]
+        # Simple config parser approach - only set logger levels, don't touch handlers
+        import configparser
+        config = configparser.ConfigParser()
+        config.read(logging_config_path)
         
-        logging.config.fileConfig(logging_config_path, disable_existing_loggers=False)
-        
-        # Restore handlers if fileConfig removed them
-        if not root_logger.handlers:
-            root_logger.handlers = existing_handlers
-    except (KeyError, ValueError) as e:
-        print(f"Warning: Invalid logging config file: {e}")
+        for section_name in config.sections():
+            if section_name.startswith('logger_') and section_name != 'logger_root':
+                try:
+                    logger_name = config.get(section_name, 'qualname')
+                    level = config.get(section_name, 'level')
+                    logging.getLogger(logger_name).setLevel(getattr(logging, level.upper()))
+                    print(f"Set logger {logger_name} to level {level}")
+                except (configparser.NoOptionError, AttributeError):
+                    pass
+    except Exception as e:
+        print(f"Warning: Could not process logging config file: {e}")
         print("Continuing with default logging setup")
 
 logger = logging.getLogger(__name__)
-
-# Test logging right after setup
-logger.info("=== LOGGING TEST: This should appear ===")
-logger.warning("=== LOGGING TEST WARNING: This should also appear ===")
-print("=== PRINT TEST: This should definitely appear ===")
 
 class Renamer:
     def __init__(self):
