@@ -61,28 +61,6 @@ logging.basicConfig(handlers=[file_handler, logging.StreamHandler()],
                     format="%(asctime)s [%(levelname)s] %(name)s %(funcName)s: %(message)s",
                     force=True)
 
-# Check for logging configuration file in current working directory
-logging_config_path = os.path.join(os.getcwd(), 'logging.conf')
-if os.path.exists(logging_config_path):
-    try:
-        # Simple config parser approach - only set logger levels, don't touch handlers
-        import configparser
-        config = configparser.ConfigParser()
-        config.read(logging_config_path)
-        
-        for section_name in config.sections():
-            if section_name.startswith('logger_') and section_name != 'logger_root':
-                try:
-                    logger_name = config.get(section_name, 'qualname')
-                    level = config.get(section_name, 'level')
-                    logging.getLogger(logger_name).setLevel(getattr(logging, level.upper()))
-                    print(f"Set logger {logger_name} to level {level}")
-                except (configparser.NoOptionError, AttributeError):
-                    pass
-    except Exception as e:
-        print(f"Warning: Could not process logging config file: {e}")
-        print("Continuing with default logging setup")
-
 logger = logging.getLogger(__name__)
 
 class Renamer:
