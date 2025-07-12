@@ -52,11 +52,6 @@ from donkeycar.parts.keras_2 import ModelLoader
 from donkeycar.parts.web_controller.web import LocalWebController 
 
 
-# Check for logging configuration file in current working directory
-logging_config_path = os.path.join(os.getcwd(), 'logging.conf')
-if os.path.exists(logging_config_path):
-    logging.config.fileConfig(logging_config_path)
-
 file_handler = logging.handlers.RotatingFileHandler(
     filename='./logs/log.txt', mode='a',
     maxBytes=1000000, backupCount=10)
@@ -65,6 +60,11 @@ file_handler.doRollover()
 logging.basicConfig(handlers=[file_handler, logging.StreamHandler()],
                     format="%(asctime)s [%(levelname)s] %(name)s %(funcName)s: %(message)s",
                     force=True)
+
+# Check for logging configuration file in current working directory
+logging_config_path = os.path.join(os.getcwd(), 'logging.conf')
+if os.path.exists(logging_config_path):
+    logging.config.fileConfig(logging_config_path, disable_existing_loggers=False)
 
 logger = logging.getLogger(__name__)
 
