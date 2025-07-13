@@ -18,14 +18,12 @@ logger = logging.getLogger(__name__)
 try:
     import RPi.GPIO as GPIO
 except ImportError as e:
-    logger.warn(f"RPi.GPIO was not imported. {e}")
+    logger.warning(f"RPi.GPIO was not imported. {e}")
     globals()["GPIO"] = None
 
 from donkeycar.parts.pins import OutputPin, PwmPin, PinState, \
     input_pwm_pin_by_id
 from donkeycar.utilities.deprecated import deprecated
-
-logger = logging.getLogger(__name__)
 
 
 #
@@ -101,6 +99,8 @@ class PulseController:
         self.scale = pwm_scale
         self.inverted = pwm_inverted
         self.pwm_pin.start()
+        logger.info(f'PulseController created with scale={self.scale}, '
+                    f'inverted={self.inverted}')
 
     def set_pulse(self, pulse: int) -> None:
         """
@@ -394,6 +394,7 @@ class EStop:
         self.count = 0
         self.is_triggerd = False
         self.last_user_mode = 0
+        logger.info(f'EStop initialized with car_freq={car_freq}, brake={brake}')
 
     def run(self, in_throttle: float, user_mode: int = 0):
         # E-stop gets triggered when user mode is shifted from 1 to 0
@@ -414,361 +415,6 @@ class EStop:
             logger.info('E-Stop released')
             self.count = 0
             return in_throttle, trigger
-
-#
-# This seems redundant.  If it's really emulating and PCA9685, then
-# why don't we just use that code?
-# - this is not used in any templates
-# - this is not documented in docs or elsewhere
-# - this seems redundant; if it emultates a PCA9685 then we should be able to use that code.
-# - there is an intention to implement a Firmata driver in pins.py.
-#   Teensy can run Firmata, so that is a way to get Teensy support.
-#   See https://www.pjrc.com/teensy/td_libs_Firmata.html
-#
-@deprecated("JHat is unsupported/undocumented in the framework.  It will be removed in a future release.")
-class JHat:
-    '''
-    PWM motor controller using Teensy emulating PCA9685.
-    '''
-    def __init__(self, channel, address=0x40, frequency=60, busnum=None):
-        logger.info("Firing up the Hat")
-        import Adafruit_PCA9685
-        LED0_OFF_L = 0x08
-        # Initialise the PCA9685 using the default address (0x40).
-        if busnum is not None:
-            from Adafruit_GPIO import I2C
-            # replace the get_bus function with our own
-            def get_bus():
-                return busnum
-            I2C.get_default_bus = get_bus
-        self.pwm = Adafruit_PCA9685.PCA9685(address=address)
-        self.pwm.set_pwm_freq(frequency)
-        self.channel = channel
-        self.register = LED0_OFF_L+4*channel
-
-        # we install our own write that is more efficient use of interrupts
-        self.pwm.set_pwm = self.set_pwm
-
-    def set_pulse(self, pulse):
-        self.set_pwm(self.channel, 0, pulse)
-
-    def set_pwm(self, channel, on, off):
-        # sets a single PWM channel
-        self.pwm._device.writeList(self.register, [off & 0xFF, off >> 8])
-
-    def run(self, pulse):
-        self.set_pulse(pulse)
-
-
-#
-# JHatReader is on the chopping block for removal
-# - it is not integrated into any templates
-# - it is not documented in docs or elsewhere
-# This appears to be a way to read RC receiving input.  As such
-# it would more appropriately be integrated into controllers.py.
-# If that can be addressed then we would keep this,
-# otherwise this should be removed.
-#
-@deprecated("JHatReader is unsupported/undocumented in the framework.  It may be removed in a future release.")
-class JHatReader:
-    '''
-    Read RC controls from teensy
-    '''
-    def __init__(self, channel, address=0x40, frequency=60, busnum=None):
-        import Adafruit_PCA9685
-        self.pwm = Adafruit_PCA9685.PCA9685(address=address)
-        self.pwm.set_pwm_freq(frequency)
-        self.register = 0 #i2c read doesn't take an address
-        self.steering = 0
-        self.throttle = 0
-        self.running = True
-        #send a reset
-        self.pwm._device.writeRaw8(0x06)
-
-    def read_pwm(self):
-        '''
-        send read requests via i2c bus to Teensy to get
-        pwm control values from last RC input
-        '''
-        h1 = self.pwm._device.readU8(self.register)
-        # first byte of header must be 100, otherwize we might be reading
-        # in the wrong byte offset
-        while h1 != 100:
-            logger.debug("skipping to start of header")
-            h1 = self.pwm._device.readU8(self.register)
-
-        h2 = self.pwm._device.readU8(self.register)
-        # h2 ignored now
-
-        val_a = self.pwm._device.readU8(self.register)
-        val_b = self.pwm._device.readU8(self.register)
-        self.steering = (val_b << 8) + val_a
-
-        val_c = self.pwm._device.readU8(self.register)
-        val_d = self.pwm._device.readU8(self.register)
-        self.throttle = (val_d << 8) + val_c
-
-        # scale the values from -1 to 1
-        self.steering = (self.steering - 1500.0) / 500.0  + 0.158
-        self.throttle = (self.throttle - 1500.0) / 500.0  + 0.136
-
-    def update(self):
-        while(self.running):
-            self.read_pwm()
-
-    def run_threaded(self):
-        return self.steering, self.throttle
-
-    def shutdown(self):
-        self.running = False
-        time.sleep(0.1)
-
-
-#
-# Adafruit_DCMotor_Hat support is on the block for removal
-# - it is not integrated into any templates
-# - It is not documented in the docs or otherwise
-# A path forward would be to add a drive train option
-# DRIVE_TRAIN_TYPE = "DC_TWO_WHEEL_ADAFRUIT"
-# and integrate this into complete.py
-#
-@deprecated("This appears to be unsupported/undocumented in the framework. This may be removed in a future release")
-class Adafruit_DCMotor_Hat:
-    '''
-    Adafruit DC Motor Controller
-    Used for each motor on a differential drive car.
-    '''
-    def __init__(self, motor_num):
-        from Adafruit_MotorHAT import Adafruit_MotorHAT, Adafruit_DCMotor
-        import atexit
-
-        self.FORWARD = Adafruit_MotorHAT.FORWARD
-        self.BACKWARD = Adafruit_MotorHAT.BACKWARD
-        self.mh = Adafruit_MotorHAT(addr=0x60)
-
-        self.motor = self.mh.getMotor(motor_num)
-        self.motor_num = motor_num
-
-        atexit.register(self.turn_off_motors)
-        self.speed = 0
-        self.throttle = 0
-
-    def run(self, speed):
-        '''
-        Update the speed of the motor where 1 is full forward and
-        -1 is full backwards.
-        '''
-        if speed > 1 or speed < -1:
-            raise ValueError( "Speed must be between 1(forward) and -1(reverse)")
-
-        self.speed = speed
-        self.throttle = int(dk.utils.map_range(abs(speed), -1, 1, -255, 255))
-
-        if speed > 0:
-            self.motor.run(self.FORWARD)
-        else:
-            self.motor.run(self.BACKWARD)
-
-        self.motor.setSpeed(self.throttle)
-
-    def shutdown(self):
-        self.mh.getMotor(self.motor_num).run(Adafruit_MotorHAT.RELEASE)
-
-
-#
-# Maestro Servo Controller support is on the block for removal
-# - it is not integrated into any templates
-# - It is not documented in the docs or otherwise
-# - It seems to require a separate AStar microcontroller for which there is no firmware included or referenced
-# If that can be addressed, then we can add Maestro support to the pin provide api in pins.py
-# so it can be used a source of TTL and PWM for the generalized motor drivers.
-# Perhaps the AStar controller is not integral to using this as a source of servo pulses in which
-# case it seems pretty straight forward to integrate this into pins.py and then delete this class.
-#
-@deprecated("This appears to be unsupported/undocumented in the framework. This may be removed in a future release")
-class Maestro:
-    '''
-    Pololu Maestro Servo controller
-    Use the MaestroControlCenter to set the speed & acceleration values to 0!
-    See https://www.pololu.com/docs/0J40/all
-    '''
-    import threading
-
-    maestro_device = None
-    astar_device = None
-    maestro_lock = threading.Lock()
-    astar_lock = threading.Lock()
-
-    def __init__(self, channel, frequency=60):
-        import serial
-
-        if Maestro.maestro_device is None:
-            Maestro.maestro_device = serial.Serial('/dev/ttyACM0', 115200)
-
-        self.channel = channel
-        self.frequency = frequency
-        self.lturn = False
-        self.rturn = False
-        self.headlights = False
-        self.brakelights = False
-
-        if Maestro.astar_device == None:
-            Maestro.astar_device = serial.Serial('/dev/ttyACM2', 115200, timeout= 0.01)
-
-    def set_pulse(self, pulse):
-        # Recalculate pulse width from the Adafruit values
-        w = pulse * (1 / (self.frequency * 4096)) # in seconds
-        w *= 1000 * 1000  # in microseconds
-        w *= 4  # in quarter microsenconds the maestro wants
-        w = int(w)
-
-        with Maestro.maestro_lock:
-            Maestro.maestro_device.write(bytearray([ 0x84,
-                                                     self.channel,
-                                                     (w & 0x7F),
-                                                     ((w >> 7) & 0x7F)]))
-
-    def set_turn_left(self, v):
-        if self.lturn != v:
-            self.lturn = v
-            b = bytearray('L' if v else 'l', 'ascii')
-            with Maestro.astar_lock:
-                Maestro.astar_device.write(b)
-
-    def set_turn_right(self, v):
-        if self.rturn != v:
-            self.rturn = v
-            b = bytearray('R' if v else 'r', 'ascii')
-            with Maestro.astar_lock:
-                Maestro.astar_device.write(b)
-
-    def set_headlight(self, v):
-        if self.headlights != v:
-            self.headlights = v
-            b = bytearray('H' if v else 'h', 'ascii')
-            with Maestro.astar_lock:
-                Maestro.astar_device.write(b)
-
-    def set_brake(self, v):
-        if self.brakelights != v:
-            self.brakelights = v
-            b = bytearray('B' if v else 'b', 'ascii')
-            with Maestro.astar_lock:
-                Maestro.astar_device.write(b)
-
-    def readline(self):
-        ret = None
-        with Maestro.astar_lock:
-            # expecting lines like
-            # E n nnn n
-            if Maestro.astar_device.inWaiting() > 8:
-                ret = Maestro.astar_device.readline()
-
-        if ret is not None:
-            ret = ret.rstrip()
-
-        return ret
-
-
-#
-# Teensy support is on the chopping block.
-# - It is not integrated into any template
-# - It is not documented in the docs or otherwise
-# - It presumably requires a firmware to be uploaded to the teensy, but no firmware is referenced.
-# If that can be addressed, then we can add Teensy support to the pin provide api in pins.py
-# so it can be used a source of TTL and PWM for the generalized motor drivers.
-# Another route is to implement Firmata protocol (perhaps a version of the Arduino sketch,
-# see ArduinoFirmata below)
-#
-@deprecated("This appears to be unsupported/undocumented in the framework. This may be removed in a future release")
-class Teensy:
-    '''
-    Teensy Servo controller
-    '''
-    import threading
-
-    teensy_device = None
-    astar_device = None
-    teensy_lock = threading.Lock()
-    astar_lock = threading.Lock()
-
-    def __init__(self, channel, frequency = 60):
-        import serial
-
-        if Teensy.teensy_device is None:
-            Teensy.teensy_device = serial.Serial('/dev/teensy', 115200, timeout=0.01)
-
-        self.channel = channel
-        self.frequency = frequency
-        self.lturn = False
-        self.rturn = False
-        self.headlights = False
-        self.brakelights = False
-
-        if Teensy.astar_device == None:
-            Teensy.astar_device = serial.Serial('/dev/astar', 115200, timeout=0.01)
-
-    def set_pulse(self, pulse):
-        # Recalculate pulse width from the Adafruit values
-        w = pulse * (1 / (self.frequency * 4096)) # in seconds
-        w *= 1000 * 1000  # in microseconds
-
-        with Teensy.teensy_lock:
-            Teensy.teensy_device.write(("%c %.1f\n" % (self.channel, w)).encode('ascii'))
-
-    def set_turn_left(self, v):
-        if self.lturn != v:
-            self.lturn = v
-            b = bytearray('L' if v else 'l', 'ascii')
-            with Teensy.astar_lock:
-                Teensy.astar_device.write(b)
-
-    def set_turn_right(self, v):
-        if self.rturn != v:
-            self.rturn = v
-            b = bytearray('R' if v else 'r', 'ascii')
-            with Teensy.astar_lock:
-                Teensy.astar_device.write(b)
-
-    def set_headlight(self, v):
-        if self.headlights != v:
-            self.headlights = v
-            b = bytearray('H' if v else 'h', 'ascii')
-            with Teensy.astar_lock:
-                Teensy.astar_device.write(b)
-
-    def set_brake(self, v):
-        if self.brakelights != v:
-            self.brakelights = v
-            b = bytearray('B' if v else 'b', 'ascii')
-            with Teensy.astar_lock:
-                Teensy.astar_device.write(b)
-
-    def teensy_readline(self):
-        ret = None
-        with Teensy.teensy_lock:
-            # expecting lines like
-            # E n nnn n
-            if Teensy.teensy_device.inWaiting() > 8:
-                ret = Teensy.teensy_device.readline()
-
-        if ret is not None:
-            ret = ret.rstrip()
-
-        return ret
-
-    def astar_readline(self):
-        ret = None
-        with Teensy.astar_lock:
-            # expecting lines like
-            # E n nnn n
-            if Teensy.astar_device.inWaiting() > 8:
-                ret = Teensy.astar_device.readline()
-
-        if ret is not None:
-            ret = ret.rstrip()
-
-        return ret
 
 
 class MockController(object):
@@ -911,7 +557,8 @@ class RCReceiver:
     """
 
     def __init__(self, gpio, min_out=-1, max_out=1, min_duty=0.06,
-                 max_duty=0.12, invert=False, jitter=0.025, no_action=None):
+                 max_duty=0.12, invert=False, jitter=0.025, no_action=None,
+                 name=""):
         """
         :param gpio: gpio pin connected to RC channel
         :param invert: invert value of run() within [MIN_OUT,MAX_OUT]
@@ -920,6 +567,12 @@ class RCReceiver:
                           sent. This is usually zero for throttle and steering
                           being the center values when the controls are not
                           pressed.
+        :param min_out: minimum output value, default -1
+        :param max_out: maximum output value, default 1
+        :param min_duty: minimum duty cycle, default 0.06 (6% duty cycle)
+        :param max_duty: maximum duty cycle, default 0.12 (12% duty cycle)
+        :param name: name of the receiver, used for logging
+        
         """
         self.min_out = min_out
         self.max_out = max_out
@@ -936,15 +589,17 @@ class RCReceiver:
                        / (self.max_duty - self.min_duty))
         self.pin = input_pwm_pin_by_id(gpio)
         self.pin.start()
-        logger.info(f'RCReceiver gpio {gpio} created')
+        self.name = name
+        logger.info(f'RCReceiver {self.name} on gpio {gpio} created')
 
     def run(self):
         """
         Donkey parts interface, returns pulse mapped into [MIN_OUT,MAX_OUT] or
         [MAX_OUT,MIN_OUT]
         """
+        duty_cycle = self.pin.duty_cycle()
         # signal is a value in [0, (MAX_OUT-MIN_OUT)]
-        signal = (self.pin.duty_cycle() - self.min_duty) * self.factor
+        signal = (duty_cycle - self.min_duty) * self.factor
         # Assuming non-activity if the pulse is at no_action point
         is_action = abs(signal - self.no_action) > self.jitter
         # if deemed noise assume no signal
@@ -956,6 +611,7 @@ class RCReceiver:
         else:
             signal += self.min_out
         signal = clamp(signal, self.min_out, self.max_out)
+        logger.debug(f'RCReceiver {self.name} run: duty={duty_cycle} signal={signal}, is_action={is_action}')
         return signal, is_action
 
     def shutdown(self):
@@ -1059,88 +715,6 @@ class L298N_HBridge_2pin(object):
         self.pin_backward.stop()
 
 
-#
-# This is being replaced by pins.py and PulseController.
-# GPIO pins can be configured using RPi.GPIO or PIGPIO,
-# so this is redundant
-#
-@deprecated("This will be removed in a future release in favor of PulseController")
-class RPi_GPIO_Servo(object):
-    '''
-    Servo controlled from the gpio pins on Rpi
-    '''
-    def __init__(self, pin, pin_scheme=None, freq=50, min=5.0, max=7.8):
-        self.pin = pin
-        if pin_scheme is None:
-            pin_scheme = GPIO.BCM
-        GPIO.setmode(pin_scheme)
-        GPIO.setup(self.pin, GPIO.OUT)
-
-        self.throttle = 0
-        self.pwm = GPIO.PWM(self.pin, freq)
-        self.pwm.start(0)
-        self.min = min
-        self.max = max
-
-    def run(self, pulse):
-        '''
-        Update the speed of the motor where 1 is full forward and
-        -1 is full backwards.
-        '''
-        # I've read 90 is a good max
-        self.throttle = dk.map_frange(pulse, -1.0, 1.0, self.min, self.max)
-        # logger.debug(pulse, self.throttle)
-        self.pwm.ChangeDutyCycle(self.throttle)
-
-    def shutdown(self):
-        self.pwm.stop()
-        GPIO.cleanup()
-
-
-#
-# This is being replaced by pins.py.  GPIO pins can be
-# configured using RPi.GPIO or PIGPIO, so ServoBlaster is redundant
-#
-@deprecated("This will be removed in a future release in favor of PulseController")
-class ServoBlaster(object):
-    '''
-    Servo controlled from the gpio pins on Rpi
-    This uses a user space service to generate more efficient PWM via DMA control blocks.
-    Check readme and install here:
-    https://github.com/richardghirst/PiBits/tree/master/ServoBlaster
-    cd PiBits/ServoBlaster/user
-    make
-    sudo ./servod
-    will start the daemon and create the needed device file:
-    /dev/servoblaster
-
-    to test this from the command line:
-    echo P1-16=120 > /dev/servoblaster
-
-    will send 1200us PWM pulse to physical pin 16 on the pi.
-
-    If you want it to start on boot:
-    sudo make install
-    '''
-    def __init__(self, pin):
-        self.pin = pin
-        self.servoblaster = open('/dev/servoblaster', 'w')
-        self.min = min
-        self.max = max
-
-    def set_pulse(self, pulse):
-        s = 'P1-%d=%d\n' % (self.pin, pulse)
-        self.servoblaster.write(s)
-        self.servoblaster.flush()
-
-    def run(self, pulse):
-        self.set_pulse(pulse)
-
-    def shutdown(self):
-        self.run((self.max + self.min) / 2)
-        self.servoblaster.close()
-
-
 class ModeSwitch:
     """
     Donkey part which allows to cycle through a number of states, every time an
@@ -1204,137 +778,3 @@ class ThrottleOffSwitch(ModeSwitch):
         return stop
 
 
-#
-# TODO: integrate ArduinoFirmata support into pin providers, then we can remove all of this code and use PulseController
-#
-# Arduino/Microcontroller PWM support.
-# Firmata is a specification for configuring general purpose microcontrollers remotey.
-# The implementatino for Arduino is used here.
-#
-# See https://docs.donkeycar.com/parts/actuators/#arduino for how to set this up.
-# Firmata Protocol https://github.com/firmata/protocol
-# Arduino implementation https://github.com/firmata/arduino
-#
-# NOTE: to create a general purpose InputPin/OutputPin/PwmPin with support for servo pulses between 1ms and 2ms
-#       with good resolution, it is likely we will need to create our own sketch based on the Arduino Firmata
-#       examples.  By default, analog write is not adequate to support servos; it is good for motor duty cycles
-#       but is poor for servos because of the low resolution and poor control of frequency.  So we need to
-#       use the Servo.h library and dynamically add a Servo instance to a pin when it is configured for
-#       analog output.  Further, we should use writeMicroseconds for output and so interpret values
-#       to the pin as microseconds for the on part of the pulse.  See the various flavors of examples
-#       in the Arduino Firmata repo linked above.
-#
-@deprecated("This will be removed in a future release and Arduino support will be added to pins.py")
-class ArduinoFirmata:
-    '''
-    PWM controller using Arduino board.
-    This is particularly useful for boards like Latte Panda with built it Arduino.
-    Standard Firmata sketch needs to be loaded on Arduino side.
-    Refer to docs/parts/actuators.md for more details
-    '''
-
-    def __init__(self, servo_pin = 6, esc_pin = 5):
-        from pymata_aio.pymata3 import PyMata3
-        self.board = PyMata3()
-        self.board.sleep(0.015)
-        self.servo_pin = servo_pin
-        self.esc_pin = esc_pin
-        self.board.servo_config(servo_pin)
-        self.board.servo_config(esc_pin)
-
-    def set_pulse(self, pin, angle):
-        try:
-            self.board.analog_write(pin, int(angle))
-        except:
-            self.board.analog_write(pin, int(angle))
-
-    def set_servo_pulse(self, angle):
-        self.set_pulse(self.servo_pin, int(angle))
-
-    def set_esc_pulse(self, angle):
-        self.set_pulse(self.esc_pin, int(angle))
-
-
-@deprecated("This will be removed in a future release and Arduino PWM support "
-            "will be add to pins.py")
-class ArdPWMSteering:
-    """
-    Wrapper over a Arduino Firmata controller to convert angles to PWM pulses.
-    """
-    LEFT_ANGLE = -1
-    RIGHT_ANGLE = 1
-
-    def __init__(self,
-                 controller=None,
-                 left_pulse=60,
-                 right_pulse=120):
-
-        self.controller = controller
-        self.left_pulse = left_pulse
-        self.right_pulse = right_pulse
-        self.pulse = dk.utils.map_range(0, self.LEFT_ANGLE, self.RIGHT_ANGLE,
-                                        self.left_pulse, self.right_pulse)
-        self.running = True
-        logger.info('Arduino PWM Steering created')
-
-    def run(self, angle):
-        # map absolute angle to angle that vehicle can implement.
-        self.pulse = dk.utils.map_range(angle,
-                                        self.LEFT_ANGLE, self.RIGHT_ANGLE,
-                                        self.left_pulse, self.right_pulse)
-        self.controller.set_servo_pulse(self.pulse)
-
-    def shutdown(self):
-        # set steering straight
-        self.pulse = dk.utils.map_range(0, self.LEFT_ANGLE, self.RIGHT_ANGLE,
-                                        self.left_pulse, self.right_pulse)
-        time.sleep(0.3)
-        self.running = False
-
-
-@deprecated("This will be removed in a future release and Arduino PWM support will be add to pins.py")
-class ArdPWMThrottle:
-
-    """
-    Wrapper over Arduino Firmata controller to convert -1 to 1 throttle
-    values to PWM pulses.
-    """
-    MIN_THROTTLE = -1
-    MAX_THROTTLE = 1
-
-    def __init__(self,
-                 controller=None,
-                 max_pulse=105,
-                 min_pulse=75,
-                 zero_pulse=90):
-
-        self.controller = controller
-        self.max_pulse = max_pulse
-        self.min_pulse = min_pulse
-        self.zero_pulse = zero_pulse
-        self.pulse = zero_pulse
-
-        # send zero pulse to calibrate ESC
-        logger.info("Init ESC")
-        self.controller.set_esc_pulse(self.max_pulse)
-        time.sleep(0.01)
-        self.controller.set_esc_pulse(self.min_pulse)
-        time.sleep(0.01)
-        self.controller.set_esc_pulse(self.zero_pulse)
-        time.sleep(1)
-        self.running = True
-        logger.info('Arduino PWM Throttle created')
-
-    def run(self, throttle):
-        if throttle > 0:
-            self.pulse = dk.utils.map_range(throttle, 0, self.MAX_THROTTLE,
-                                            self.zero_pulse, self.max_pulse)
-        else:
-            self.pulse = dk.utils.map_range(throttle, self.MIN_THROTTLE, 0,
-                                            self.min_pulse, self.zero_pulse)
-        self.controller.set_esc_pulse(self.pulse)
-
-    def shutdown(self):
-        # stop vehicle
-        self.run(0)
-        self.running = False

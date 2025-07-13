@@ -242,9 +242,28 @@ class RecordingCondition:
     """ Class to switch recording based on static or dynamic condition """
     def __init__(self, static_condition=None):
         self.condition = static_condition
+        logger.info(f"Creating RecordingCondition with static condition: {self.condition}")
 
     def run(self, dynamic_condition, throttle_val):
+        logger.debug(f"RecordingCondition: static={self.condition}, "
+                     f"dynamic={dynamic_condition}, throttle={throttle_val}")
         if self.condition is None:
             return dynamic_condition and throttle_val > 0
         else:
             return self.condition and throttle_val > 0
+
+
+class ChangeDetector:
+    """ Class to detect changes in boolean input values """
+    def __init__(self):
+        self.previous_value = None
+        logger.info("ChangeDetector created")
+
+    def run(self, input_value):
+        if self.previous_value is None:
+            self.previous_value = input_value
+            return False
+        
+        changed = input_value != self.previous_value
+        self.previous_value = input_value
+        return changed

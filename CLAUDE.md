@@ -198,3 +198,81 @@ def run(self, image, steering, throttle):
 - Test configuration in pytest.ini with custom warning filters
 - CI/CD via GitHub Actions with matrix testing (macOS, Ubuntu)
 - Tests located in `tests/` directory with 40+ test files
+
+## Remote Development Workflow
+
+### Raspberry Pi Development Setup
+
+When developing for Raspberry Pi deployment, use this workflow:
+
+**Development Environment:**
+- Local development machine with donkeycar repo
+- Raspberry Pi accessible via SSH at `hyper.local`
+- Git repo on Pi located at `~/projects/donkeycar`
+- Car application directory at `~/mycar`
+
+**Deployment Steps:**
+
+1. **Local Development:**
+   ```bash
+   # Make changes to donkey5.py or other files
+   git add . && git commit -m "description"
+   git push
+   ```
+
+2. **Deploy to Raspberry Pi:**
+   ```bash
+   ssh hyper.local
+   cd ~/projects/donkeycar
+   git pull origin new_dev
+   
+   # Update car application with latest template
+   cd ~/mycar
+   donkey update --template donkey5
+   ```
+
+3. **Test on Pi:**
+   ```bash
+   # Run car application
+   ./manage.py drive
+   
+   # Observe logging output and adjust logging.conf if needed
+   # The logging.conf file should be in ~/mycar directory
+   ```
+
+4. **Iterate:** Repeat steps 1-3 until functionality works correctly
+
+**Logging Configuration:**
+- Car app uses rotating file handler + console output with timestamps
+- Optional `logging.conf` in car directory for module-specific debug levels
+- Uses configparser approach (not fileConfig) to preserve console/file handlers
+- Example working logging.conf:
+  ```ini
+  [loggers]
+  keys=root,actuator,transform
+
+  [handlers]
+  keys=
+
+  [formatters]
+  keys=
+
+  [logger_root]
+  level=INFO
+
+  [logger_actuator]
+  level=DEBUG
+  qualname=donkeycar.parts.actuator
+
+  [logger_transform]
+  level=DEBUG
+  qualname=donkeycar.parts.transform
+  ```
+
+**Key Points:**
+- **CRITICAL:** Never use `handlers=` lines in logger sections - they override console/file output
+- **CRITICAL:** donkey5.py uses configparser, not fileConfig(), to avoid handler disruption
+- The `donkey update` command copies template files to car directory
+- Changes to core library require git pull + update cycle
+- Working logging shows: `2025-07-12 12:47:40,939 [INFO] donkeycar.parts.actuator __init__: RCReceiver created`
+- Documentation at docs.donkeycar.com covers main branch; new_dev may differ

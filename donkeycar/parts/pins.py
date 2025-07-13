@@ -1346,6 +1346,8 @@ class InputPwmPinPico(InputPwmPin):
         self.pin_number = f'GP{pin_number}'
         self.duty = duty
         self._state = PinState.NOT_STARTED
+        logger.info(f"Creating InputPwmPinPico for pin {self.pin_number} "
+                    f"with duty cycle {self.duty}")
 
     def start(self) -> None:
         """
@@ -1359,6 +1361,8 @@ class InputPwmPinPico(InputPwmPin):
         self.pico.setup_input_pin(self.pin_number, mode='PWM_IN',
                                   duty=self.duty)
         self._state = self.duty
+        logger.info(f"InputPwmPinPico 'PICO.BCM.{self.pin_number}' started "
+                    f"with duty cycle {self.duty}.")
 
     def stop(self) -> None:
         if self.state() != PinState.NOT_STARTED:
@@ -1390,6 +1394,8 @@ class PwmPinPico(PwmPin):
         self.frequency: int = frequency_hz
         self.pico = pico_instance
         self._state: int = PinState.NOT_STARTED
+        logger.info(f"Creating PwmPinPico for pin {self.pin_number} "
+                    f"with frequency {self.frequency}Hz")
 
     def start(self, duty=0.09) -> None:
         """
@@ -1404,6 +1410,8 @@ class PwmPinPico(PwmPin):
         self.pico.setup_output_pin(self.pin_number, mode='PWM',
                                    duty=duty, frequency=self.frequency)
         self._state = duty
+        logger.info(f"PwmPinPico 'PICO.BCM.{self.pin_number}' started with "
+                    f"duty cycle {duty} and frequency {self.frequency}Hz.")
 
     def stop(self) -> None:
         self._state = PinState.NOT_STARTED

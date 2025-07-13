@@ -29,6 +29,7 @@ class Tub(object):
         # Create images folder if necessary
         if not os.path.exists(self.images_base_path):
             os.makedirs(self.images_base_path, exist_ok=True)
+        logger.info(f'Created Tub at {self.base_path}')
 
     def write_record(self, record=None):
         """
@@ -133,8 +134,14 @@ class TubWriter(object):
     """
     def __init__(self, base_path, inputs=[], types=[], metadata=[],
                  max_catalog_len=1000, lap_timer=None):
+        print(f'Creating part TubWriter...')
+        print(f"Logger level: {logger.getEffectiveLevel()}")
         self.tub = Tub(base_path, inputs, types, metadata, max_catalog_len)
         self.lap_timer = lap_timer
+        print(f'Created TubWriter for {self.tub.base_path}')
+        logger.info(f'Created TubWriter for {self.tub.base_path}')
+        logger.warning(f'Created TubWriter for {self.tub.base_path}')
+        logger.error(f'Created TubWriter for {self.tub.base_path}')
 
     def run(self, *args):
         assert len(self.tub.manifest.inputs) == len(args), \
@@ -175,6 +182,8 @@ class TubWiper:
         self._num_records = num_records
         self._active_loop_count = 0  # for debouncing
         self._min_loops = min_loops
+        logger.info(f'Created TubWiper for {self._tub.base_path} '
+                    f'to delete {self._num_records} records')
 
     def run(self, is_delete):
         """
@@ -193,7 +202,7 @@ class TubWiper:
                 # action command
                 self._tub.delete_last_n_records(self._num_records)
                 # only trigger if it was released before
-                logger.debug(f"Wiper triggered")
+                logger.info(f"Wiper triggered")
                 return True
         else:
             # trigger released, reset active loop count
