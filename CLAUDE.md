@@ -6,6 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Donkey Car is a minimalist and modular self-driving car library for Python, designed for hobbyists and students. It enables building RC cars that drive themselves using machine learning, with support for various sensors, actuators, and ML frameworks.
 
+## Environment Setup
+
+**CRITICAL**: Always ensure the 'donkey' conda environment is activated before running any Python code, tests, or installations. If the environment is not active, ask the user before proceeding.
+
+Check current environment with: `conda info --envs | grep \*`
+Activate with: `conda activate donkey`
+
 ## Key Commands
 
 ### Testing and Development
