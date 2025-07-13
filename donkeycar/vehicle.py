@@ -109,7 +109,7 @@ class Vehicle:
         """
         self.parts.remove(part)
 
-    def start(self, rate_hz: int=10, max_loop_count: int=None) -> (int, float):
+    def start(self, rate_hz: int=10, max_loop_count: int=None) -> tuple[int, float]:
         """
         Start vehicle's main drive loop.
 
