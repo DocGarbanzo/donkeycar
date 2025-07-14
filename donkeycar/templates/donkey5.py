@@ -43,8 +43,9 @@ from donkeycar.parts.controller import WebFpv
 from donkeycar.parts.tub_v2 import TubWiper, TubWriter
 from donkeycar.pipeline.database import update_config_from_database
 from donkeycar.parts.file_watcher import FileWatcher
-from donkeycar.parts.transform import ChangeDetector, ControlSwitch, ImuCombinerNormaliser, RecordingCondition, \
-    SimplePidController, SpeedRescaler
+from donkeycar.parts.transform import (ChangeDetector, ControlSwitch, 
+    ImuCombinerNormaliser, RecordingCondition, 
+    SimplePidController, SpeedRescaler)
 from donkeycar.parts.image_transformations import ImageTransformations
 
 from donkeycar.parts.imu import Mpu6050Ada
@@ -57,9 +58,10 @@ file_handler = logging.handlers.RotatingFileHandler(
     maxBytes=1000000, backupCount=10)
 file_handler.doRollover()
 
-logging.basicConfig(handlers=[file_handler, logging.StreamHandler()],
-                    format="%(asctime)s [%(levelname)s] %(name)s %(funcName)s: %(message)s",
-                    force=True)
+logging.basicConfig(
+    handlers=[file_handler, logging.StreamHandler()],
+    format="%(asctime)s [%(levelname)s] %(name)s %(funcName)s: %(message)s",
+    force=True)
 
 logger = logging.getLogger(__name__)
 
@@ -107,15 +109,16 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     rc_steering = RCReceiver(gpio=cfg.STEERING_RC_GPIO, name='steering')
     car.add(rc_steering, outputs=['user/angle', 'user/angle_on'])
 
-    rc_throttle = RCReceiver(gpio=cfg.THROTTLE_RC_GPIO, name='throttle',)
+    rc_throttle = RCReceiver(gpio=cfg.THROTTLE_RC_GPIO, name='throttle')
     car.add(rc_throttle, outputs=['user/throttle', 'user/throttle_on'])
 
-    rc_ch_3 = RCReceiver(min_out=0, no_action=0, gpio=cfg.CH3_RC_GPIO, name='ch3')
+    rc_ch_3 = RCReceiver(
+        min_out=0, no_action=0, gpio=cfg.CH3_RC_GPIO, name='ch3')
     car.add(rc_ch_3, outputs=['user/wiper', 'user/wiper_on'])
 
-    odo = OdometerPico(tick_per_meter=cfg.TICK_PER_M, pin_id=cfg.ODOMETER_GPIO, weight=0.5)
-    car.add(odo, inputs=['pico/read_odo'],
-            outputs=['car/speed', 'car/inst_speed', 'car/distance'])
+    odo = OdometerPico(
+        tick_per_meter=cfg.TICK_PER_M, pin_id=cfg.ODOMETER_GPIO, weight=0.5)
+    car.add(odo, outputs=['car/speed', 'car/inst_speed', 'car/distance'])
     #
     # add lap timer ------------------------------------------------------------
     lap = LapTimer(gpio=cfg.LAP_TIMER_GPIO)
@@ -140,9 +143,9 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
         # Add image transformations like crop or trapezoidal mask
         if hasattr(cfg, 'TRANSFORMATIONS') and cfg.TRANSFORMATIONS or \
                 hasattr(cfg, 'POST_TRANSFORMATIONS') and cfg.POST_TRANSFORMATIONS:
-            car.add(ImageTransformations(cfg, 'TRANSFORMATIONS',
-                                         'POST_TRANSFORMATIONS'),
-                    inputs=[CAM_IMG], outputs=[CAM_IMG])
+            car.add(ImageTransformations(
+                    cfg, 'TRANSFORMATIONS', 'POST_TRANSFORMATIONS'),
+                inputs=[CAM_IMG], outputs=[CAM_IMG])
         # imu transformation and addition AI input -----------------------------
         use_imu = 'imu' in model_path
         if use_imu:
@@ -157,8 +160,8 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
             car.add(ctr,
                     inputs=[CAM_IMG, 'tub/num_records'],
                     outputs=['ctr/user/angle', 'ctr/user/throttle',
-                                'ctr/user/mode',
-                                'ctr/recording', 'ctr/buttons', 'ctr/sliders'],
+                             'ctr/user/mode', 'ctr/recording', 
+                             'ctr/buttons', 'ctr/sliders'],
                     threaded=True)
             car.add(SliderSorter(cfg), inputs=['ctr/sliders'],
                     outputs=['lap_pct'])
@@ -329,7 +332,8 @@ def calibrate(cfg, verbose=False):
     rc_throttle = RCReceiver(gpio=cfg.THROTTLE_RC_GPIO, name='throttle')
     car.add(rc_throttle, outputs=['user/throttle', 'user/rc_throttle_on'])
 
-    rc_ch_3 = RCReceiver(min_out=0, no_action=0, gpio=cfg.CH3_RC_GPIO, name='ch3')
+    rc_ch_3 = RCReceiver(min_out=0, no_action=0, 
+                         gpio=cfg.CH3_RC_GPIO, name='ch3')
     car.add(rc_ch_3, outputs=['user/ch_3', 'user/rc_ch_3_on'])
 
     car.add(Plotter(), inputs=['user/angle', 'user/throttle', 'user/ch_3'])
