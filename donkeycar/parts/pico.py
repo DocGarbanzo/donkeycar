@@ -250,13 +250,21 @@ class OdometerPico:
     magnets attached to the drive system. Based on Pico part that delivers a
     pulse-in list of high/lo state changes.
     """
-    def __init__(self, tick_per_meter=75, weight=0.5, maxlen=10, debug=False):
+    def __init__(self, pin_id: str, tick_per_meter=75, weight=0.5, maxlen=10, auto_clear=True, debug=False):
         """
+        :param pin_id: pin identifier like "PICO.BCM.18"
         :param tick_per_meter: how many signals per meter
         :param weight: weighting of current measurement in average speed
                         calculation
+        :param maxlen: maximum number of pulse timings to store
+        :param auto_clear: whether to automatically clear pulse buffer after reading
         :param debug: if debug info should be printed
         """
+        from donkeycar.parts.pins import pulse_in_pin_by_id
+        
+        self.pulse_pin = pulse_in_pin_by_id(pin_id, maxlen=maxlen, auto_clear=auto_clear)
+        self.pulse_pin.start(maxlen=maxlen, auto_clear=auto_clear)
+        
         self._tick_per_meter = tick_per_meter
         self.pulses = deque(maxlen=maxlen)
         self._weight = weight
@@ -265,8 +273,8 @@ class OdometerPico:
         self._debug_data = dict(tick=[], time=[])
         self.scale = 1.0e6 / self._tick_per_meter
         self._debug = debug
-        logger.info(f"OdometerPico added with tick_per_meter: {tick_per_meter},"
-                    f" weight: {weight}, maxlen: {maxlen}")
+        logger.info(f"OdometerPico added with pin_id: {pin_id}, tick_per_meter: {tick_per_meter},"
+                    f" weight: {weight}, maxlen: {maxlen}, auto_clear: {auto_clear}")
 
     def _weighted_avg(self):
         weighted_avg = self.pulses[0]
@@ -275,14 +283,14 @@ class OdometerPico:
                             + (1.0 - self._weight) * weighted_avg
         return weighted_avg
 
-    def run(self, pulse_in=None):
+    def run(self):
         """
         Knowing the tick time in mu s and the ticks/m we calculate the speed. If
         ticks haven't been update since the last call we assume speed is
         zero. Then we reset the pulse history.
-        :param pulse_in: list of high/lo signals in mu s
-        :return speed: in m / s
+        :return: (speed, inst_speed, distance) tuple
         """
+        pulse_in = self.pulse_pin.read_pulses()
         if pulse_in is None:
             pulse_in = []
         self.pulses.extend(pulse_in)
@@ -316,5 +324,6 @@ class OdometerPico:
             path = join(getcwd(), 'odo.json')
             with open(path, "w") as outfile:
                 dump(self._debug_data, outfile, indent=4)
+        self.pulse_pin.stop()
 
 

@@ -287,6 +287,51 @@ class AnalogInputPin(ABC):
         pass  # subclasses must override
 
 
+class PulseInPin(ABC):
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    @abstractmethod
+    def start(self, maxlen: int = 2, auto_clear: bool = False) -> None:
+        """
+        Start the pin in pulse input mode.
+        This raises a RuntimeError if the pin is already started.
+        You can check to see if the pin is started by calling
+        state() and checking for PinState.NOT_STARTED
+        :param maxlen: maximum number of pulse timings to store
+        :param auto_clear: whether to automatically clear pulse buffer after reading
+        """
+        pass  # subclasses should override this
+
+    @abstractmethod
+    def stop(self) -> None:
+        """
+        Stop the pin and return it to PinState.NOT_STARTED
+        """
+        pass  # subclasses should override this
+
+    @abstractmethod
+    def state(self) -> list:
+        """
+        Return most recent pulse timings.  This does not re-read the pin,
+        It just returns that last value read by the read_pulses() method.
+        If the pin is not started or has been stopped,
+        this will return an empty list
+        :return: list of pulse timings in microseconds
+        """
+        return []  # subclasses must override
+
+    @abstractmethod
+    def read_pulses(self) -> list:
+        """
+        Read pulse timings from the pin.
+        :return: list of pulse timings in microseconds or empty list if no pulses
+        :except: RuntimeError if pin is not started
+        """
+        return []  # subclasses must override
+
+
 #
 # ####### Factory Methods
 #
@@ -384,6 +429,18 @@ def analog_input_pin_by_id(pin_id: str) -> AnalogInputPin:
     pin_scheme = parts[1]
     pin_number = int(parts[2])
     return analog_input_pin(pin_provider, pin_number, pin_scheme=pin_scheme)
+
+
+def pulse_in_pin_by_id(pin_id: str, maxlen: int = 2, auto_clear: bool = False) -> PulseInPin:
+    """
+    Select a pulse input pin given a pin id.
+    """
+    parts = pin_id.split(".")
+    pin_provider = parts[0]
+    if pin_provider != PinProvider.PICO:
+        raise RuntimeError("Only Pico implements PulseInPin")
+    pin_number = int(parts[2])
+    return pulse_in_pin(pin_provider, pin_number, maxlen=maxlen, auto_clear=auto_clear)
 
 
 def input_pin(
@@ -524,6 +581,29 @@ def analog_input_pin(
     if pin_scheme != PinScheme.BCM:
         raise ValueError("Pin scheme must be PinScheme.BCM for PICO")
     return AnalogInputPinPico(pin_number)
+
+
+def pulse_in_pin(
+        pin_provider: str,
+        pin_number: int,
+        pin_scheme: str = PinScheme.BCM,
+        maxlen: int = 2,
+        auto_clear: bool = False) -> PulseInPin:
+    """
+    construct a PulseInPin using the given pin provider
+    :param pin_provider: PinProvider string
+    :param pin_number: zero based pin number
+    :param pin_scheme: PinScheme string
+    :param maxlen: maximum number of pulse timings to store
+    :param auto_clear: whether to automatically clear pulse buffer after reading
+    :return: PulseInPin
+    :except: RuntimeError if pin_provider is not valid.
+    """
+    if pin_provider != PinProvider.PICO:
+        raise RuntimeError("Only Pico implements PulseInPin")
+    if pin_scheme != PinScheme.BCM:
+        raise ValueError("Pin scheme must be PinScheme.BCM for PICO")
+    return PulseInPinPico(pin_number, maxlen=maxlen, auto_clear=auto_clear)
 
 #
 # ----- RPi.GPIO/Jetson.GPIO implementations -----
@@ -1434,6 +1514,74 @@ class PwmPinPico(PwmPin):
             raise ValueError("duty_cycle must be in range 0 to 1")
         if self.state() != PinState.NOT_STARTED:
             self.pico.write(self.pin_number, duty)
+
+
+class PulseInPinPico(PulseInPin):
+    """
+    Pulse input pin using Pi Pico
+    """
+    def __init__(self, pin_number: int, maxlen: int = 2, auto_clear: bool = False) -> None:
+        super().__init__()
+        from donkeycar.parts.pico import instance as pico_instance
+        self.pico = pico_instance
+        self.pin_number = f'GP{pin_number}'
+        self.maxlen = maxlen
+        self.auto_clear = auto_clear
+        self._state = []
+        logger.info(f"Creating PulseInPinPico for pin {self.pin_number} "
+                    f"with maxlen {self.maxlen} and auto_clear {self.auto_clear}")
+
+    def start(self, maxlen: int = 2, auto_clear: bool = False) -> None:
+        """
+        Start pin for pulse input.
+        :param maxlen: maximum number of pulse timings to store
+        :param auto_clear: whether to automatically clear pulse buffer after reading
+        :except: RuntimeError if pin is already started.
+        """
+        if len(self._state) > 0 or hasattr(self, '_started'):
+            raise RuntimeError(f"Attempt to start PulseInPinPico("
+                               f"{self.pin_number}) that is already started.")
+        
+        self.maxlen = maxlen
+        self.auto_clear = auto_clear
+        self.pico.setup_input_pin(self.pin_number, mode='PULSE_IN', 
+                                  maxlen=self.maxlen, auto_clear=self.auto_clear)
+        self._state = []
+        self._started = True
+        logger.info(f"PulseInPinPico 'PICO.BCM.{self.pin_number}' started "
+                    f"with maxlen {self.maxlen} and auto_clear {self.auto_clear}.")
+
+    def stop(self) -> None:
+        if hasattr(self, '_started') and self._started:
+            self._state = []
+            self._started = False
+            self.pico.remove_pin(self.pin_number)
+            logger.info(f"PulseInPinPico 'PICO.BCM.{self.pin_number}' stopped.")
+
+    def state(self) -> list:
+        """
+        Return last read pulse timings.
+        :return: list of pulse timings in microseconds or empty list if not started
+        """
+        if not hasattr(self, '_started') or not self._started:
+            return []
+        return self._state
+
+    def read_pulses(self) -> list:
+        """
+        Read pulse timings from the pin.
+        :return: list of pulse timings in microseconds or empty list if no pulses
+        :except: RuntimeError if pin is not started
+        """
+        if not hasattr(self, '_started') or not self._started:
+            raise RuntimeError(f"Attempt to read from PulseInPinPico("
+                               f"{self.pin_number}) that is not started.")
+        
+        pulses = self.pico.read(self.pin_number)
+        if pulses is None:
+            pulses = []
+        self._state = pulses if isinstance(pulses, list) else []
+        return self._state
 
 
 if __name__ == '__main__':
