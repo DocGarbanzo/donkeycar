@@ -155,10 +155,11 @@ class LapTimer:
         """
         Donkey parts interface
         """
-        self.distance = distance
+        if distance is not None:
+            self.distance = distance
         lap_changed = self.lap_count != self.last_lap_count
         self.last_lap_count = self.lap_count
-        return self.lap_count, distance - self.last_distance, lap_changed
+        return self.lap_count, self.distance - self.last_distance, lap_changed
 
     def shutdown(self):
         """
