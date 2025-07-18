@@ -349,7 +349,6 @@ def pulsein(cfg):
     steering channel. The signal is created by the RC receiver and is
     read by the pico into a PulseInResettable part.
     """
-    from donkeycar.parts.pico import PulseInResettable
     car = dk.vehicle.Vehicle()
     rc_steering = RCReceiver(gpio=cfg.STEERING_RC_GPIO, name='steering')
     car.add(rc_steering, outputs=['user/angle', 'user/angle_on'])
