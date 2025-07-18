@@ -364,7 +364,6 @@ def pulsein(cfg):
         tick_per_meter=cfg.TICK_PER_M, pin_id=cfg.ODOMETER_GPIO, weight=0.5, 
         debug=True)
     car.add(odo, outputs=['car/speed', 'car/inst_speed', 'car/distance'])
-    car.add(odo, outputs=['pulse/in'])
 
     car.start(rate_hz=cfg.DRIVE_LOOP_HZ, max_loop_count=cfg.MAX_LOOPS)
 
