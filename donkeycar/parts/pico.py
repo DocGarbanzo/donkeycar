@@ -59,7 +59,7 @@ class Pico:
         Initialize the Pico communicator.
         :param port: port for data connection
         """
-        self.serial = serial.Serial(port, 115200)  #, write_timeout=10.0)
+        self.serial = serial.Serial(port, 115200)  #, write_timeout=10.0)   
         self.counter = 0
         self.running = True
         self.pin_configuration = dict()
@@ -127,8 +127,8 @@ class Pico:
         # process None values. This blocks until the first data is received.
         while self.counter == 0:
             time.sleep(0.1)
-        assert gpio in self.send_dict, f"Pin {gpio} not in send_dict."
         with self.lock:
+            assert gpio in self.send_dict, f"Pin {gpio} not in send_dict."
             self.send_dict[gpio] = value
 
     def read(self, gpio):
@@ -184,8 +184,8 @@ class Pico:
         except Exception as e:
             logger.error(f"Input pin {gpio} setup failed to send setup dict "
                          f"because of {e}, skipping.")
-
-        self.receive_dict[gpio] = 0
+        with self.lock:
+            self.receive_dict[gpio] = 0
 
     def setup_output_pin(self, gpio: str, mode: str, **kwargs) -> None:
         """
@@ -216,10 +216,10 @@ class Pico:
         """
         :param gpio:    the gpio pin to remove
         """
-        setup_dict = dict()
-        logger.info(f"Removing pin {gpio}")
+        logger.info(f"Try removing pin {gpio}")
         try:
             with self.lock:
+                setup_dict = dict()
                 if gpio in self.receive_dict:
                     setup_dict['input_pins'] = {gpio: {}}
                     del self.receive_dict[gpio]
@@ -231,8 +231,8 @@ class Pico:
                 else:
                     logger.warning(f"Pin {gpio} not in send or receive dict.")
                     return
-            # send the setup dictionary
-            pack = json.dumps(setup_dict) + '\n'
+                pack = json.dumps(setup_dict) + '\n'
+            # send the setup dictionary           
             self.serial.reset_input_buffer()
             self.serial.reset_output_buffer()
             self.serial.write(pack.encode())
