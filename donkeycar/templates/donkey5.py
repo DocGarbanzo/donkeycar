@@ -11,6 +11,7 @@ Usage:
     prog stream
     prog led [--verbose]
     prog pwm [--verbose]
+    prog pulsein
 
 Options:
     -h --help               Show this screen.
