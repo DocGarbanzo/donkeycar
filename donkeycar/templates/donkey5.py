@@ -360,12 +360,11 @@ def pulsein(cfg):
                                right_pulse=cfg.STEERING_RIGHT_PWM)
     car.add(pwm_steering, inputs=['user/angle'], threaded=True)
 
-
-    gpio = cfg.PULSE_IN_GPIO
-    pin = PulseInResettable(gpio, maxlen=2, auto_clear=True)
-    car.add(pin, outputs=['pulse/in'])
-
-
+    odo = OdometerPico(
+        tick_per_meter=cfg.TICK_PER_M, pin_id=cfg.ODOMETER_GPIO, weight=0.5, 
+        debug=True)
+    car.add(odo, outputs=['car/speed', 'car/inst_speed', 'car/distance'])
+    car.add(odo, outputs=['pulse/in'])
 
     car.start(rate_hz=cfg.DRIVE_LOOP_HZ, max_loop_count=cfg.MAX_LOOPS)
 

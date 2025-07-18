@@ -250,7 +250,8 @@ class OdometerPico:
     magnets attached to the drive system. Based on Pico part that delivers a
     pulse-in list of high/lo state changes.
     """
-    def __init__(self, pin_id: str, tick_per_meter=75, weight=0.5, maxlen=10, auto_clear=True, debug=False):
+    def __init__(self, pin_id: str, tick_per_meter=75, weight=0.5, maxlen=10, 
+                 auto_clear=True, debug=False):
         """
         :param pin_id: pin identifier like "PICO.BCM.18"
         :param tick_per_meter: how many signals per meter
@@ -262,7 +263,8 @@ class OdometerPico:
         """
         from donkeycar.parts.pins import pulse_in_pin_by_id
         
-        self.pulse_pin = pulse_in_pin_by_id(pin_id, maxlen=maxlen, auto_clear=auto_clear)
+        self.pulse_pin = pulse_in_pin_by_id(
+            pin_id, maxlen=maxlen, auto_clear=auto_clear)
         self.pulse_pin.start(maxlen=maxlen, auto_clear=auto_clear)
         
         self._tick_per_meter = tick_per_meter
@@ -273,8 +275,9 @@ class OdometerPico:
         self._debug_data = dict(tick=[], time=[])
         self.scale = 1.0e6 / self._tick_per_meter
         self._debug = debug
-        logger.info(f"OdometerPico added with pin_id: {pin_id}, tick_per_meter: {tick_per_meter},"
-                    f" weight: {weight}, maxlen: {maxlen}, auto_clear: {auto_clear}")
+        logger.info(f"OdometerPico added with pin_id: {pin_id}, tick_per_meter:"
+                    f"{tick_per_meter}, weight: {weight}, maxlen: {maxlen}, "
+                    f"auto_clear: {auto_clear}")
 
     def _weighted_avg(self):
         weighted_avg = self.pulses[0]
