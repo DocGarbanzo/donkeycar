@@ -318,16 +318,13 @@ def calibrate(cfg, verbose=False):
     car = dk.vehicle.Vehicle()
     rc_steering = RCReceiver(gpio=cfg.STEERING_RC_GPIO, name='steering')
     car.add(rc_steering, outputs=['user/angle', 'user/angle_on'])
-
     rc_throttle = RCReceiver(gpio=cfg.THROTTLE_RC_GPIO, name='throttle')
     car.add(rc_throttle, outputs=['user/throttle', 'user/rc_throttle_on'])
 
     rc_ch_3 = RCReceiver(min_out=0, no_action=0, 
                          gpio=cfg.CH3_RC_GPIO, name='ch3')
     car.add(rc_ch_3, outputs=['user/ch_3', 'user/rc_ch_3_on'])
-
     car.add(Plotter(), inputs=['user/angle', 'user/throttle', 'user/ch_3'])
-
     car.start(rate_hz=10, max_loop_count=cfg.MAX_LOOPS)
 
 
@@ -342,6 +339,35 @@ def stream(cfg):
     # car.add(streamer, inputs=['cam/image_array'], threaded=True)
     car.add(WebFpv(), inputs=['cam/image_array'], threaded=True)
     car.start(rate_hz=hz, max_loop_count=cfg.MAX_LOOPS)
+
+
+def pulsein(cfg):
+    """
+    This script is used to test the pulse-in functionality of the pico.
+    It reads the pulse width of a signal that is created by the RC
+    steering channel. The signal is created by the RC receiver and is
+    read by the pico into a PulseInResettable part.
+    """
+    from donkeycar.parts.pico import PulseInResettable
+    car = dk.vehicle.Vehicle()
+    rc_steering = RCReceiver(gpio=cfg.STEERING_RC_GPIO, name='steering')
+    car.add(rc_steering, outputs=['user/angle', 'user/angle_on'])
+    # hard-wiring pin 0 for pwm output to the PULSE_IN_GPIO to check the 
+    steering_pin = pwm_pin_by_id("PICO.BCM.0")
+    steering_pulse = PulseController(pwm_pin=steering_pin)
+    pwm_steering = PWMSteering(controller=steering_pulse,
+                               left_pulse=cfg.STEERING_LEFT_PWM,
+                               right_pulse=cfg.STEERING_RIGHT_PWM)
+    car.add(pwm_steering, inputs=['user/angle'], threaded=True)
+
+
+    gpio = cfg.PULSE_IN_GPIO
+    pin = PulseInResettable(gpio, maxlen=2, auto_clear=True)
+    car.add(pin, outputs=['pulse/in'])
+
+
+
+    car.start(rate_hz=cfg.DRIVE_LOOP_HZ, max_loop_count=cfg.MAX_LOOPS)
 
 
 class OnOff:
@@ -390,5 +416,7 @@ if __name__ == '__main__':
     elif args['led']:
         led(config, verbose=args['--verbose'])
     elif args['pwm']:
-        pwm(config, verbose=args['--verbose'])
+        pwm(config)
+    elif args['pulsein']:
+        pulsein(config)
     logger.info(f'Ending run of {__file__}')
