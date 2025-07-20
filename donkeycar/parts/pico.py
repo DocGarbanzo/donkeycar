@@ -67,6 +67,7 @@ class Pico:
         # need to guarantee dictionary order as we might receive the
         # dictionary with a different order of keys after deserialisation
         self.receive_dict = dict()
+        self.pulse_in_pins = set()
         self.lock = Lock()
         self.start = None
         logger.info(f"Creating Pico on port: {port}, initialising comms...")
@@ -101,7 +102,7 @@ class Pico:
                 str_in = bytes_in.decode()[:-1]
                 received_dict = json.loads(str_in)
                 with self.lock:
-                    self.receive_dict.update(received_dict)
+                    self._update_receive_dict(received_dict)
                     pack = json.dumps(self.send_dict) + '\n'
                     self.serial.write(pack.encode())
                 if self.counter % 10 == 0:
@@ -146,7 +147,7 @@ class Pico:
                        f"{', '.join(self.receive_dict.keys())}")
                 logger.error(msg)
                 raise RuntimeError(msg)
-            return self.receive_dict[gpio]
+            return self._read_pin_data(gpio)
 
     def stop(self):
         self.running = False
@@ -184,8 +185,11 @@ class Pico:
         except Exception as e:
             logger.error(f"Input pin {gpio} setup failed to send setup dict "
                          f"because of {e}, skipping.")
+        # Track PULSE_IN pins for special handling
+        if mode == 'PULSE_IN':
+            self.pulse_in_pins.add(gpio)
         with self.lock:
-            self.receive_dict[gpio] = 0
+            self.receive_dict[gpio] = [] if mode == 'PULSE_IN' else 0
 
     def setup_output_pin(self, gpio: str, mode: str, **kwargs) -> None:
         """
@@ -223,6 +227,7 @@ class Pico:
                 if gpio in self.receive_dict:
                     setup_dict['input_pins'] = {gpio: {}}
                     del self.receive_dict[gpio]
+                    self.pulse_in_pins.discard(gpio)
                     logger.info(f"Removed input pin {gpio} on pico.")
                 elif gpio in self.send_dict:
                     setup_dict['output_pins'] = {gpio: {}}
@@ -240,6 +245,34 @@ class Pico:
             logger.error(f"Remove pin {gpio} failed with exception {e}, "
                          f"skipping.")
             
+
+    def _update_receive_dict(self, received_dict: dict) -> None:
+        """
+        Update receive_dict with new data, handling PULSE_IN pins specially.
+        For PULSE_IN pins, append new pulse data to existing lists.
+        For other pins, overwrite with new values.
+        """
+        for gpio, data in received_dict.items():
+            if gpio in self.pulse_in_pins:
+                if gpio not in self.receive_dict:
+                    self.receive_dict[gpio] = []
+                if isinstance(data, list) and data:
+                    self.receive_dict[gpio].extend(data)
+            else:
+                self.receive_dict[gpio] = data
+    
+    def _read_pin_data(self, gpio: str):
+        """
+        Read pin data with clear-after-read behavior for PULSE_IN pins.
+        For PULSE_IN pins, return accumulated data and clear the buffer.
+        For other pins, return current value.
+        """
+        if gpio in self.pulse_in_pins:
+            data = self.receive_dict[gpio].copy()
+            self.receive_dict[gpio].clear()
+            return data
+        return self.receive_dict[gpio]
+
 
 instance = Pico()
 
