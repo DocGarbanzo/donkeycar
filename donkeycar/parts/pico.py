@@ -356,9 +356,9 @@ class OdometerPico:
                     f'{self._distance / self._tick_per_meter:4.2f}')
         self.pulse_pin.stop()
         if self._debug:
-            from os import join, getcwd
+            from os import getcwd, path
             from json import dump
-            path = join(getcwd(), 'odo.json')
+            path = path.join(getcwd(), 'odo.json')
             with open(path, "w") as outfile:
                 dump(self._debug_data, outfile, indent=4)
 
