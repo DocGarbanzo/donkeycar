@@ -107,7 +107,7 @@ class CarScreen(AppScreen):
                 # merge in previous deleted indexes which now might have been
                 # overwritten
                 old_tub = get_app_screen('tub').ids.tub_loader.tub
-                if old_tub:
+                if old_tub is not None:
                     deleted_indexes = old_tub.manifest.deleted_indexes
                     get_app_screen('tub').ids.tub_loader.update_tub()
                     if deleted_indexes:

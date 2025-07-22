@@ -38,40 +38,37 @@ class Tub(object):
         contents = dict()
         is_overwrite = '_index' in record
         for key, value in record.items():
-            if value is None:
+            if value is None or key not in self.input_types:
                 continue
-            elif key not in self.input_types:
-                continue
-            else:
-                input_type = self.input_types[key]
-                if input_type == 'float':
-                    # Handle np.float() types gracefully
-                    contents[key] = float(value)
-                elif input_type == 'str':
-                    contents[key] = value
-                elif input_type == 'int':
-                    contents[key] = int(value)
-                elif input_type == 'boolean':
-                    contents[key] = bool(value)
-                elif input_type == 'nparray':
-                    contents[key] = value.tolist()
-                elif input_type == 'list' or input_type == 'vector':
-                    contents[key] = list(value)
-                elif input_type == 'image_array':
-                    # Handle image array
-                    image = Image.fromarray(np.uint8(value))
-                    name = Tub._image_file_name(self.manifest.current_index, key)
-                    image_path = os.path.join(self.images_base_path, name)
-                    image.save(image_path)
-                    contents[key] = name
-                elif input_type == 'gray16_array':
-                    # save np.uint16 as a 16bit png
-                    image = Image.fromarray(np.uint16(value))
-                    name = Tub._image_file_name(self.manifest.current_index,
-                                                key, extension='.png')
-                    image_path = os.path.join(self.images_base_path, name)
-                    image.save(image_path)
-                    contents[key] = name
+            input_type = self.input_types[key]
+            if input_type == 'float':
+                # Handle np.float() types gracefully
+                contents[key] = float(value)
+            elif input_type == 'str':
+                contents[key] = value
+            elif input_type == 'int':
+                contents[key] = int(value)
+            elif input_type == 'boolean':
+                contents[key] = bool(value)
+            elif input_type == 'nparray':
+                contents[key] = value.tolist()
+            elif input_type == 'list' or input_type == 'vector':
+                contents[key] = list(value)
+            elif input_type == 'image_array':
+                # Handle image array
+                image = Image.fromarray(np.uint8(value))
+                name = Tub._image_file_name(self.manifest.current_index, key)
+                image_path = os.path.join(self.images_base_path, name)
+                image.save(image_path)
+                contents[key] = name
+            elif input_type == 'gray16_array':
+                # save np.uint16 as a 16bit png
+                image = Image.fromarray(np.uint16(value))
+                name = Tub._image_file_name(self.manifest.current_index,
+                                            key, extension='.png')
+                image_path = os.path.join(self.images_base_path, name)
+                image.save(image_path)
+                contents[key] = name
 
         # Private properties, allow record overwriting if '_index' is given
         if is_overwrite:
@@ -90,7 +87,7 @@ class Tub(object):
             contents['_timestamp_ms'] = ts
             contents['_index'] = self.manifest.current_index
             contents['_session_id'] = self.manifest.session_id[1]
-
+        logger.debug(f'Writing record {contents} with index {index} ')
         self.manifest.write_record(contents, index)
 
     def delete_records(self, record_indexes):
@@ -134,14 +131,9 @@ class TubWriter(object):
     """
     def __init__(self, base_path, inputs=[], types=[], metadata=[],
                  max_catalog_len=1000, lap_timer=None):
-        print(f'Creating part TubWriter...')
-        print(f"Logger level: {logger.getEffectiveLevel()}")
         self.tub = Tub(base_path, inputs, types, metadata, max_catalog_len)
         self.lap_timer = lap_timer
-        print(f'Created TubWriter for {self.tub.base_path}')
         logger.info(f'Created TubWriter for {self.tub.base_path}')
-        logger.warning(f'Created TubWriter for {self.tub.base_path}')
-        logger.error(f'Created TubWriter for {self.tub.base_path}')
 
     def run(self, *args):
         assert len(self.tub.manifest.inputs) == len(args), \

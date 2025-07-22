@@ -307,11 +307,14 @@ class Manifest(object):
             # session gets closed
             if not self._updated_session:
                 self._updated_session = True
+            logger.debug(f'Writing fresh record {record} with '
+                         f'index {self.current_index-1}')
         else:
             self._set_catalog(index)
             relative_index = index % self.max_len
             self.current_catalog.write_record(record, relative_index)
             self._reset_catalog()
+            logger.debug(f'Overwriting record {record} for given index {index}')    
 
     def delete_records(self, record_indexes):
         # Does not actually delete the record, but marks it as deleted.

@@ -312,7 +312,7 @@ class TubScreen(AppScreen):
 
     def on_index(self, obj, index):
         """ Kivy method that is called if self.index changes"""
-        if index >= 0:
+        if index >= 0 and index < len(self.ids.tub_loader.records):
             self.current_record = self.ids.tub_loader.records[index]
             self.ids.slider.value = index
 
