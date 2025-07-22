@@ -140,6 +140,7 @@ class TubWriter(object):
             f'Expected {len(self.tub.manifest.inputs)} inputs but received' \
             f' {len(args)}'
         record = dict(zip(self.tub.manifest.inputs, args))
+        logger.debug(f'Writing record: {record}')
         self.tub.write_record(record)
         return self.tub.manifest.current_index
 
@@ -154,6 +155,7 @@ class TubWriter(object):
         self.tub.close()
 
     def shutdown(self):
+        logger.info(f'Shutting down TubWriter for {self.tub.base_path}')
         self.close()
 
 

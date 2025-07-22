@@ -239,7 +239,6 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
                  'float', 'float', 'float',
                  'float', 'int', 'vector', 'vector']
      
-        logger.info(f'Try creating TubWriter')
         tub_writer = TubWriter(base_path=cfg.DATA_PATH, inputs=inputs,
                                types=types, lap_timer=lap)
         car.add(tub_writer, inputs=inputs, outputs=["tub/num_records"],
