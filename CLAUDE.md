@@ -20,6 +20,15 @@ Activate with: `conda activate donkey`
 - `pytest tests/test_specific.py` - Run a single test file
 - `pytest -k "test_name"` - Run specific test by name
 
+## Branch Management Policy
+
+**CRITICAL**: Never make changes or push to the main branch without explicit user permission. Always ask before:
+- Making commits to main branch
+- Pushing changes to main branch  
+- Creating pull requests to main branch
+
+This project uses main as the stable branch - all development should happen on feature branches or new_dev branch unless specifically requested by the user.
+
 ### Package Management
 - `make package` - Create source distribution
 - `pip install -e .` - Install in development mode
