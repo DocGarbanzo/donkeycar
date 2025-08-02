@@ -7,7 +7,8 @@ from donkeycar.management.base import CreateCar
 
 
 def on_pi():
-    if 'arm' in platform.machine():
+    # Check for Raspberry Pi specifically, not just ARM architecture
+    if platform.system() == 'Linux' and 'arm' in platform.machine():
         return True
     return False
 
