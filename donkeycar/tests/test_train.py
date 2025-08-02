@@ -7,7 +7,7 @@ import numpy as np
 from collections import defaultdict
 from dataclasses import dataclass
 from itertools import product
-from typing import Callable, Generator, List
+from typing import Callable, Iterator, List
 
 from donkeycar.parts.tub_v2 import Tub
 from donkeycar.pipeline.training import train, BatchSequence
@@ -77,7 +77,7 @@ def imu_fields() -> List[str]:
 
 
 @pytest.fixture(scope='session')
-def car_dir(tmpdir_factory, base_config, imu_fields) -> Generator[str, None, None]:
+def car_dir(tmpdir_factory, base_config, imu_fields) -> Iterator[str]:
     """ Creating car dir with sub dirs and extracting tub """
     car_dir = tmpdir_factory.mktemp('mycar')
     os.mkdir(os.path.join(car_dir, 'models'))
