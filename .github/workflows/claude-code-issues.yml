@@ -1,0 +1,62 @@
+name: Claude Code Issue Handler
+
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created]
+
+jobs:
+  claude-issue-handler:
+    if: contains(github.event.issue.labels.*.name, 'claude') || contains(github.event.comment.body, '@claude')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: write
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install Claude Code
+        run: |
+          pip install anthropic
+          curl -fsSL https://claude.ai/install.sh | sh
+          
+      - name: Handle Issue with Claude
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Extract issue details
+          ISSUE_TITLE="${{ github.event.issue.title }}"
+          ISSUE_BODY="${{ github.event.issue.body }}"
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
+          
+          # Create a prompt for Claude
+          PROMPT="Based on this GitHub issue in the donkeycar repository, please analyze and provide a solution:
+          
+          Title: $ISSUE_TITLE
+          Body: $ISSUE_BODY
+          
+          Repository context: This is a minimalist self-driving car library for Python. 
+          Please provide either:
+          1. A code solution with implementation details
+          2. A detailed analysis of the issue
+          3. Request for more information if needed
+          
+          Follow the coding guidelines in CLAUDE.md."
+          
+          # Run Claude Code to handle the issue
+          echo "$PROMPT" | claude --non-interactive --project-dir . > claude_response.txt
+          
+          # Post Claude's response as a comment
+          gh issue comment $ISSUE_NUMBER --body-file claude_response.txt
