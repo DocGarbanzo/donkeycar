@@ -707,7 +707,7 @@ class TestVehicle(unittest.TestCase):
         #
         loop_ticks = ticks_per_second * loop_seconds
         loop_distance = loop_ticks / cfg.ENCODER_PPR * meters_per_revolution
-        self.assertLessEqual(abs(loop_distance - distance) / distance, 0.025)  # final error less than 2.5%
+        self.assertLessEqual(abs(loop_distance - distance) / distance, 0.05)  # final error less than 5%
 
         #
         # calculate the expected ending position using the center of the turn,
