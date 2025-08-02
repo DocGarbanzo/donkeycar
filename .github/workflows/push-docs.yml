@@ -9,24 +9,53 @@ on:
       - .github/workflows/push-docs.yml
       - mkdocs.yml
 
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   mkdocs-build-and-push:
-    name: mkdocs and push to github
+    name: Build and deploy documentation
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         shell: bash -l {0}
     steps:
-      - uses: actions/checkout@v4
-      - uses: conda-incubator/setup-miniconda@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Setup conda environment
+        uses: conda-incubator/setup-miniconda@v3
         with:
           python-version: 3.11
           auto-activate-base: true
           channels: defaults, conda-forge
-      - run: |
+          
+      - name: Cache conda environment
+        uses: actions/cache@v4
+        with:
+          path: /usr/share/miniconda/envs/
+          key: conda-${{ runner.os }}-${{ hashFiles('**/environment.yml') }}
+          restore-keys: |
+            conda-${{ runner.os }}-
+            
+      - name: Display environment info
+        run: |
           conda info
-          conda install mkdocs
-          pip install mkdocs-material
           conda list
+          
+      - name: Install MkDocs and dependencies
+        run: |
+          conda install mkdocs -y
+          pip install mkdocs-material
+          
+      - name: Validate MkDocs configuration
+        run: mkdocs build --strict
+        
+      - name: Deploy to GitHub Pages
+        run: |
           mkdocs gh-deploy --force -v
-          echo Created docs on github pages
+          echo "✅ Documentation deployed to GitHub Pages"
