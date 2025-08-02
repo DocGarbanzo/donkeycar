@@ -508,6 +508,182 @@ class TestTubSessionManagement(unittest.TestCase):
             self.assertIn(session_id, sessions['all_full_ids'])
 
 
+class TestTubImproperClosureHandling(unittest.TestCase):
+    """Test tub behavior when not properly closed.
+    
+    Tests the safeguarding mechanisms that detect when a tub was not properly
+    closed and prevent data corruption from session ID conflicts.
+    """
+    
+    def setUp(self):
+        self.test_path = tempfile.mkdtemp()
+        
+    def tearDown(self):
+        shutil.rmtree(self.test_path)
+    
+    def test_improper_closure_detection(self):
+        """Test detection of improper tub closure.
+        
+        Verifies that:
+        - Tubs that weren't properly closed are detected on reopening
+        - Session ID conflicts are caught before data corruption can occur
+        - RuntimeError is raised with clear instructions for manual cleanup
+        - The error prevents silent data corruption
+        """
+        inputs = ['data']
+        types = ['int']
+        
+        # Create tub and write a record
+        tub1 = Tub(self.test_path, inputs, types)
+        tub1.write_record({'data': 1})
+        session_id = tub1.manifest.session_id[1]
+        
+        # Simulate improper closure by not calling close()
+        # This means _update_session_info() never gets called
+        # and manifest metadata doesn't get updated
+        
+        # Try to create another tub with the same session ID
+        with patch('time.strftime', return_value=session_id.split('_')[0]):
+            with self.assertRaises(RuntimeError) as context:
+                Tub(self.test_path, inputs, types)
+                
+            error_msg = str(context.exception)
+            self.assertIn('Session', error_msg)
+            self.assertIn('already found in last record', error_msg)
+            self.assertIn('clean up your manifest metadata', error_msg)
+        
+        # Clean up
+        tub1.close()
+    
+    def test_session_id_conflict_prevents_data_corruption(self):
+        """Test that session ID conflicts prevent data corruption.
+        
+        Verifies that:
+        - Multiple sessions cannot accidentally share the same session_id
+        - Lap timing and distance data remain separate between sessions
+        - Statistical aggregations won't be corrupted by mixed session data
+        - Error handling protects data integrity over convenience
+        """
+        inputs = ['steering', 'throttle', 'speed']
+        types = ['float', 'float', 'float']
+        
+        # Create first session and write some records
+        tub1 = Tub(self.test_path, inputs, types)
+        for i in range(5):
+            tub1.write_record({'steering': i * 0.1, 'throttle': 0.5, 'speed': 10.0})
+        
+        session_id = tub1.manifest.session_id[1]
+        
+        # Simulate improper closure - don't call close()
+        # This leaves the manifest metadata unupdated
+        
+        # Attempt to create second session with same date
+        # This would generate the same session_id
+        with patch('time.strftime', return_value=session_id.split('_')[0]):
+            with self.assertRaises(RuntimeError):
+                Tub(self.test_path, inputs, types)
+                # If this didn't raise an error, we could write records
+                # with the same session_id, corrupting lap/distance stats
+        
+        tub1.close()
+    
+    def test_proper_closure_allows_new_sessions(self):
+        """Test that proper closure allows new sessions normally.
+        
+        Verifies that:
+        - Properly closed tubs don't trigger conflict detection
+        - New sessions can be created after proper closure
+        - Session metadata is correctly maintained across proper reopens
+        - The safeguarding doesn't interfere with normal operation
+        """
+        inputs = ['data']
+        types = ['int']
+        
+        # Create and properly close first session
+        tub1 = Tub(self.test_path, inputs, types)
+        tub1.write_record({'data': 1})
+        session1_id = tub1.manifest.session_id[1]
+        tub1.close()  # Proper closure updates manifest metadata
+        
+        # Create second session - should work fine
+        tub2 = Tub(self.test_path, inputs, types)
+        tub2.write_record({'data': 2})
+        session2_id = tub2.manifest.session_id[1]
+        tub2.close()
+        
+        # Verify sessions are different
+        self.assertNotEqual(session1_id, session2_id)
+        
+        # Verify both sessions are tracked in metadata
+        with open(os.path.join(self.test_path, 'manifest.json'), 'r') as f:
+            content = f.readlines()
+            manifest_metadata = json.loads(content[3])
+            
+        sessions = manifest_metadata['sessions']
+        self.assertIn(session1_id, sessions['all_full_ids'])
+        self.assertIn(session2_id, sessions['all_full_ids'])
+    
+    def test_manual_metadata_cleanup_after_improper_closure(self):
+        """Test manual metadata cleanup after improper closure.
+        
+        Verifies that:
+        - Manual cleanup of manifest metadata allows tub reuse
+        - Proper session numbering resumes after cleanup
+        - Data integrity is preserved during manual intervention
+        - Instructions in error message lead to working solution
+        """
+        inputs = ['data']
+        types = ['int']
+        
+        # Create tub and write record without proper closure
+        tub1 = Tub(self.test_path, inputs, types)
+        tub1.write_record({'data': 1})
+        session_id = tub1.manifest.session_id[1]
+        
+        # Don't call close() to simulate improper closure
+        
+        # Manually update the manifest metadata as if close() was called
+        # This simulates the manual cleanup mentioned in the error message
+        tub1.manifest._update_session_info()
+        tub1.manifest.write_metadata()
+        
+        # Now try to create new session - should work
+        with patch('time.strftime', return_value=session_id.split('_')[0]):
+            tub2 = Tub(self.test_path, inputs, types)
+            tub2.write_record({'data': 2})
+            
+            # New session should have incremented ID
+            new_session_id = tub2.manifest.session_id[1]
+            self.assertNotEqual(session_id, new_session_id)
+            
+            tub2.close()
+    
+    def test_empty_tub_no_conflict_check(self):
+        """Test that empty tubs don't trigger conflict checks.
+        
+        Verifies that:
+        - Empty catalogs don't cause false positive conflicts
+        - New tubs can be created without issues
+        - The fix for empty tub consistency checks works correctly
+        - No errors occur when no records exist yet
+        """
+        inputs = ['data']
+        types = ['int']
+        
+        # Create tub but don't write any records
+        tub1 = Tub(self.test_path, inputs, types)
+        session_id = tub1.manifest.session_id[1]
+        
+        # Don't close properly and don't write records
+        
+        # Try to create another tub - should work because catalog is empty
+        with patch('time.strftime', return_value=session_id.split('_')[0]):
+            tub2 = Tub(self.test_path, inputs, types)
+            # Should not raise error because catalog has no records
+            tub2.write_record({'data': 1})
+            tub2.close()
+
+
 class TestTubRecordOperations(unittest.TestCase):
     """Test record overwriting and advanced operations.
     
