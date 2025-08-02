@@ -2,8 +2,8 @@ name: Python package and test
 
 on:
   push:
-    paths:
-      - !docs/**
+    paths-ignore:
+      - 'docs/**'
   pull_request:
 
 jobs:
