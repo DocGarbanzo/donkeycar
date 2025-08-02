@@ -12,11 +12,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        include:
-          - os: macos-latest
-            ENV_FILE: install/envs/mac.yml
-          - os: ubuntu-latest
-            ENV_FILE: install/envs/ubuntu.yml
+        os: [macos-latest, ubuntu-latest]
       fail-fast: false
     defaults:
       run:
@@ -29,13 +25,11 @@ jobs:
         with:
           python-version: 3.11
           activate-environment: donkey
-          environment-file: ${{matrix.ENV_FILE}}
           auto-activate-base: false
           channels: default, conda-forge, pytorch
           channel-priority: true
       - name: Conda info and list
         run: |
-          echo Environment file ${{matrix.ENV_FILE}}
           conda info
           conda list
       - name: Install donkey
