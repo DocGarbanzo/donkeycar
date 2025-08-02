@@ -33,6 +33,6 @@ jobs:
           conda info
           conda list
       - name: Install donkey
-        run: pip install -e .[pc, dev]
+        run: pip install -e .[pc,dev]
       - name: Run tests
         run: pytest
