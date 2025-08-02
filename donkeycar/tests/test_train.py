@@ -77,7 +77,7 @@ def imu_fields() -> List[str]:
 
 
 @pytest.fixture(scope='session')
-def car_dir(tmpdir_factory, base_config, imu_fields) -> Generator[str]:
+def car_dir(tmpdir_factory, base_config, imu_fields) -> Generator[str, None, None]:
     """ Creating car dir with sub dirs and extracting tub """
     car_dir = tmpdir_factory.mktemp('mycar')
     os.mkdir(os.path.join(car_dir, 'models'))
