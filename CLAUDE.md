@@ -20,14 +20,26 @@ Activate with: `conda activate donkey`
 - `pytest tests/test_specific.py` - Run a single test file
 - `pytest -k "test_name"` - Run specific test by name
 
-## Branch Management Policy
+## Branch and Remote Management Policy
 
-**CRITICAL**: Never make changes or push to the main branch without explicit user permission. Always ask before:
-- Making commits to main branch
-- Pushing changes to main branch  
-- Creating pull requests to main branch
+**CRITICAL Repository Remote Management:**
+- The project has TWO remotes: `autorope` (upstream) and `docgarbanzo` (fork)
+- **NEVER push anything to the autorope main branch without explicit user permission**
+- **Pushing to docgarbanzo main branch is ALLOWED** for testing and development
+- Always confirm which remote you're pushing to before executing git push
 
-This project uses main as the stable branch - all development should happen on feature branches or new_dev branch unless specifically requested by the user.
+**CRITICAL Branch Management:**
+- Never push to the **autorope** main branch without explicit user permission
+- Pushing to **docgarbanzo** main branch is fine for development/testing
+- Always ask before:
+  - Making commits to autorope main branch
+  - Pushing changes to autorope main branch  
+  - Creating pull requests to autorope main branch
+- Development should happen on feature branches or new_dev branch, but main branch work on the fork is acceptable
+
+**Remote Configuration:**
+- `autorope` - https://github.com/autorope/donkeycar.git (upstream)
+- `docgarbanzo` - git@github.com:DocGarbanzo/donkeycar.git (fork)
 
 ### Package Management
 - `make package` - Create source distribution
@@ -285,3 +297,4 @@ When developing for Raspberry Pi deployment, use this workflow:
 - Changes to core library require git pull + update cycle
 - Working logging shows: `2025-07-12 12:47:40,939 [INFO] donkeycar.parts.actuator __init__: RCReceiver created`
 - Documentation at docs.donkeycar.com covers main branch; new_dev may differ
+
