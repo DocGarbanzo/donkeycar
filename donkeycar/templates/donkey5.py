@@ -215,11 +215,13 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
                                min_pulse=cfg.THROTTLE_REVERSE_PWM)
     # feed signal which is either rc (user) or ai
     throttle_input = 'pid/throttle' if use_pid else 'throttle'
-    car.add(pwm_throttle, inputs=[throttle_input], threaded=True)
-
+    
+    # EStop processes throttle and outputs final throttle + estop signal
     car.add(EStop(car_frequency),
             inputs=[throttle_input, 'user/mode'],
-            outputs=[throttle_input, 'user/estop'])
+            outputs=['final_throttle', 'user/estop'])
+    
+    car.add(pwm_throttle, inputs=['final_throttle'], threaded=True)
     
     # if we want to record a tub -----------------------------------------------
     if not no_cam and (model_path is None or record_on_ai) and not no_tub:
