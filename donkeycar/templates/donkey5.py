@@ -35,7 +35,7 @@ import logging.config
 import donkeycar as dk
 import donkeycar.parts
 from donkeycar.parts.actuator import EStop, RCReceiver, PulseController, PWMSteering, \
-    PWMThrottle, ModeSwitch, ThrottleOffSwitch
+    PWMThrottle, ThrottleOffSwitch
 from donkeycar.parts.led_status import LEDStatusPi
 from donkeycar.parts.pico import OdometerPico
 from donkeycar.parts.pins import pwm_pin_by_id, output_pin_by_id
@@ -84,6 +84,18 @@ class SliderSorter:
                 logger.info(f'Updating lap_pct {new_lap_pct}')
             self.lap_pct = new_lap_pct
         return self.lap_pct
+
+class LatchedModeToggle:
+    """Toggle between two modes based on changes in a latching RC signal"""
+    def __init__(self):
+        self.mode = 0
+        logger.info('LatchedModeToggle initialized')
+    
+    def run(self, changed):
+        if changed:
+            self.mode = 1 - self.mode  # Toggle between 0 and 1
+            logger.info(f'Mode toggled to {self.mode}')
+        return self.mode
 
 # define some strings that are used in the vehicle data flow
 CAM_IMG = 'cam/image_array'
@@ -180,8 +192,11 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
         # if driving w/ ai switch between user throttle or pilot throttle by
         # pressing channel 3 on the remote control we have 2 modes,
         # pilot/steering + user/speed, or pilot/steering + pilot/speed
-        mode_switch = ModeSwitch(num_modes=2, min_loops=2)
-        car.add(mode_switch, inputs=['user/wiper_on'], outputs=['user/mode'])
+        # Use ChangeDetector + LatchedModeToggle for latching RC signals
+        change_detector = ChangeDetector()
+        car.add(change_detector, inputs=['user/wiper_on'], outputs=['user/wiper_changed'])
+        mode_toggle = LatchedModeToggle()
+        car.add(mode_toggle, inputs=['user/wiper_changed'], outputs=['user/mode'])
 
         # This part dispatches between user or ai depending on the switch state
         switch = ControlSwitch(cfg)
