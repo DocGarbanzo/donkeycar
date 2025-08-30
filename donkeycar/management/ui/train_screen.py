@@ -270,7 +270,7 @@ class TrainScreen(AppScreen):
         self.ids.transfer_spinner.values \
             = ['Choose transfer model'] + pilot_names
         self.ids.select_spinner.values = pilot_names
-        self.ids.column_chooser.build_widgets(dataframe)
+        self.ids.column_chooser.build_widgets(dataframe.columns)
 
     def plot_dataframe(self, df, selected_cols=None):
         grid = self.ids.scroll_pilots
