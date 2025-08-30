@@ -45,7 +45,7 @@ class ConfigParamSetter(BoxLayout):
         else:
             return []
 
-    def on_config(self, obj=None, config=None):
+    def on_config(self, _obj=None, _config=None):
         if self.ids:
             self.ids.cfg_spinner.values = self.get_keys()
 
@@ -94,7 +94,7 @@ class ConfigParamPanel(GridLayout):
         self.add_widget(cfg_setter)
         return cfg_setter
 
-    def remove_widget(self, cfg_setter, *args, **kwargs):
+    def remove_widget(self, cfg_setter, *_args, **_kwargs):
         att = cfg_setter.ids.cfg_spinner.text
         cfg_params = rc_handler.data.get('config_params', [])
         if att in cfg_params:
@@ -172,7 +172,7 @@ class HistoryPlot(FigureCanvasKivyAgg):
     def __init__(self, **kwargs):
         super().__init__(fig1, **kwargs)
 
-    def on_df(self, e=None, z=None):
+    def on_df(self, _e=None, _z=None):
         ax1.clear()
         if self.df is None or self.df.empty:
             return
@@ -200,7 +200,7 @@ class TrainScreen(AppScreen):
     tub_df = ObjectProperty(force_dispatch=True)
     train_checker = False
 
-    def train_call(self, *args):
+    def train_call(self, *_):
         tub_path = get_app_screen('tub').ids.tub_loader.tub.base_path
         transfer = self.ids.transfer_spinner.text
         model_type = self.ids.train_spinner.text
@@ -218,7 +218,7 @@ class TrainScreen(AppScreen):
             status(f'Could find neither {sm} nor {h5} - training without '
                    f'transfer')
         try:
-            history = train(self.config, tub_paths=tub_path,
+            _ = train(self.config, tub_paths=tub_path,
                             model_type=model_type,
                             transfer=transfer_model,
                             comment=self.ids.comment.text)
@@ -231,10 +231,10 @@ class TrainScreen(AppScreen):
         t = Thread(target=self.train_call)
         status('Training started.')
 
-        def func(dt):
+        def func(_):
             t.start()
 
-        def check_training_done(dt):
+        def check_training_done(_):
             if t.is_alive():
                 return
             self.train_checker.cancel()
@@ -250,7 +250,7 @@ class TrainScreen(AppScreen):
         # checks if training finished and updates the window if
         self.train_checker = Clock.schedule_interval(check_training_done, 0.5)
 
-    def on_config(self, obj, config):
+    def on_config(self, _obj, _config):
         if self.config and self.ids:
             self.reload_database()
 
@@ -258,12 +258,12 @@ class TrainScreen(AppScreen):
         if self.config:
             self.database = PilotDatabase(self.config)
 
-    def on_database(self, obj=None, database=None):
+    def on_database(self, _obj=None, _database=None):
         df = self.database.to_df()
         df.drop(columns=['History', 'Config'], errors='ignore', inplace=True)
         self.dataframe = df
 
-    def on_dataframe(self, obj, dataframe):
+    def on_dataframe(self, _, dataframe):
         self.plot_dataframe(dataframe)
         if self.dataframe.empty:
             return
@@ -282,7 +282,7 @@ class TrainScreen(AppScreen):
         num_cols = len(df1.columns)
         grid.cols = num_cols
 
-        for i, col in enumerate(df1.columns):
+        for _, col in enumerate(df1.columns):
             lab = BackgroundLabel(text=f"[b]{col}[/b]", markup=True)
             lab.size = lab.texture_size
             grid.add_widget(lab)
@@ -300,7 +300,7 @@ class TrainScreen(AppScreen):
                 lab.size = lab.texture_size
                 grid.add_widget(lab)
 
-    def show_config(self, obj=None):
+    def show_config(self, _=None):
         pilot = self.ids.select_spinner.text
         cfg = self.database.get_entry(pilot).get('Config')
         if not cfg:
@@ -310,7 +310,7 @@ class TrainScreen(AppScreen):
         popup.fill_grid()
         popup.open()
 
-    def show_history(self, obj=None):
+    def show_history(self, _=None):
         pilot = self.ids.select_spinner.text
         history = self.database.get_entry(pilot).get('History')
         if not history:
