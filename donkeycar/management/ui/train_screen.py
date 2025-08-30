@@ -50,6 +50,9 @@ class ConfigParamSetter(BoxLayout):
             self.ids.cfg_spinner.values = self.get_keys()
 
     def set_config_attribute(self, input):
+        # Normalize boolean strings to lowercase for JSON parsing
+        if input.upper() in ('TRUE', 'FALSE'):
+            input = input.lower()
         try:
             val = json.loads(input)
         except ValueError:
@@ -57,8 +60,6 @@ class ConfigParamSetter(BoxLayout):
         att = self.ids.cfg_spinner.text
         setattr(self.config, att, val)
         msg = f'Setting {att} to {val} of type {type(val).__name__}'
-        if val in ('True', 'False', 'TRUE', 'FALSE'):
-            msg += f' - ATTENTION: {val} is not a Boolean but a String!'
         status(msg)
         if get_app_screen('train').ids.save_cfg.state == 'down':
             car_path = get_app_screen('tub').ids.config_manager.file_path
