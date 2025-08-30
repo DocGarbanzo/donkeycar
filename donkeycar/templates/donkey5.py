@@ -28,8 +28,6 @@ Options:
 """
 
 import os
-import signal
-import sys
 from docopt import docopt
 import logging
 import logging.config
@@ -291,15 +289,6 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     car.add(LEDStatusPi(), inputs=['mode', 'car/lap_updated', 'wipe'],
             threaded=True)
     car.add(IsThrottledChecker(), outputs=['car/throttled'], threaded=True)
-
-    # Set up signal handler for graceful shutdown
-    def signal_handler(sig, frame):
-        logger.info('Shutting down gracefully...')
-        car.stop()
-        sys.exit(0)
-    
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
 
     car.start(rate_hz=car_frequency, max_loop_count=cfg.MAX_LOOPS)
 
