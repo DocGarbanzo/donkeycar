@@ -236,6 +236,7 @@ class BNO055Ada:
         self.speed = np.zeros(3)
         self.pos = np.zeros(3)
         self.accel = np.zeros(3) # np.array(self.sensor.linear_acceleration)
+        self.gyro = np.array(self.sensor.gyro)
         self.path = []
         self.time = None
         self.on = True
