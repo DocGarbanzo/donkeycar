@@ -252,8 +252,9 @@ class Manifest(object):
         has_catalogs = False
 
         if self.manifest_path.exists():
+            # Allow manifest.json to be writable even in read-only mode for UI operations
             self.seekeable = Seekable(self.manifest_path,
-                                      read_only=self.read_only)
+                                      read_only=False)
             if self.seekeable.has_content():
                 self._read_contents()
             has_catalogs = len(self.catalog_paths) > 0
@@ -265,8 +266,9 @@ class Manifest(object):
                 self.base_path.mkdir(parents=True, exist_ok=True)
                 logger.info(f'Creating a new datastore at'
                             f' {self.base_path.as_posix()}')
+            # Allow manifest.json to be writable even in read-only mode for UI operations
             self.seekeable = Seekable(self.manifest_path,
-                                      read_only=self.read_only)
+                                      read_only=False)
             logger.info(f'Creating a new manifest at '
                         f'{self.manifest_path.as_posix()}')
 
