@@ -266,8 +266,11 @@ class BNO055Ada:
         self.accel += self.alpha * np.array(self.sensor.linear_acceleration)
 
         # euler angles are in z, y, x order in the sensor
-        self.euler *= (1.0 - self.alpha)
-        self.euler += self.alpha * np.array(self.sensor.euler[::-1])
+        euler_reading = np.array(self.sensor.euler[::-1])
+        # Ignore readings when BNO055 returns [0, 0, 0] (sensor error)
+        if np.any(euler_reading):
+            self.euler *= (1.0 - self.alpha)
+            self.euler += self.alpha * euler_reading
 
         if self.record_path:
             delta_v = self.accel * dt
