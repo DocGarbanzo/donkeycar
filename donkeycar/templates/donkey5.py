@@ -39,7 +39,7 @@ from donkeycar.parts.actuator import EStop, RCReceiver, PulseController, PWMStee
 from donkeycar.parts.led_status import LEDStatusPi
 from donkeycar.parts.pico import OdometerPico
 from donkeycar.parts.pins import pwm_pin_by_id, output_pin_by_id
-from donkeycar.parts.sensor import IsThrottledChecker, LapTimer
+from donkeycar.parts.sensor import IsThrottledChecker, LapTimer, Voltmeter
 from donkeycar.parts.controller import WebFpv
 from donkeycar.parts.tub_v2 import TubWiper, TubWriter
 from donkeycar.pipeline.database import update_config_from_database
@@ -141,6 +141,10 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     # add mpu ------------------------------------------------------------------
     mpu = BNO055Ada(record_path=cfg.CAR_PATH)
     car.add(mpu, outputs=['car/euler', 'car/accel', 'car/gyro'], threaded=True)
+
+    # add voltmeter
+    voltmeter = Voltmeter(pin=cfg.BATTERY_GPIO)
+    car.add(voltmeter, outputs=['car/voltage', 'car/voltage_pct'])
 
     # add fpv parts ------------------------------------------------------------
     if web:
@@ -250,11 +254,13 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
         inputs = [CAM_IMG, 'user/angle', 'user/throttle', 'pilot/angle',
                   'pilot/throttle', 'user/wiper_on', 'user/mode',
                   'car/speed', 'car/inst_speed', 'car/distance','car/m_in_lap', 
-                  'car/lap', 'car/accel', 'car/gyro', 'car/euler']
+                  'car/lap', 'car/accel', 'car/gyro', 'car/euler', 
+                  'car/voltage']
         types = ['image_array', 'float', 'float', 'float',
                  'float', 'bool', 'int',
                  'float', 'float', 'float', 'float',
-                 'int', 'vector', 'vector', 'vector']
+                 'int', 'vector', 'vector', 'vector',
+                 'float']
      
         tub_writer = TubWriter(base_path=cfg.DATA_PATH, inputs=inputs,
                                types=types, lap_timer=lap)
