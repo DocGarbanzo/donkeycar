@@ -70,7 +70,9 @@ class ConfigManager(BackgroundBoxLayout, FileChooserBase):
         car_screen = get_app_screen('car')
         if car_screen:
             car_screen.config = self.config
-        status('Config loaded from' + self.file_path)
+        msg = f'Config loaded from {self.file_path}'
+        status(msg)
+        logger.info('ConfigManager: ' + msg)
 
 
 class TubLoader(BackgroundBoxLayout, FileChooserBase):
@@ -102,9 +104,11 @@ class TubLoader(BackgroundBoxLayout, FileChooserBase):
         try:
             if self.tub:
                 self.tub.close()
-            self.tub = Tub(self.file_path)
+            self.tub = Tub(self.file_path, read_only=True)
         except Exception as e:
-            status(f'Failed loading tub: {str(e)}')
+            msg = f'Failed loading tub: {str(e)}'
+            status(msg)
+            logger.error(f'TubLoader: {msg}')
             return False
         # Check if filter is set in tub screen
         # expression = tub_screen().ids.tub_filter.filter_expression
