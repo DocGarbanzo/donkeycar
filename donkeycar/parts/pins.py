@@ -1338,7 +1338,7 @@ class AnalogInputPinPico(AnalogInputPin):
         if self.state() != PinState.NOT_STARTED:
             raise RuntimeError(f"Attempt to start InputPinPico("
                                f"{self.pin_number}) that is already started.")
-        self.pico.setup_input_pin(self.pin_number, mode='ANALOG')
+        self.pico.setup_input_pin(self.pin_number, mode='ANALOG_IN')
         self._state = self.pico.read(self.pin_number)  # read initial state
 
     def stop(self) -> None:
