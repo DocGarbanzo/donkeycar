@@ -258,12 +258,16 @@ class BNO055Ada:
         if self.time is None:
             self.time = new_time
         dt = new_time - self.time
-        gyro = np.array(self.sensor.gyro)
-        self.euler *= (1.0 - self.alpha)
-        # euler angles are in z, y, x order in the sensor
-        self.euler += self.alpha * np.array(self.sensor.euler[::-1])
+        self.gyro *= (1.0 - self.alpha)
+        self.gyro += self.alpha * np.array(self.sensor.gyro)
+
         self.accel *= (1.0 - self.alpha)
         self.accel += self.alpha * np.array(self.sensor.linear_acceleration)
+
+        # euler angles are in z, y, x order in the sensor
+        self.euler *= (1.0 - self.alpha)
+        self.euler += self.alpha * np.array(self.sensor.euler[::-1])
+
         if self.record_path:
             delta_v = self.accel * dt
             self.speed += delta_v
@@ -276,7 +280,7 @@ class BNO055Ada:
             self.poll()
 
     def run_threaded(self):
-        return self.euler, self.accel
+        return self.euler, self.accel, self.gyro
 
     def run(self):
         self.poll()

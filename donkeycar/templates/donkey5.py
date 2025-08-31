@@ -49,7 +49,7 @@ from donkeycar.parts.transform import (ChangeDetector, ControlSwitch,
     SimplePidController, SpeedRescaler)
 from donkeycar.parts.image_transformations import ImageTransformations
 
-from donkeycar.parts.imu import Mpu6050Ada
+from donkeycar.parts.imu import BNO055Ada
 from donkeycar.parts.keras_2 import ModelLoader
 from donkeycar.parts.web_controller.web import LocalWebController 
 
@@ -137,10 +137,10 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     lap = LapTimer(gpio=cfg.LAP_TIMER_GPIO)
     car.add(lap, inputs=['car/distance'],
             outputs=['car/lap', 'car/m_in_lap', 'car/lap_updated'])
-    #
-    # # add mpu ------------------------------------------------------------------
-    # mpu = Mpu6050Ada()
-    # car.add(mpu, outputs=['car/accel', 'car/gyro'], threaded=True)
+    
+    # add mpu ------------------------------------------------------------------
+    mpu = BNO055Ada(record_path=cfg.CAR_PATH)
+    car.add(mpu, outputs=['car/euler', 'car/accel', 'car/gyro'], threaded=True)
 
     # add fpv parts ------------------------------------------------------------
     if web:
@@ -249,12 +249,12 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
         # add tub to save data
         inputs = [CAM_IMG, 'user/angle', 'user/throttle', 'pilot/angle',
                   'pilot/throttle', 'user/wiper_on', 'user/mode',
-                  'car/speed', 'car/inst_speed', 'car/distance',
-                  'car/m_in_lap', 'car/lap', 'car/accel', 'car/gyro']
+                  'car/speed', 'car/inst_speed', 'car/distance','car/m_in_lap', 
+                  'car/lap', 'car/accel', 'car/gyro', 'car/euler']
         types = ['image_array', 'float', 'float', 'float',
                  'float', 'bool', 'int',
-                 'float', 'float', 'float',
-                 'float', 'int', 'vector', 'vector']
+                 'float', 'float', 'float', 'float',
+                 'int', 'vector', 'vector', 'vector']
      
         tub_writer = TubWriter(base_path=cfg.DATA_PATH, inputs=inputs,
                                types=types, lap_timer=lap)
