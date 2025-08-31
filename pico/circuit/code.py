@@ -238,13 +238,17 @@ def read(serial, input_pins, output_pins, led, is_setup, count):
     return is_setup
 
 
-def write(serial, input_pins, write_dict):
+def write(serial, input_pins, write_dict, led):
     """ Return list if no error or return error as string"""
+    if input_pins:
+        led.value = True
     for name, pin in input_pins.items():
         write_dict[name] = pin.get_value()
 
     byte_out = dict_to_bytes(write_dict)
     n = serial.write(byte_out)
+    if input_pins:
+        led.value = False
     return n
 
 
@@ -274,7 +278,7 @@ def main():
                             is_setup, count)
             # sending output, catching number of bytes written
             if is_setup:
-                n = write(serial, input_pins, write_dict)
+                n = write(serial, input_pins, write_dict, led)
             toc = time.monotonic()
             total_time += toc - tic
             tic = toc
