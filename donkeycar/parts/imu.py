@@ -233,8 +233,7 @@ class BNO055Ada:
         self.sensor.offsets_accelerometer = (41, -116, -26)
         self.sensor.offsets_gyroscope = (-1, -1, -1)
         self.sensor.offsets_magnetometer = (-176, 196, 17)
-        self.speed = np.zeros(3)
-        self.pos = np.zeros(3)
+        self.pos = np.zeros(3)  # [x, y, z] where x=forward, y=left, z=up
         self.accel = np.zeros(3) # np.array(self.sensor.linear_acceleration)
         self.gyro = np.array(self.sensor.gyro)
         self.path = []
@@ -244,6 +243,7 @@ class BNO055Ada:
         self.euler = np.array(self.sensor.euler[::-1])
         self.alpha = alpha
         self.record_path = record_path
+        self.odometer_speed = 0.0
 
     def temperature(self):
         result = self.sensor.temperature
@@ -272,21 +272,39 @@ class BNO055Ada:
             self.euler *= (1.0 - self.alpha)
             self.euler += self.alpha * euler_reading
 
-        if self.record_path:
-            delta_v = self.accel * dt
-            self.speed += delta_v
-            self.pos += self.speed * dt
-            self.path.append((self.time, *self.pos, np.linalg.norm(self.speed)))
+        if self.record_path and self.odometer_speed is not None:
+            # Use 2D position estimation with odometer speed and heading (Euler z-angle)
+            # Euler z-angle (heading/yaw) is in degrees, 360° = 0° = forward (parallel to x-axis)
+            # Convert to standard math coordinates (0° = +x, 90° = +y)
+            heading_deg = (90.0 - self.euler[2]) if len(self.euler) > 2 else 0.0
+            heading_rad = math.radians(heading_deg)
+            
+            # Calculate 2D velocity components using odometer speed and heading
+            # X-axis: forward direction, Y-axis: left direction
+            vx = self.odometer_speed * math.cos(heading_rad)  # forward velocity
+            vy = self.odometer_speed * math.sin(heading_rad)  # left velocity
+            
+            # Update 2D position using kinematics
+            self.pos[0] += vx * dt  # x position (forward)
+            self.pos[1] += vy * dt  # y position (left)
+            self.pos[2] = 0.0       # z position always zero (2D plane)
+            
+            # Store path with 2D coordinates and odometer speed
+            self.path.append((self.time, self.pos[0], self.pos[1], 0.0, self.odometer_speed))
         self.time = new_time
 
     def update(self):
         while self.on:
             self.poll()
 
-    def run_threaded(self):
+    def run_threaded(self, odometer_speed=None):
+        if odometer_speed is not None:
+            self.odometer_speed = odometer_speed
         return self.euler, self.accel, self.gyro
 
-    def run(self):
+    def run(self, odometer_speed=None):
+        if odometer_speed is not None:
+            self.odometer_speed = odometer_speed
         self.poll()
         return self.euler, self.accel
 
@@ -295,7 +313,7 @@ class BNO055Ada:
         if self.record_path:
             df = pd.DataFrame(columns=['t', 'x', 'y', 'z', 'v'], data=self.path)
             df.to_csv('imu.csv', index=False)
-            logger.info('BNO055050 shutdown - saved path to imu.csv')
+            logger.info('BNO055 shutdown - saved 2D path to imu.csv')
 
 
 import multiprocessing
@@ -355,6 +373,120 @@ class PathPlotter:
         if len(x) != 2:
             raise ValueError("Input must be a 2-sequence")
         self.mlist.append((time.time(), *x))
+
+
+def visualize_imu_path(csv_file='imu.csv'):
+    """
+    Load and visualize IMU path data with interactive time slider.
+    
+    Args:
+        csv_file (str): Path to the CSV file containing t,x,y,z,v columns
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.widgets import Slider
+    import numpy as np
+    import os
+    
+    # Check if file exists
+    if not os.path.exists(csv_file):
+        print(f"File {csv_file} not found. Run the IMU with record_path=True first.")
+        return
+    
+    # Load CSV data
+    df = pd.read_csv(csv_file)
+    if df.empty:
+        print(f"No data found in {csv_file}")
+        return
+        
+    print(f"Loaded {len(df)} data points from {csv_file}")
+    print(f"Time range: {df['t'].min():.2f} to {df['t'].max():.2f} seconds")
+    print(f"Distance traveled: {np.sqrt(df['x'].iloc[-1]**2 + df['y'].iloc[-1]**2):.2f} units")
+    
+    # Set up the figure and axis
+    plt.style.use('dark_background')
+    fig, ax = plt.subplots(figsize=(12, 8))
+    plt.subplots_adjust(bottom=0.25)
+    
+    # Initial plot setup
+    ax.set_xlabel('X Position (Forward)')
+    ax.set_ylabel('Y Position (Left)')
+    ax.set_title('IMU 2D Path Visualization')
+    ax.grid(True, alpha=0.3)
+    ax.set_aspect('equal')
+    
+    # Create color map based on speed
+    speeds = df['v'].values
+    
+    # Plot full trajectory (faded)
+    ax.scatter(df['x'], df['y'], c=speeds, cmap='viridis', alpha=0.3, s=10, label='Full path')
+    
+    # Current position marker
+    current_pos = ax.scatter([], [], c='red', s=100, marker='o', label='Current position')
+    
+    # Path up to current time
+    current_path, = ax.plot([], [], 'yellow', linewidth=2, alpha=0.8, label='Path to current time')
+    
+    # Speed text
+    speed_text = ax.text(0.02, 0.98, '', transform=ax.transAxes, 
+                        verticalalignment='top', fontsize=12,
+                        bbox=dict(boxstyle='round', facecolor='black', alpha=0.8))
+    
+    # Time text
+    time_text = ax.text(0.02, 0.92, '', transform=ax.transAxes,
+                       verticalalignment='top', fontsize=12,
+                       bbox=dict(boxstyle='round', facecolor='black', alpha=0.8))
+    
+    # Set axis limits with some padding
+    x_margin = (df['x'].max() - df['x'].min()) * 0.1
+    y_margin = (df['y'].max() - df['y'].min()) * 0.1
+    ax.set_xlim(df['x'].min() - x_margin, df['x'].max() + x_margin)
+    ax.set_ylim(df['y'].min() - y_margin, df['y'].max() + y_margin)
+    
+    # Add colorbar for speed
+    cbar = plt.colorbar(plt.cm.ScalarMappable(cmap='viridis'), ax=ax)
+    cbar.set_label('Speed')
+    
+    # Create slider
+    ax_slider = plt.axes([0.15, 0.1, 0.7, 0.03])
+    time_slider = Slider(ax_slider, 'Time', df['t'].min(), df['t'].max(), 
+                        valinit=df['t'].min(), valfmt='%.2f s')
+    
+    def update_plot(val):
+        current_time = time_slider.val
+        
+        # Find data points up to current time
+        mask = df['t'] <= current_time
+        current_data = df[mask]
+        
+        if len(current_data) > 0:
+            # Update current position
+            last_point = current_data.iloc[-1]
+            current_pos.set_offsets([[last_point['x'], last_point['y']]])
+            
+            # Update path
+            current_path.set_data(current_data['x'], current_data['y'])
+            
+            # Update text displays
+            speed_text.set_text(f'Speed: {last_point["v"]:.2f}')
+            time_text.set_text(f'Time: {current_time:.2f}s')
+        else:
+            current_pos.set_offsets([[]])
+            current_path.set_data([], [])
+            speed_text.set_text('Speed: --')
+            time_text.set_text(f'Time: {current_time:.2f}s')
+        
+        fig.canvas.draw_idle()
+    
+    # Connect slider to update function
+    time_slider.on_changed(update_plot)
+    
+    # Initial update
+    update_plot(df['t'].min())
+    
+    # Add legend
+    ax.legend()
+    
+    plt.show()
 
 
 if __name__ == "__main__":
