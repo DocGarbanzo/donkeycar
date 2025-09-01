@@ -6,7 +6,7 @@ steering triggers.
 
 Usage:
     prog drive [--pid] [--no_cam] [--model=PATH_TO_PILOT] [--web]\
-        [--fpv] [--no_tub] [--verbose] [--type=MODEL_TYPE]
+        [--fpv] [--no_tub] [--verbose] [--type=MODEL_TYPE] [--record_path]
     prog calibrate [--verbose]
     prog stream
     prog led [--verbose]
@@ -25,6 +25,7 @@ Options:
     --no_tub                don't write to tub
     --verbose               set logging level to debug
     --type=MODEL_TYPE       type of the model to load [default: linear]
+    --record_path           enable IMU path recording to CSV
 """
 
 import os
@@ -102,7 +103,7 @@ CAM_IMG = 'cam/image_array'
 
 
 def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
-          web=False, fpv=False, no_tub=False, verbose=False):
+          web=False, fpv=False, no_tub=False, verbose=False, record_path=False):
     if verbose:
         donkeycar.logger.setLevel(logging.DEBUG)
 
@@ -139,8 +140,8 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
             outputs=['car/lap', 'car/m_in_lap', 'car/lap_updated'])
     
     # add mpu ------------------------------------------------------------------
-    mpu = BNO055Ada()
-    car.add(mpu, outputs=['car/euler', 'car/accel', 'car/gyro'], threaded=True)
+    mpu = BNO055Ada(record_path=record_path)
+    car.add(mpu, inputs=['car/speed'], outputs=['car/euler', 'car/accel', 'car/gyro'], threaded=True)
 
     # add voltmeter
     voltmeter = Voltmeter(pin=cfg.BATTERY_GPIO)
@@ -428,7 +429,8 @@ if __name__ == '__main__':
               fpv=args['--fpv'],
               no_tub=args['--no_tub'],
               verbose=args['--verbose'],
-              model_type=args['--type'])
+              model_type=args['--type'],
+              record_path=args['--record_path'])
     elif args['calibrate']:
         calibrate(config)
     elif args['stream']:
