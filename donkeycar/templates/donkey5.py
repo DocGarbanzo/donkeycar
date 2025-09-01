@@ -139,7 +139,7 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
             outputs=['car/lap', 'car/m_in_lap', 'car/lap_updated'])
     
     # add mpu ------------------------------------------------------------------
-    mpu = BNO055Ada(record_path=cfg.CAR_PATH)
+    mpu = BNO055Ada()
     car.add(mpu, outputs=['car/euler', 'car/accel', 'car/gyro'], threaded=True)
 
     # add voltmeter
