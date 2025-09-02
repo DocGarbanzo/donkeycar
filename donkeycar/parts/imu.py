@@ -404,8 +404,8 @@ def visualize_imu_path(csv_file='imu.csv'):
     
     # Set up the figure and axis
     plt.style.use('dark_background')
-    fig, ax = plt.subplots(figsize=(14, 8))
-    plt.subplots_adjust(bottom=0.25, right=0.78, top=0.92, left=0.08)  # Make room for legend and text
+    fig, ax = plt.subplots(figsize=(12, 8))
+    plt.subplots_adjust(bottom=0.25, right=0.95, top=0.85, left=0.08)  # Room for legend at top
     
     # Initial plot setup
     ax.set_xlabel('X Position (Forward)')
@@ -434,8 +434,8 @@ def visualize_imu_path(csv_file='imu.csv'):
                          bbox=dict(boxstyle='round', facecolor='black', alpha=0.8),
                          color='white')
     
-    # Time text - position in top area above plot
-    time_text = fig.text(0.02, 0.94, '', fontsize=12,
+    # Time text - position in top area above plot  
+    time_text = fig.text(0.02, 0.93, '', fontsize=12,
                         bbox=dict(boxstyle='round', facecolor='black', alpha=0.8),
                         color='white')
     
@@ -504,8 +504,10 @@ def visualize_imu_path(csv_file='imu.csv'):
     # Initial update
     update_plot(df['t'].min())
     
-    # Add legend outside plot area on the right
-    ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', framealpha=0.9)
+    # Add legend in top area underneath speed/time displays
+    legend = ax.legend(bbox_to_anchor=(0.02, 1.18), loc='upper left', 
+                      framealpha=0.9, ncol=3, fontsize=10,
+                      bbox_transform=fig.transFigure)
     
     plt.show()
 
