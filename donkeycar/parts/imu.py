@@ -505,9 +505,9 @@ def visualize_imu_path(csv_file='imu.csv'):
     update_plot(df['t'].min())
     
     # Add legend in top area underneath speed/time displays
-    legend = ax.legend(bbox_to_anchor=(0.02, 1.18), loc='upper left', 
-                      framealpha=0.9, ncol=3, fontsize=10,
-                      bbox_transform=fig.transFigure)
+    ax.legend(bbox_to_anchor=(0.02, 0.89), loc='upper left', 
+              framealpha=0.9, ncol=3, fontsize=10,
+              bbox_transform=fig.transFigure)
     
     plt.show()
 
