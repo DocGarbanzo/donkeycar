@@ -386,6 +386,7 @@ def visualize_imu_path(csv_file='imu.csv'):
     from matplotlib.widgets import Slider
     import numpy as np
     import os
+    from datetime import datetime
     
     # Check if file exists
     if not os.path.exists(csv_file):
@@ -399,7 +400,11 @@ def visualize_imu_path(csv_file='imu.csv'):
         return
         
     print(f"Loaded {len(df)} data points from {csv_file}")
-    print(f"Time range: {df['t'].min():.2f} to {df['t'].max():.2f} seconds")
+    
+    # Convert UTC timestamps to datetime objects for better display
+    start_time = datetime.fromtimestamp(df['t'].min())
+    end_time = datetime.fromtimestamp(df['t'].max())
+    print(f"Time range: {start_time.strftime('%H:%M:%S')} to {end_time.strftime('%H:%M:%S')}")
     print(f"Distance traveled: {np.sqrt(df['x'].iloc[-1]**2 + df['y'].iloc[-1]**2):.2f} units")
     
     # Set up the figure and axis
@@ -449,10 +454,22 @@ def visualize_imu_path(csv_file='imu.csv'):
     cbar = plt.colorbar(plt.cm.ScalarMappable(cmap='viridis'), ax=ax)
     cbar.set_label('Speed')
     
-    # Create slider
+    # Create slider with ISO time format
     ax_slider = plt.axes([0.15, 0.1, 0.7, 0.03])
+    
+    def format_timestamp(val):
+        """Convert UTC timestamp to HH:MM:SS format"""
+        try:
+            dt = datetime.fromtimestamp(val)
+            return dt.strftime('%H:%M:%S')
+        except:
+            return f'{val:.1f}s'
+    
     time_slider = Slider(ax_slider, 'Time', df['t'].min(), df['t'].max(), 
-                        valinit=df['t'].min(), valfmt='%.2f s')
+                        valinit=df['t'].min(), valfmt='%s')
+    
+    # Custom formatter for slider
+    time_slider.valfmt = format_timestamp
     
     # Performance optimization: throttle updates
     last_update_time = [0]
@@ -486,14 +503,16 @@ def visualize_imu_path(csv_file='imu.csv'):
             
             current_path.set_data(display_data['x'], display_data['y'])
             
-            # Update text displays
+            # Update text displays with ISO time format
+            current_datetime = datetime.fromtimestamp(current_time_val)
             speed_text.set_text(f'Speed: {last_point["v"]:.2f}')
-            time_text.set_text(f'Time: {current_time_val:.2f}s')
+            time_text.set_text(f'Time: {current_datetime.strftime("%H:%M:%S")}')
         else:
             current_pos.set_offsets([[]])
             current_path.set_data([], [])
             speed_text.set_text('Speed: --')
-            time_text.set_text(f'Time: {current_time_val:.2f}s')
+            current_datetime = datetime.fromtimestamp(current_time_val)
+            time_text.set_text(f'Time: {current_datetime.strftime("%H:%M:%S")}')
         
         # Use draw_idle for better performance
         fig.canvas.draw_idle()
@@ -504,9 +523,9 @@ def visualize_imu_path(csv_file='imu.csv'):
     # Initial update
     update_plot(df['t'].min())
     
-    # Add legend in top area underneath speed/time displays
-    ax.legend(bbox_to_anchor=(0.02, 0.89), loc='upper left', 
-              framealpha=0.9, ncol=3, fontsize=10,
+    # Add legend in top area underneath speed/time displays - vertical arrangement
+    ax.legend(bbox_to_anchor=(0.02, 0.85), loc='upper left', 
+              framealpha=0.9, ncol=1, fontsize=10,
               bbox_transform=fig.transFigure)
     
     plt.show()
