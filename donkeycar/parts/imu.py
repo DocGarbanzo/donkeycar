@@ -404,7 +404,7 @@ def visualize_imu_path(csv_file='imu.csv'):
     # Convert UTC timestamps to datetime objects for better display
     start_time = datetime.fromtimestamp(df['t'].min())
     end_time = datetime.fromtimestamp(df['t'].max())
-    print(f"Time range: {start_time.strftime('%H:%M:%S')} to {end_time.strftime('%H:%M:%S')}")
+    print(f"Time range: {start_time.isoformat(timespec='milliseconds')} to {end_time.isoformat(timespec='milliseconds')}")
     print(f"Distance traveled: {np.sqrt(df['x'].iloc[-1]**2 + df['y'].iloc[-1]**2):.2f} units")
     
     # Set up the figure and axis
@@ -458,18 +458,22 @@ def visualize_imu_path(csv_file='imu.csv'):
     ax_slider = plt.axes([0.15, 0.1, 0.7, 0.03])
     
     def format_timestamp(val):
-        """Convert UTC timestamp to HH:MM:SS format"""
+        """Convert UTC timestamp to ISO format"""
         try:
             dt = datetime.fromtimestamp(val)
-            return dt.strftime('%H:%M:%S')
+            return dt.isoformat(timespec='milliseconds')
         except:
-            return f'{val:.1f}s'
+            return f'{val:.3f}s'
     
     time_slider = Slider(ax_slider, 'Time', df['t'].min(), df['t'].max(), 
-                        valinit=df['t'].min(), valfmt='%s')
+                        valinit=df['t'].min(), valfmt='%.1f s')
     
-    # Custom formatter for slider
-    time_slider.valfmt = format_timestamp
+    # Override the slider's text update method for custom formatting
+    original_set_val = time_slider.set_val
+    def custom_set_val(val):
+        original_set_val(val)
+        time_slider.valtext.set_text(format_timestamp(val))
+    time_slider.set_val = custom_set_val
     
     # Performance optimization: throttle updates
     last_update_time = [0]
@@ -506,13 +510,13 @@ def visualize_imu_path(csv_file='imu.csv'):
             # Update text displays with ISO time format
             current_datetime = datetime.fromtimestamp(current_time_val)
             speed_text.set_text(f'Speed: {last_point["v"]:.2f}')
-            time_text.set_text(f'Time: {current_datetime.strftime("%H:%M:%S")}')
+            time_text.set_text(f'Time: {current_datetime.isoformat(timespec="milliseconds")}')
         else:
             current_pos.set_offsets([[]])
             current_path.set_data([], [])
             speed_text.set_text('Speed: --')
             current_datetime = datetime.fromtimestamp(current_time_val)
-            time_text.set_text(f'Time: {current_datetime.strftime("%H:%M:%S")}')
+            time_text.set_text(f'Time: {current_datetime.isoformat(timespec="milliseconds")}')
         
         # Use draw_idle for better performance
         fig.canvas.draw_idle()
@@ -522,6 +526,8 @@ def visualize_imu_path(csv_file='imu.csv'):
     
     # Initial update
     update_plot(df['t'].min())
+    # Set initial slider text to formatted time
+    time_slider.valtext.set_text(format_timestamp(df['t'].min()))
     
     # Add legend in top area underneath speed/time displays - vertical arrangement
     ax.legend(bbox_to_anchor=(0.02, 0.85), loc='upper left', 
