@@ -405,7 +405,7 @@ def visualize_imu_path(csv_file='imu.csv'):
     # Set up the figure and axis
     plt.style.use('dark_background')
     fig, ax = plt.subplots(figsize=(12, 8))
-    plt.subplots_adjust(bottom=0.25)
+    plt.subplots_adjust(bottom=0.25, right=0.85)  # Make room for legend
     
     # Initial plot setup
     ax.set_xlabel('X Position (Forward)')
@@ -417,8 +417,11 @@ def visualize_imu_path(csv_file='imu.csv'):
     # Create color map based on speed
     speeds = df['v'].values
     
-    # Plot full trajectory (faded)
-    ax.scatter(df['x'], df['y'], c=speeds, cmap='viridis', alpha=0.3, s=10, label='Full path')
+    # Plot full trajectory (faded) - downsample for better performance
+    downsample_factor = max(1, len(df) // 2000)  # Limit to ~2000 points
+    df_display = df[::downsample_factor]
+    speeds_display = speeds[::downsample_factor]
+    ax.scatter(df_display['x'], df_display['y'], c=speeds_display, cmap='viridis', alpha=0.3, s=8, label='Full path')
     
     # Current position marker
     current_pos = ax.scatter([], [], c='red', s=100, marker='o', label='Current position')
@@ -451,11 +454,21 @@ def visualize_imu_path(csv_file='imu.csv'):
     time_slider = Slider(ax_slider, 'Time', df['t'].min(), df['t'].max(), 
                         valinit=df['t'].min(), valfmt='%.2f s')
     
+    # Performance optimization: throttle updates
+    last_update_time = [0]
+    
     def update_plot(val):
-        current_time = time_slider.val
+        import time as time_module
+        current_time_val = time_slider.val
+        
+        # Throttle updates to ~10 FPS for better performance on Pi
+        now = time_module.time()
+        if now - last_update_time[0] < 0.1:  # 100ms minimum between updates
+            return
+        last_update_time[0] = now
         
         # Find data points up to current time
-        mask = df['t'] <= current_time
+        mask = df['t'] <= current_time_val
         current_data = df[mask]
         
         if len(current_data) > 0:
@@ -463,18 +476,26 @@ def visualize_imu_path(csv_file='imu.csv'):
             last_point = current_data.iloc[-1]
             current_pos.set_offsets([[last_point['x'], last_point['y']]])
             
-            # Update path
-            current_path.set_data(current_data['x'], current_data['y'])
+            # Update path - limit points for performance
+            max_points = 1000  # Limit path points for better performance
+            if len(current_data) > max_points:
+                step = len(current_data) // max_points
+                display_data = current_data[::step]
+            else:
+                display_data = current_data
+            
+            current_path.set_data(display_data['x'], display_data['y'])
             
             # Update text displays
             speed_text.set_text(f'Speed: {last_point["v"]:.2f}')
-            time_text.set_text(f'Time: {current_time:.2f}s')
+            time_text.set_text(f'Time: {current_time_val:.2f}s')
         else:
             current_pos.set_offsets([[]])
             current_path.set_data([], [])
             speed_text.set_text('Speed: --')
-            time_text.set_text(f'Time: {current_time:.2f}s')
+            time_text.set_text(f'Time: {current_time_val:.2f}s')
         
+        # Use draw_idle for better performance
         fig.canvas.draw_idle()
     
     # Connect slider to update function
@@ -483,8 +504,8 @@ def visualize_imu_path(csv_file='imu.csv'):
     # Initial update
     update_plot(df['t'].min())
     
-    # Add legend
-    ax.legend()
+    # Add legend outside plot area
+    ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left')
     
     plt.show()
 
