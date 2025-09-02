@@ -404,8 +404,8 @@ def visualize_imu_path(csv_file='imu.csv'):
     
     # Set up the figure and axis
     plt.style.use('dark_background')
-    fig, ax = plt.subplots(figsize=(12, 8))
-    plt.subplots_adjust(bottom=0.25, right=0.85)  # Make room for legend
+    fig, ax = plt.subplots(figsize=(14, 8))
+    plt.subplots_adjust(bottom=0.25, right=0.78, top=0.92, left=0.08)  # Make room for legend and text
     
     # Initial plot setup
     ax.set_xlabel('X Position (Forward)')
@@ -429,15 +429,15 @@ def visualize_imu_path(csv_file='imu.csv'):
     # Path up to current time
     current_path, = ax.plot([], [], 'yellow', linewidth=2, alpha=0.8, label='Path to current time')
     
-    # Speed text
-    speed_text = ax.text(0.02, 0.98, '', transform=ax.transAxes, 
-                        verticalalignment='top', fontsize=12,
-                        bbox=dict(boxstyle='round', facecolor='black', alpha=0.8))
+    # Speed text - position in top area above plot
+    speed_text = fig.text(0.02, 0.97, '', fontsize=12,
+                         bbox=dict(boxstyle='round', facecolor='black', alpha=0.8),
+                         color='white')
     
-    # Time text
-    time_text = ax.text(0.02, 0.92, '', transform=ax.transAxes,
-                       verticalalignment='top', fontsize=12,
-                       bbox=dict(boxstyle='round', facecolor='black', alpha=0.8))
+    # Time text - position in top area above plot
+    time_text = fig.text(0.02, 0.94, '', fontsize=12,
+                        bbox=dict(boxstyle='round', facecolor='black', alpha=0.8),
+                        color='white')
     
     # Set axis limits with some padding
     x_margin = (df['x'].max() - df['x'].min()) * 0.1
@@ -504,8 +504,8 @@ def visualize_imu_path(csv_file='imu.csv'):
     # Initial update
     update_plot(df['t'].min())
     
-    # Add legend outside plot area
-    ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left')
+    # Add legend outside plot area on the right
+    ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', framealpha=0.9)
     
     plt.show()
 
