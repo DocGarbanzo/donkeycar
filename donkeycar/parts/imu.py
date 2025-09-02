@@ -454,26 +454,14 @@ def visualize_imu_path(csv_file='imu.csv'):
     cbar = plt.colorbar(plt.cm.ScalarMappable(cmap='viridis'), ax=ax)
     cbar.set_label('Speed')
     
-    # Create slider with ISO time format
+    # Create slider without time display (redundant with top-left display)
     ax_slider = plt.axes([0.15, 0.1, 0.7, 0.03])
     
-    def format_timestamp(val):
-        """Convert UTC timestamp to ISO format"""
-        try:
-            dt = datetime.fromtimestamp(val)
-            return dt.isoformat(timespec='milliseconds')
-        except:
-            return f'{val:.3f}s'
-    
     time_slider = Slider(ax_slider, 'Time', df['t'].min(), df['t'].max(), 
-                        valinit=df['t'].min(), valfmt='%.1f s')
+                        valinit=df['t'].min(), valfmt='')
     
-    # Override the slider's text update method for custom formatting
-    original_set_val = time_slider.set_val
-    def custom_set_val(val):
-        original_set_val(val)
-        time_slider.valtext.set_text(format_timestamp(val))
-    time_slider.set_val = custom_set_val
+    # Hide the slider's value text since we show time in top-left corner
+    time_slider.valtext.set_visible(False)
     
     # Performance optimization: throttle updates
     last_update_time = [0]
@@ -526,8 +514,6 @@ def visualize_imu_path(csv_file='imu.csv'):
     
     # Initial update
     update_plot(df['t'].min())
-    # Set initial slider text to formatted time
-    time_slider.valtext.set_text(format_timestamp(df['t'].min()))
     
     # Add legend in top area underneath speed/time displays - vertical arrangement
     ax.legend(bbox_to_anchor=(0.02, 0.85), loc='upper left', 
