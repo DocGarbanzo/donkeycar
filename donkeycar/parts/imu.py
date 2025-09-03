@@ -375,12 +375,86 @@ class PathPlotter:
         self.mlist.append((time.time(), *x))
 
 
-def visualize_imu_path(csv_file='imu.csv'):
+def correct_loop_drift(df, min_loop_distance=1.0, origin_tolerance=0.2):
+    """
+    Correct drift in closed-loop IMU path data by detecting loop completions 
+    and applying proportional corrections.
+    
+    Args:
+        df (DataFrame): IMU data with columns t, x, y, z, v
+        min_loop_distance (float): Minimum distance to travel before considering loop closure
+        origin_tolerance (float): Maximum distance from origin to consider as loop closure
+        
+    Returns:
+        DataFrame: Corrected path data with same structure
+    """
+    import numpy as np
+    import pandas as pd
+    
+    if len(df) < 2:
+        return df.copy()
+    
+    # Create a copy to avoid modifying original data
+    corrected_df = df.copy()
+    
+    # Calculate cumulative distance traveled
+    dx = np.diff(corrected_df['x'])
+    dy = np.diff(corrected_df['y'])
+    distances = np.sqrt(dx**2 + dy**2)
+    cumulative_distance = np.concatenate([[0], np.cumsum(distances)])
+    
+    # Find loop closure points
+    loop_points = []
+    last_loop_end = 0
+    
+    for i in range(1, len(corrected_df)):
+        # Only consider points after minimum distance from last loop
+        if cumulative_distance[i] - cumulative_distance[last_loop_end] < min_loop_distance:
+            continue
+            
+        # Check if we're close to origin (0, 0)
+        distance_to_origin = np.sqrt(corrected_df.iloc[i]['x']**2 + corrected_df.iloc[i]['y']**2)
+        
+        if distance_to_origin <= origin_tolerance:
+            # Found a loop closure
+            loop_points.append(i)
+            last_loop_end = i
+            print(f"Loop closure detected at index {i}, distance from origin: {distance_to_origin:.3f}m")
+    
+    # Apply corrections for each completed loop
+    for loop_idx, loop_end in enumerate(loop_points):
+        # Determine loop start (previous loop end or beginning)
+        loop_start = loop_points[loop_idx - 1] if loop_idx > 0 else 0
+        
+        # Calculate drift vector at loop closure
+        end_x = corrected_df.iloc[loop_end]['x']
+        end_y = corrected_df.iloc[loop_end]['y']
+        drift_vector = np.array([end_x, end_y])  # Drift from true origin (0, 0)
+        
+        print(f"Loop {loop_idx + 1}: indices {loop_start}-{loop_end}, drift vector: [{drift_vector[0]:.3f}, {drift_vector[1]:.3f}]")
+        
+        # Apply proportional correction to this loop
+        loop_length = loop_end - loop_start
+        if loop_length > 0:
+            for i in range(loop_start, loop_end + 1):
+                # Proportionality factor: 0 at start, 1 at end
+                prop_factor = (i - loop_start) / loop_length
+                
+                # Apply correction
+                corrected_df.iloc[i, corrected_df.columns.get_loc('x')] -= drift_vector[0] * prop_factor
+                corrected_df.iloc[i, corrected_df.columns.get_loc('y')] -= drift_vector[1] * prop_factor
+    
+    print(f"Applied drift correction to {len(loop_points)} completed loops")
+    return corrected_df
+
+
+def visualize_imu_path(csv_file='imu.csv', correct_drift=True):
     """
     Load and visualize IMU path data with interactive time slider.
     
     Args:
         csv_file (str): Path to the CSV file containing t,x,y,z,v columns
+        correct_drift (bool): Apply loop drift correction to the path data
     """
     import matplotlib.pyplot as plt
     from matplotlib.widgets import Slider
@@ -400,6 +474,12 @@ def visualize_imu_path(csv_file='imu.csv'):
         return
         
     print(f"Loaded {len(df)} data points from {csv_file}")
+    
+    # Apply drift correction if requested
+    if correct_drift:
+        print("Applying loop drift correction...")
+        df = correct_loop_drift(df)
+        print("Drift correction completed.")
     
     # Convert UTC timestamps to datetime objects for better display
     start_time = datetime.fromtimestamp(df['t'].min())
