@@ -681,6 +681,28 @@ class Monitor(BaseCommand):
               .format(count, count / proc_time))
 
 
+class ImuPathVisualizer(BaseCommand):
+    """Command for visualizing IMU path data from CSV files."""
+
+    def parse_args(self, args):
+        parser = argparse.ArgumentParser(prog='imupath',
+                                         usage='%(prog)s [options] [csv_file]')
+        parser.add_argument('csv_file', nargs='?', default='imu.csv',
+                           help='path to IMU CSV file (default: imu.csv)')
+        parser.add_argument('--no-drift-correction', action='store_true',
+                           help='disable loop drift correction')
+
+        parsed_args = parser.parse_args(args)
+        return parsed_args
+
+    def run(self, args):
+        args = self.parse_args(args)
+        from donkeycar.utilities.imu_path_visualizer import visualize_imu_path
+        
+        correct_drift = not args.no_drift_correction
+        visualize_imu_path(args.csv_file, correct_drift=correct_drift)
+
+
 def execute_from_command_line():
     """
     This is the function linked to the "donkey" terminal command.
@@ -699,7 +721,8 @@ def execute_from_command_line():
         'train': Train,
         'models': ModelDatabase,
         'ui': Gui,
-        'monitor': Monitor
+        'monitor': Monitor,
+        'imupath': ImuPathVisualizer
     }
 
     args = sys.argv[:]
