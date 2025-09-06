@@ -330,11 +330,7 @@ def calibrate(cfg, verbose=False):
     third channel on the remote we can use it for wiping bad data while
     recording, so we print its values here, too.
     """
-    class Plotter:
-        def run(self, steer, throttle=0, ch_3=0):
-            print(f'Calibration - angle: {steer:+4.3f} '
-                  f'throttle {throttle:+4.3f} '
-                  f'ch3: {ch_3:+4.3f}')
+    from donkeycar.parts.plot import Plotter
 
     if verbose:
         donkeycar.logger.setLevel(logging.DEBUG)
@@ -348,7 +344,9 @@ def calibrate(cfg, verbose=False):
     rc_ch_3 = RCReceiver(min_out=0, no_action=0, 
                          gpio=cfg.CH3_RC_GPIO, name='ch3')
     car.add(rc_ch_3, outputs=['user/ch_3', 'user/rc_ch_3_on'])
-    car.add(Plotter(), inputs=['user/angle', 'user/throttle', 'user/ch_3'])
+    # Use generalized Plotter with default +4.3f formatting
+    car.add(Plotter("angle", "throttle", "ch_3"),
+            inputs=['user/angle', 'user/throttle', 'user/ch_3'])
     car.start(rate_hz=10, max_loop_count=cfg.MAX_LOOPS)
 
 
