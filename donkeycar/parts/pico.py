@@ -166,7 +166,7 @@ class Pico:
         :param mode:    the mode of the pin
         :param kwargs:  additional arguments for the mode
         """
-        assert mode in ('INPUT', 'PULSE_IN', 'ANALOG_IN', 'PWM_IN'), \
+        assert mode in ('INPUT', 'PULSE_IN', 'PULSE_IN_PIO', 'ANALOG_IN', 'PWM_IN'), \
             f"Mode {mode} not supported for input pins."
 
         setup_dict = dict(input_pins={gpio: dict(mode=mode, **kwargs)})
@@ -186,10 +186,10 @@ class Pico:
             logger.error(f"Input pin {gpio} setup failed to send setup dict "
                          f"because of {e}, skipping.")
         # Track PULSE_IN pins for special handling
-        if mode == 'PULSE_IN':
+        if mode in ('PULSE_IN', 'PULSE_IN_PIO'):
             self.pulse_in_pins.add(gpio)
         with self.lock:
-            self.receive_dict[gpio] = [] if mode == 'PULSE_IN' else 0
+            self.receive_dict[gpio] = [] if mode in ('PULSE_IN', 'PULSE_IN_PIO') else 0
 
     def setup_output_pin(self, gpio: str, mode: str, **kwargs) -> None:
         """

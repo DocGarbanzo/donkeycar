@@ -6,8 +6,10 @@ import pulseio
 import pwmio
 import usb_cdc
 import json
+import struct
 import microcontroller
-
+import rp2pio
+import adafruit_pioasm
 
 class PulseInResettable:
     def __init__(self, gpio, maxlen=2, auto_clear=False, **kwargs):
@@ -24,6 +26,100 @@ class PulseInResettable:
 
     def deinit(self):
         self.pin.deinit()
+
+
+class PulseInPioPIO:
+    def __init__(self, gpio, maxlen=64, auto_clear=False, frequency=2_000_000, **kwargs):
+        import rp2pio
+        import adafruit_pioasm
+        import struct
+        
+        self.gpio = gpio
+        self.maxlen = maxlen
+        self.auto_clear = auto_clear
+        self.buffer = bytearray(maxlen * 4)
+        self.frequency = frequency
+        # Calculate microsecond scaling factor
+        # PIO loop takes 2 instructions per count, so effective frequency is frequency/2
+        self.us_per_count = 2_000_000.0 / frequency
+        
+        program = """
+.program pulse_both_us_nb
+; Measure both high and low durations in clock counts
+; Resolution depends on SM clock frequency
+; Pushes one 32-bit value per level period
+; Uses 'push noblock' so SM never blocks
+
+wait_any:
+    ; Sync to current state
+    jmp pin, measure_high   ; if currently high, next edge is falling
+    jmp      measure_low    ; else low, next edge is rising
+
+; -----------------
+; Measure HIGH width (from rising→falling)  
+; -----------------
+measure_high:
+    mov  x, ~x              ; x = -1 (0xFFFFFFFF)
+count_high:
+    jmp  pin, dec_high      ; if still high, loop
+    ; fell low: push high duration
+    mov  isr, x
+    push noblock
+    jmp  measure_low        ; now measure low
+dec_high:
+    jmp  x--, count_high    ; decrement and loop (2 cycles per iteration)
+
+; -----------------
+; Measure LOW width (from falling→rising)
+; -----------------
+measure_low:
+    mov  x, ~x              ; x = -1 (0xFFFFFFFF)
+count_low:
+    jmp  pin, low_done      ; if high now, edge occurred
+    jmp  x--, count_low     ; still low, keep counting (2 cycles per iteration)
+low_done:
+    mov  isr, x
+    push noblock
+    jmp  measure_high
+"""
+        
+        asm = adafruit_pioasm.assemble(program)
+        
+        try:
+            self.sm = rp2pio.StateMachine(
+                asm,
+                frequency=frequency,
+                first_in_pin=gpio,
+                in_pin_count=1,
+                auto_push=False,
+                fifo_join=rp2pio.StateMachine.RX_FIFO_JOIN
+            )
+            # Verify actual frequency matches requested
+            actual_freq = self.sm.frequency
+            if abs(actual_freq - frequency) > frequency * 0.01:  # 1% tolerance
+                print(f"Warning: Requested frequency {frequency}Hz, actual {actual_freq}Hz")
+                # Update scaling factor with actual frequency
+                self.us_per_count = 2_000_000.0 / actual_freq
+        except Exception as e:
+            print(f"PIO StateMachine setup failed: {e}")
+            raise
+
+    def get_value(self):
+
+        pulses = []
+        nbytes = self.sm.readinto(self.buffer)
+        for i in range(0, nbytes, 4):
+            (xval,) = struct.unpack_from("<I", self.buffer, i)
+            # Convert inverted count to actual count
+            count = (~xval) & 0xFFFFFFFF
+            # Scale to microseconds based on actual frequency
+            us = count * self.us_per_count
+            pulses.append(int(us))
+        return pulses
+
+    def deinit(self):
+        if hasattr(self, 'sm'):
+            self.sm.deinit()
 
 
 class PWMIn(PulseInResettable):
@@ -138,6 +234,13 @@ def pin_from_dict(pin_name, d):
                                 auto_clear=d.get('auto_clear', False))
         print(f'Configured pulse-in pin, gpio: {gpio}, maxlen:',
               f'{pin.pin.maxlen}, auto_clear: {pin.auto_clear}')
+    elif d['mode'] == 'PULSE_IN_PIO':
+        frequency = d.get('frequency', 2_000_000)
+        pin = PulseInPioPIO(gpio, maxlen=d.get('maxlen', 64),
+                            auto_clear=d.get('auto_clear', False),
+                            frequency=frequency)
+        print(f'Configured PIO pulse-in pin, gpio: {gpio}, maxlen: {pin.maxlen}',
+              f'auto_clear: {pin.auto_clear}, frequency: {pin.frequency}Hz')
     elif d['mode'] == 'PWM_IN':
         pin = PWMIn(gpio, duty=d.get('duty_center', 0.09))
         print(f'Configured pwm-in pin, gpio: {gpio}, duty_center: {pin.duty}')
@@ -254,7 +357,7 @@ def write(serial, input_pins, write_dict, led):
 
 def main():
     print('\n************ Starting pi pico ************')
-    microcontroller.cpu.frequency = 180000000
+    microcontroller.cpu.frequency = 180_000_000
     print(f'Current CPU frequency: {microcontroller.cpu.frequency}')
 
     serial = usb_cdc.data
@@ -289,4 +392,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
