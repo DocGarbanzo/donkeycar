@@ -60,6 +60,8 @@ CH3_RC_GPIO = "PICO.BCM.20"
 MAX_SPEED = 4.4
 ODOMETER_GPIO = "PICO.BCM.2"
 TICK_PER_M = 75
+ODOMETER_USE_PIO = True        # Use PIO counter for long pulses
+ODOMETER_FREQUENCY = 20_000    # PIO frequency in Hz (20kHz)
 
 # BATTERY
 BATTERY_GPIO = "PICO.BCM.28"

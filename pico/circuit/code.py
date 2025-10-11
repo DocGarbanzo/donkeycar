@@ -28,94 +28,119 @@ class PulseInResettable:
         self.pin.deinit()
 
 
-class PulseInPioPIO:
-    def __init__(self, gpio, maxlen=64, auto_clear=False, frequency=2_000_000, **kwargs):
+class PulseInCounter:
+    def __init__(self, gpio, maxlen=64, auto_clear=True, frequency=20_000, **kwargs):
         import rp2pio
         import adafruit_pioasm
-        import struct
-        
+        import array
+
         self.gpio = gpio
         self.maxlen = maxlen
-        self.auto_clear = auto_clear
-        self.buffer = bytearray(maxlen * 4)
+        self.auto_clear = True  # Always auto-clear to prevent double counting
         self.frequency = frequency
-        # Calculate microsecond scaling factor
-        # PIO loop takes 2 instructions per count, so effective frequency is frequency/2
-        self.us_per_count = 2_000_000.0 / frequency
-        
-        program = """
-.program pulse_both_us_nb
-; Measure both high and low durations in clock counts
-; Resolution depends on SM clock frequency
-; Pushes one 32-bit value per level period
-; Uses 'push noblock' so SM never blocks
+        self.pulse_count = 0
 
-wait_any:
-    ; Sync to current state
-    jmp pin, measure_high   ; if currently high, next edge is falling
-    jmp      measure_low    ; else low, next edge is rising
+        pulse_in_program = """
+.program pulse_in
+; Count cycles for each interval between pin transitions.
 
-; -----------------
-; Measure HIGH width (from rising→falling)  
-; -----------------
-measure_high:
-    mov  x, ~x              ; x = -1 (0xFFFFFFFF)
-count_high:
-    jmp  pin, dec_high      ; if still high, loop
-    ; fell low: push high duration
-    mov  isr, x
-    push noblock
-    jmp  measure_low        ; now measure low
-dec_high:
-    jmp  x--, count_high    ; decrement and loop (2 cycles per iteration)
+mov x, ~null        ; Reset counter to all ones
+jmp pin, measure_high
 
-; -----------------
-; Measure LOW width (from falling→rising)
-; -----------------
-measure_low:
-    mov  x, ~x              ; x = -1 (0xFFFFFFFF)
-count_low:
-    jmp  pin, low_done      ; if high now, edge occurred
-    jmp  x--, count_low     ; still low, keep counting (2 cycles per iteration)
-low_done:
-    mov  isr, x
-    push noblock
-    jmp  measure_high
+measure_low:            ; Pin is low, wait for it to go high
+    jmp pin, capture    ; Rising edge detected
+    jmp x--, measure_low
+    jmp capture         ; Timeout if counter wrapped
+
+measure_high:           ; Pin is high, wait for it to go low
+    jmp pin, decrement_high
+    jmp capture         ; Falling edge detected
+
+decrement_high:
+    jmp x--, measure_high
+    jmp capture         ; Timeout if counter wrapped
+
+capture:
+    mov y, ~x          ; Invert count to get elapsed cycles
+    mov x, y           ; Keep original count for saturation check
+    mov osr, x         ; Stage count for shifting
+    out null, 16       ; Drop lower 16 bits, leaving high word in OSR
+    mov x, osr         ; Copy upper 16 bits into X
+    jmp !x, push_value ; Upper word zero => within 16-bit range
+    mov y, ~null       ; Saturate to 0xFFFF when overflow detected
+push_value:
+    in y, 16           ; Push lower 16 bits (saturated when overflowed)
 """
-        
-        asm = adafruit_pioasm.assemble(program)
-        
+
+        asm = adafruit_pioasm.assemble(pulse_in_program)
+
         try:
             self.sm = rp2pio.StateMachine(
                 asm,
                 frequency=frequency,
                 first_in_pin=gpio,
                 in_pin_count=1,
-                auto_push=False,
-                fifo_join=rp2pio.StateMachine.RX_FIFO_JOIN
+                jmp_pin=gpio,
+                auto_push=True,
+                push_threshold=16,
+                in_shift_right=True,
+                out_shift_right=True,
+                fifo_type="rx",
             )
+            self.sm.clear_rxfifo()
             # Verify actual frequency matches requested
-            actual_freq = self.sm.frequency
-            if abs(actual_freq - frequency) > frequency * 0.01:  # 1% tolerance
-                print(f"Warning: Requested frequency {frequency}Hz, actual {actual_freq}Hz")
-                # Update scaling factor with actual frequency
-                self.us_per_count = 2_000_000.0 / actual_freq
+            try:
+                actual_freq = self.sm.frequency
+                print(f"PulseInCounter configured: frequency={actual_freq}Hz")
+            except AttributeError:
+                print("PulseInCounter: frequency property unavailable")
         except Exception as e:
             print(f"PIO StateMachine setup failed: {e}")
             raise
 
-    def get_value(self):
+    def clear(self):
+        if self.sm:
+            self.sm.clear_rxfifo()
 
+    def read_pulse(self):
+        if not self.sm:
+            return []
+        # Check if FIFO has data
+        waiting = self.sm.in_waiting
+        if waiting == 0:
+            return []
+        # Read all available values from FIFO
+        import array
+        answers = array.array("H", [0] * waiting)
+        self.sm.readinto(answers)
+        # Process all drained values
         pulses = []
-        nbytes = self.sm.readinto(self.buffer)
-        for i in range(0, nbytes, 4):
-            (xval,) = struct.unpack_from("<I", self.buffer, i)
-            # Convert inverted count to actual count
-            count = (~xval) & 0xFFFFFFFF
-            # Scale to microseconds based on actual frequency
-            us = count * self.us_per_count
-            pulses.append(int(us))
+        for raw in answers:
+            if raw == 0xFFFF:
+                adjusted = raw  # preserve saturation flag
+            else:
+                adjusted = (raw + 5) & 0xFFFF  # compensate for latency
+            pulses.append(adjusted)
+        self.pulse_count += waiting
         return pulses
+
+    def get_value(self):
+        """
+        Interface-compatible method that behaves like PulseInResettable.
+        Returns pulse data and auto-clears if configured.
+        """
+        pulses = self.read_pulse()
+        # Auto-clear is handled automatically by read_pulse() which drains FIFO
+        # Each call returns only new pulses, ensuring no double counting
+        return pulses
+
+    def get_pulse_ms(self, pulse_width):
+        return pulse_width * 2000 / self.frequency
+
+    def get_stats(self):
+        return {
+            'count': self.pulse_count,
+        }
 
     def deinit(self):
         if hasattr(self, 'sm'):
@@ -234,13 +259,12 @@ def pin_from_dict(pin_name, d):
                                 auto_clear=d.get('auto_clear', False))
         print(f'Configured pulse-in pin, gpio: {gpio}, maxlen:',
               f'{pin.pin.maxlen}, auto_clear: {pin.auto_clear}')
-    elif d['mode'] == 'PULSE_IN_PIO':
-        frequency = d.get('frequency', 2_000_000)
-        pin = PulseInPioPIO(gpio, maxlen=d.get('maxlen', 64),
-                            auto_clear=d.get('auto_clear', False),
-                            frequency=frequency)
-        print(f'Configured PIO pulse-in pin, gpio: {gpio}, maxlen: {pin.maxlen}',
-              f'auto_clear: {pin.auto_clear}, frequency: {pin.frequency}Hz')
+    elif d['mode'] == 'PULSE_IN_COUNTER':
+        frequency = d.get('frequency', 20_000)
+        pin = PulseInCounter(gpio, maxlen=d.get('maxlen', 64),
+                             frequency=frequency)
+        print(f'Configured PulseInCounter pin, gpio: {gpio}, maxlen: {pin.maxlen}',
+              f'frequency: {pin.frequency}Hz (auto-clear always enabled)')
     elif d['mode'] == 'PWM_IN':
         pin = PWMIn(gpio, duty=d.get('duty_center', 0.09))
         print(f'Configured pwm-in pin, gpio: {gpio}, duty_center: {pin.duty}')

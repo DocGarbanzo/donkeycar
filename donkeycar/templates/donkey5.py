@@ -131,7 +131,11 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     car.add(rc_ch_3, outputs=['user/wiper', 'user/wiper_on'])
 
     odo = OdometerPico(
-        tick_per_meter=cfg.TICK_PER_M, pin_id=cfg.ODOMETER_GPIO, weight=0.5)
+        tick_per_meter=cfg.TICK_PER_M,
+        pin_id=cfg.ODOMETER_GPIO,
+        weight=0.5,
+        use_pio=cfg.ODOMETER_USE_PIO,
+        frequency=cfg.ODOMETER_FREQUENCY)
     car.add(odo, outputs=['car/speed', 'car/inst_speed', 'car/distance'])
     #
     # add lap timer ------------------------------------------------------------
@@ -382,8 +386,11 @@ def pulsein(cfg):
     car.add(pwm_steering, inputs=['user/angle'], threaded=True)
 
     odo = OdometerPico(
-        tick_per_meter=cfg.TICK_PER_M, pin_id=cfg.ODOMETER_GPIO, weight=0.5, 
-        debug=True)
+        tick_per_meter=cfg.TICK_PER_M,
+        pin_id=cfg.ODOMETER_GPIO,
+        weight=0.5,
+        use_pio=cfg.ODOMETER_USE_PIO,
+        frequency=cfg.ODOMETER_FREQUENCY)
     car.add(odo, outputs=['car/speed', 'car/inst_speed', 'car/distance'])
 
     car.start(rate_hz=cfg.DRIVE_LOOP_HZ, max_loop_count=cfg.MAX_LOOPS)

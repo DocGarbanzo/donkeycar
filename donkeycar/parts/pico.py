@@ -54,12 +54,12 @@ class Pico:
     See above examples for the required keys for each mode.
     """
 
-    def __init__(self, port: str = '/dev/ttyACM1'):
+    def __init__(self, port: str = "/dev/ttyACM1"):
         """
         Initialize the Pico communicator.
         :param port: port for data connection
         """
-        self.serial = serial.Serial(port, 115200)  #, write_timeout=10.0)   
+        self.serial = serial.Serial(port, 115200)  # , write_timeout=10.0)
         self.counter = 0
         self.running = True
         self.pin_configuration = dict()
@@ -72,7 +72,7 @@ class Pico:
         self.start = None
         logger.info(f"Creating Pico on port: {port}, initialising comms...")
         # send the initial setup dictionary to clear all pins
-        pack = json.dumps(dict(input_pins={}, output_pins={})) + '\n'
+        pack = json.dumps(dict(input_pins={}, output_pins={})) + "\n"
         try:
             self.serial.write(pack.encode())
             self.t = Thread(target=self.loop, args=(), daemon=True)
@@ -103,21 +103,24 @@ class Pico:
                 received_dict = json.loads(str_in)
                 with self.lock:
                     self._update_receive_dict(received_dict)
-                    pack = json.dumps(self.send_dict) + '\n'
+                    pack = json.dumps(self.send_dict) + "\n"
                     self.serial.write(pack.encode())
                 if self.counter % 10 == 0:
-                    logger.debug(f'Last received: {received_dict}')
-                    logger.debug(f'Last sent: {self.send_dict}')
+                    logger.debug(f"Last received: {received_dict}")
+                    logger.debug(f"Last sent: {self.send_dict}")
                 time.sleep(0.0)
             except ValueError as e:
-                logger.error(f'Failed to load json in loop {self.counter} '
-                             f'because of {e}. Expected json, but got: '
-                             f'+++{str_in}+++')
+                logger.error(
+                    f"Failed to load json in loop {self.counter} "
+                    f"because of {e}. Expected json, but got: "
+                    f"+++{str_in}+++"
+                )
             except Exception as e:
-                logger.error(f'Problem with serial comms {e} '
-                             f'in loop {self.counter}')
+                logger.error(
+                    f"Problem with serial comms {e} " f"in loop {self.counter}"
+                )
             self.counter += 1
-        logger.info('Pico loop stopped.')
+        logger.info("Pico loop stopped.")
 
     def write(self, gpio: str, value: Union[float, int]) -> None:
         """
@@ -143,8 +146,10 @@ class Pico:
             time.sleep(0.1)
         with self.lock:
             if gpio not in self.receive_dict:
-                msg = (f"Pin {gpio} not in receive_dict. Known pins: "
-                       f"{', '.join(self.receive_dict.keys())}")
+                msg = (
+                    f"Pin {gpio} not in receive_dict. Known pins: "
+                    f"{', '.join(self.receive_dict.keys())}"
+                )
                 logger.error(msg)
                 raise RuntimeError(msg)
             return self._read_pin_data(gpio)
@@ -156,9 +161,11 @@ class Pico:
         self.serial.reset_output_buffer()
         self.serial.close()
         total_time = time.time() - self.start
-        logger.info(f"Pico communication disconnected, ran {self.counter} "
-                    f"loops, each loop taking "
-                    f"{total_time * 1000 / self.counter:5.1f} ms.")
+        logger.info(
+            f"Pico communication disconnected, ran {self.counter} "
+            f"loops, each loop taking "
+            f"{total_time * 1000 / self.counter:5.1f} ms."
+        )
 
     def setup_input_pin(self, gpio: str, mode: str, **kwargs) -> None:
         """
@@ -166,15 +173,22 @@ class Pico:
         :param mode:    the mode of the pin
         :param kwargs:  additional arguments for the mode
         """
-        assert mode in ('INPUT', 'PULSE_IN', 'PULSE_IN_PIO', 'ANALOG_IN', 'PWM_IN'), \
-            f"Mode {mode} not supported for input pins."
+        assert mode in (
+            "INPUT",
+            "PULSE_IN",
+            "PULSE_IN_COUNTER",
+            "ANALOG_IN",
+            "PWM_IN",
+        ), f"Mode {mode} not supported for input pins."
 
         setup_dict = dict(input_pins={gpio: dict(mode=mode, **kwargs)})
-        logger.info(f"Setting up input pin {gpio} in mode {mode} using "
-                    f"setup dict {setup_dict}")
+        logger.info(
+            f"Setting up input pin {gpio} in mode {mode} using "
+            f"setup dict {setup_dict}"
+        )
         try:
             # send the setup dictionary
-            pack = json.dumps(setup_dict) + '\n'
+            pack = json.dumps(setup_dict) + "\n"
             logger.debug(f"Sending setup dict: {pack}")
             logger.debug(f"Reset input buffer.")
             self.serial.reset_input_buffer()
@@ -183,13 +197,17 @@ class Pico:
             logger.debug(f"Writing setup dict to serial.")
             self.serial.write(pack.encode())
         except Exception as e:
-            logger.error(f"Input pin {gpio} setup failed to send setup dict "
-                         f"because of {e}, skipping.")
+            logger.error(
+                f"Input pin {gpio} setup failed to send setup dict "
+                f"because of {e}, skipping."
+            )
         # Track PULSE_IN pins for special handling
-        if mode in ('PULSE_IN', 'PULSE_IN_PIO'):
+        if mode in ("PULSE_IN", "PULSE_IN_COUNTER"):
             self.pulse_in_pins.add(gpio)
         with self.lock:
-            self.receive_dict[gpio] = [] if mode in ('PULSE_IN', 'PULSE_IN_PIO') else 0
+            self.receive_dict[gpio] = (
+                [] if mode in ("PULSE_IN", "PULSE_IN_COUNTER") else 0
+            )
 
     def setup_output_pin(self, gpio: str, mode: str, **kwargs) -> None:
         """
@@ -198,23 +216,29 @@ class Pico:
         :param kwargs:  additional arguments for the mode
         """
 
-        assert mode in ('OUTPUT', 'PWM'), \
-            f"Mode {mode} not supported for output pins on Pico"
+        assert mode in (
+            "OUTPUT",
+            "PWM",
+        ), f"Mode {mode} not supported for output pins on Pico"
         setup_dict = dict(output_pins={gpio: dict(mode=mode, **kwargs)})
-        logger.info(f"Setting up output pin {gpio} in mode {mode} using "
-                    f"setup dict {setup_dict}")
+        logger.info(
+            f"Setting up output pin {gpio} in mode {mode} using "
+            f"setup dict {setup_dict}"
+        )
         try:
             with self.lock:
                 # send the setup dictionary
-                pack = json.dumps(setup_dict) + '\n'
+                pack = json.dumps(setup_dict) + "\n"
                 self.serial.reset_input_buffer()
                 self.serial.reset_output_buffer()
                 self.serial.write(pack.encode())
                 time.sleep(0.2)
-                self.send_dict[gpio] = 0 if mode == 'OUTPUT' else kwargs['duty']
+                self.send_dict[gpio] = 0 if mode == "OUTPUT" else kwargs["duty"]
         except Exception as e:
-            logger.error(f"Output pin {gpio} setup failed to send setup dict "
-                         f"because of {e}, skipping.")
+            logger.error(
+                f"Output pin {gpio} setup failed to send setup dict "
+                f"because of {e}, skipping."
+            )
 
     def remove_pin(self, gpio: str) -> None:
         """
@@ -225,26 +249,26 @@ class Pico:
             with self.lock:
                 setup_dict = dict()
                 if gpio in self.receive_dict:
-                    setup_dict['input_pins'] = {gpio: {}}
+                    setup_dict["input_pins"] = {gpio: {}}
                     del self.receive_dict[gpio]
                     self.pulse_in_pins.discard(gpio)
                     logger.info(f"Removed input pin {gpio} on pico.")
                 elif gpio in self.send_dict:
-                    setup_dict['output_pins'] = {gpio: {}}
+                    setup_dict["output_pins"] = {gpio: {}}
                     del self.send_dict[gpio]
                     logger.info(f"Removed output pin {gpio} on pico.")
                 else:
                     logger.warning(f"Pin {gpio} not in send or receive dict.")
                     return
-                pack = json.dumps(setup_dict) + '\n'
-            # send the setup dictionary           
+                pack = json.dumps(setup_dict) + "\n"
+            # send the setup dictionary
             self.serial.reset_input_buffer()
             self.serial.reset_output_buffer()
             self.serial.write(pack.encode())
         except Exception as e:
-            logger.error(f"Remove pin {gpio} failed with exception {e}, "
-                         f"skipping.")
-            
+            logger.error(
+                f"Remove pin {gpio} failed with exception {e}, " f"skipping."
+            )
 
     def _update_receive_dict(self, received_dict: dict) -> None:
         """
@@ -260,7 +284,7 @@ class Pico:
                     self.receive_dict[gpio].extend(data)
             else:
                 self.receive_dict[gpio] = data
-    
+
     def _read_pin_data(self, gpio: str):
         """
         Read pin data with clear-after-read behavior for PULSE_IN pins.
@@ -283,82 +307,129 @@ class OdometerPico:
     magnets attached to the drive system. Based on Pico part that delivers a
     pulse-in list of high/lo state changes.
     """
-    def __init__(self, pin_id: str, tick_per_meter=75, weight=0.5, maxlen=10, 
-                 auto_clear=True, debug=False):
+
+    def __init__(
+        self,
+        pin_id: str,
+        tick_per_meter=75,
+        weight=0.5,
+        maxlen=10,
+        auto_clear=True,
+        debug=False,
+        use_pio=True,
+        frequency=20_000,
+    ):
         """
         :param pin_id: pin identifier like "PICO.BCM.18"
         :param tick_per_meter: how many signals per meter
         :param weight: weighting of current measurement in average speed
                         calculation
         :param maxlen: maximum number of pulse timings to store
-        :param auto_clear: whether to automatically clear pulse buffer after reading
+        :param auto_clear: whether to clear pulse buffer after reading
         :param debug: if debug info should be printed
+        :param use_pio: if True, use PIO-based counter (cycle counts)
+        :param frequency: PIO frequency in Hz (default 20kHz, use_pio)
         """
         from donkeycar.parts.pins import pulse_in_pin_by_id
-        
+
+        self.use_pio = use_pio
+        self.frequency = frequency
+
         self.pulse_pin = pulse_in_pin_by_id(
-            pin_id, maxlen=maxlen, auto_clear=auto_clear)
-        self.pulse_pin.start(maxlen=maxlen, auto_clear=auto_clear)
-        
+            pin_id, maxlen=maxlen, auto_clear=auto_clear, use_pio=use_pio
+        )
+
+        start_kwargs = {"maxlen": maxlen, "auto_clear": auto_clear}
+        if use_pio:
+            start_kwargs["frequency"] = frequency
+        self.pulse_pin.start(**start_kwargs)
+
         self._tick_per_meter = tick_per_meter
         self.pulses = deque(maxlen=maxlen)
         self._weight = weight
         self._max_speed = 0.0
         self._distance = 0
         self._debug_data = dict(tick=[], time=[])
+
+        # Scale for speed calculation (same for both modes)
         self.scale = 1.0e6 / self._tick_per_meter
+        # Conversion factor: PIO mode uses cycle counts, regular mode uses us
+        self.cycles_to_us = 2_000_000.0 / frequency if use_pio else 1.0
+
         self._debug = debug
-        logger.info(f"OdometerPico added with pin_id: {pin_id}, tick_per_meter:"
-                    f"{tick_per_meter}, weight: {weight}, maxlen: {maxlen}, "
-                    f"auto_clear: {auto_clear}")
+        logger.info(
+            f"OdometerPico added with pin_id: {pin_id}, "
+            f"tick_per_meter: {tick_per_meter}, weight: {weight}, "
+            f"maxlen: {maxlen}, auto_clear: {auto_clear}, "
+            f"use_pio: {use_pio}, frequency: {frequency}Hz"
+        )
 
     def _weighted_avg(self):
         weighted_avg = self.pulses[0]
         for i in range(1, len(self.pulses)):
-            weighted_avg = self._weight * self.pulses[i] \
-                            + (1.0 - self._weight) * weighted_avg
+            weighted_avg = (
+                self._weight * self.pulses[i]
+                + (1.0 - self._weight) * weighted_avg
+            )
         return weighted_avg
 
     def run(self):
         """
-        Knowing the tick time in mu s and the ticks/m we calculate the speed. If
-        ticks haven't been update since the last call we assume speed is
-        zero. Then we reset the pulse history.
+        Knowing the tick time in microseconds and the ticks/m we
+        calculate the speed. If ticks haven't been updated since the
+        last call we assume speed is zero. Then we reset the pulse
+        history.
+
+        For PIO mode: converts raw cycle counts to microseconds first
+        For regular mode: pulse values are already in microseconds
+
         :return: (speed, inst_speed, distance) tuple
         """
         pulse_in = self.pulse_pin.read_pulses()
         if pulse_in is None:
             pulse_in = []
-        self.pulses.extend(pulse_in)
+
+        # Convert cycle counts to microseconds if using PIO
+        if self.use_pio and pulse_in:
+            pulse_in_us = [
+                int(cycles * self.cycles_to_us) for cycles in pulse_in
+            ]
+        else:
+            pulse_in_us = pulse_in
+
+        self.pulses.extend(pulse_in_us)
         speed = 0.0
         inst_speed = 0.0
-        if pulse_in:
+        if pulse_in_us:
             # for distance just count number of pulses
-            self._distance += len(pulse_in)
-            inst_speed = self.scale / pulse_in[-1]
+            self._distance += len(pulse_in_us)
+            inst_speed = self.scale / pulse_in_us[-1]
             speed = self.scale / self._weighted_avg()
             self._max_speed = max(self._max_speed, speed)
             if self._debug:
-                self._debug_data['time'].append(time.time())
-                self._debug_data['tick'].append(pulse_in)
+                self._debug_data["time"].append(time.time())
+                self._debug_data["tick"].append(pulse_in_us)
         else:
             self.pulses.clear()
         distance = float(self._distance) / float(self._tick_per_meter)
-        logger.debug(f"Speed: {speed} InstSpeed: {inst_speed} Distance: "
-                     f"{distance}")
+        logger.debug(
+            f"Speed: {speed} InstSpeed: {inst_speed} " f"Distance: {distance}"
+        )
         return speed, inst_speed, distance
 
     def shutdown(self):
         """
         Donkey parts interface
         """
-        logger.info(f'Maximum speed {self._max_speed:4.2f}, total distance '
-                    f'{self._distance / self._tick_per_meter:4.2f}')
+        logger.info(
+            f"Maximum speed {self._max_speed:4.2f}, total distance "
+            f"{self._distance / self._tick_per_meter:4.2f}"
+        )
         self.pulse_pin.stop()
         if self._debug:
             from os import getcwd, path
             from json import dump
-            path = path.join(getcwd(), 'odo.json')
+
+            path = path.join(getcwd(), "odo.json")
             with open(path, "w") as outfile:
                 dump(self._debug_data, outfile, indent=4)
-

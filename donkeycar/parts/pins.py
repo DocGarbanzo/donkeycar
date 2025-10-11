@@ -610,7 +610,7 @@ def pulse_in_pin(
     if pin_scheme != PinScheme.BCM:
         raise ValueError("Pin scheme must be PinScheme.BCM for PICO")
     if use_pio:
-        return PulseInPinPioPIO(pin_number, maxlen=maxlen, auto_clear=auto_clear)
+        return PulseInPinCounter(pin_number, maxlen=maxlen, auto_clear=auto_clear)
     return PulseInPinPico(pin_number, maxlen=maxlen, auto_clear=auto_clear)
 
 #
@@ -1592,9 +1592,10 @@ class PulseInPinPico(PulseInPin):
         return self._state
 
 
-class PulseInPinPioPIO(PulseInPin):
+class PulseInPinCounter(PulseInPin):
     """
-    High-performance PIO-based pulse input pin using Pi Pico
+    High-performance PIO-based pulse counter pin using Pi Pico
+    Returns raw cycle counts from PIO hardware timer
     """
     def __init__(self, pin_number: int, maxlen: int = 64, auto_clear: bool = False) -> None:
         super().__init__()
@@ -1604,40 +1605,44 @@ class PulseInPinPioPIO(PulseInPin):
         self.maxlen = maxlen
         self.auto_clear = auto_clear
         self._state = []
-        logger.info(f"Creating PulseInPinPioPIO for pin {self.pin_number} "
+        logger.info(f"Creating PulseInPinCounter for pin {self.pin_number} "
                     f"with maxlen {self.maxlen} and auto_clear {self.auto_clear}")
 
-    def start(self, maxlen: int = 64, auto_clear: bool = False) -> None:
+    def start(self, maxlen: int = 64, auto_clear: bool = False, frequency: int = 20_000) -> None:
         """
-        Start pin for PIO-based pulse input.
+        Start pin for PIO-based pulse counter.
         :param maxlen: maximum number of pulse timings to store
         :param auto_clear: whether to automatically clear pulse buffer after reading
+        :param frequency: PIO frequency in Hz (default 20kHz)
         :except: RuntimeError if pin is already started.
         """
         if len(self._state) > 0 or hasattr(self, '_started'):
-            raise RuntimeError(f"Attempt to start PulseInPinPioPIO("
+            raise RuntimeError(f"Attempt to start PulseInPinCounter("
                                f"{self.pin_number}) that is already started.")
-        
+
         self.maxlen = maxlen
         self.auto_clear = auto_clear
-        self.pico.setup_input_pin(self.pin_number, mode='PULSE_IN_PIO', 
-                                  maxlen=self.maxlen, auto_clear=self.auto_clear)
+        self.frequency = frequency
+        self.pico.setup_input_pin(self.pin_number, mode='PULSE_IN_COUNTER',
+                                  maxlen=self.maxlen, auto_clear=self.auto_clear,
+                                  frequency=self.frequency)
         self._state = []
         self._started = True
-        logger.info(f"PulseInPinPioPIO 'PICO.BCM.{self.pin_number}' started "
-                    f"with maxlen {self.maxlen} and auto_clear {self.auto_clear}.")
+        logger.info(f"PulseInPinCounter 'PICO.BCM.{self.pin_number}' started "
+                    f"with maxlen {self.maxlen}, auto_clear {self.auto_clear}, "
+                    f"frequency {self.frequency}Hz.")
 
     def stop(self) -> None:
         if hasattr(self, '_started') and self._started:
             self._state = []
             self._started = False
             self.pico.remove_pin(self.pin_number)
-            logger.info(f"PulseInPinPioPIO 'PICO.BCM.{self.pin_number}' stopped.")
+            logger.info(f"PulseInPinCounter 'PICO.BCM.{self.pin_number}' stopped.")
 
     def state(self) -> list:
         """
         Return last read pulse timings.
-        :return: list of pulse timings in microseconds or empty list if not started
+        :return: list of raw cycle counts or empty list if not started
         """
         if not hasattr(self, '_started') or not self._started:
             return []
@@ -1645,12 +1650,12 @@ class PulseInPinPioPIO(PulseInPin):
 
     def read_pulses(self) -> list:
         """
-        Read pulse timings from the pin.
-        :return: list of pulse timings in microseconds or empty list if no pulses
+        Read pulse cycle counts from the pin.
+        :return: list of raw cycle counts or empty list if no pulses
         :except: RuntimeError if pin is not started
         """
         if not hasattr(self, '_started') or not self._started:
-            raise RuntimeError(f"Attempt to read from PulseInPinPioPIO("
+            raise RuntimeError(f"Attempt to read from PulseInPinCounter("
                                f"{self.pin_number}) that is not started.")
         
         pulses = self.pico.read(self.pin_number)
