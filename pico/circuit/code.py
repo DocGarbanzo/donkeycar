@@ -385,6 +385,12 @@ def main():
     print(f'Current CPU frequency: {microcontroller.cpu.frequency}')
 
     serial = usb_cdc.data
+    if serial is None:
+        print("ERROR: USB CDC data is None!")
+        print("Make sure boot.py is on the Pico with:")
+        print("  import usb_cdc")
+        print("  usb_cdc.enable(console=True, data=True)")
+        return
     serial.reset_input_buffer()
     led = digitalio.DigitalInOut(board.LED)
     led.direction = digitalio.Direction.OUTPUT
