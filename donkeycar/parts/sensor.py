@@ -272,4 +272,5 @@ class Voltmeter:
         return voltage, pct
 
     def shutdown(self):
-        pass
+        logger.info("Shutting down Voltmeter...")
+        self.pin.stop()

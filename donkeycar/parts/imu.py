@@ -312,6 +312,7 @@ class BNO055Ada:
 
     def shutdown(self):
         self.on = False
+        logger.info("Shutting down BNO055...")
         if self.record_path:
             df = pd.DataFrame(columns=['t', 'x', 'y', 'z', 'v'], data=self.path)
             df.to_csv('imu.csv', index=False)
