@@ -385,7 +385,6 @@ def main():
     print(f'Current CPU frequency: {microcontroller.cpu.frequency}')
 
     serial = usb_cdc.data
-    serial.timeout = 0.01
     serial.reset_input_buffer()
     led = digitalio.DigitalInOut(board.LED)
     led.direction = digitalio.Direction.OUTPUT
