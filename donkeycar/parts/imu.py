@@ -38,17 +38,20 @@ class IMU:
 
     '''
 
-    def __init__(self, addr=0x68, poll_delay=0.0166, sensor=SENSOR_MPU6050, dlp_setting=DLP_SETTING_DISABLED):
+    def __init__(self, addr=0x68, poll_delay=0.0166, 
+                 sensor=SENSOR_MPU6050, dlp_setting=DLP_SETTING_DISABLED):
         self.sensortype = sensor
         if self.sensortype == SENSOR_MPU6050:
             from mpu6050 import mpu6050 as MPU6050
             self.sensor = MPU6050(addr)
 
             if(dlp_setting > 0):
-                self.sensor.bus.write_byte_data(self.sensor.address, CONFIG_REGISTER, dlp_setting)
+                self.sensor.bus.write_byte_data(self.sensor.address, 
+                                                CONFIG_REGISTER, dlp_setting)
 
         else:
-            from mpu9250_jmdev.registers import AK8963_ADDRESS, GFS_1000, AFS_4G, AK8963_BIT_16, AK8963_MODE_C100HZ
+            from mpu9250_jmdev.registers import (AK8963_ADDRESS, GFS_1000, 
+                AFS_4G, AK8963_BIT_16, AK8963_MODE_C100HZ)
             from mpu9250_jmdev.mpu_9250 import MPU9250
 
             self.sensor = MPU9250(
@@ -270,6 +273,8 @@ class BNO055Ada:
         # euler angles are in z, y, x order in the sensor
         euler_reading = np.array(self.sensor.euler[::-1])
         # Ignore readings when BNO055 returns [0, 0, 0] (sensor error)
+        logger.debug(f'BNO055 euler: {euler_reading}, gyro: {self.gyro}, '
+                     f'speed: {self.odometer_speed}')
         if np.any(euler_reading):
             self.euler *= (1.0 - self.alpha)
             self.euler += self.alpha * euler_reading
