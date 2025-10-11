@@ -297,4 +297,4 @@ When developing for Raspberry Pi deployment, use this workflow:
 - Changes to core library require git pull + update cycle
 - Working logging shows: `2025-07-12 12:47:40,939 [INFO] donkeycar.parts.actuator __init__: RCReceiver created`
 - Documentation at docs.donkeycar.com covers main branch; new_dev may differ
-
+- To move code from the donkey car project to the pi, you have to go into ~/projects/donkeycar on the pi and do a git pull there after changing code here and pushing

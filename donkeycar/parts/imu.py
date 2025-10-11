@@ -244,6 +244,8 @@ class BNO055Ada:
         self.alpha = alpha
         self.record_path = record_path
         self.odometer_speed = 0.0
+        logger.info(f"Created BNO055, with alpha={self.alpha}, "
+                    f"record_path={self.record_path}")
 
     def temperature(self):
         result = self.sensor.temperature
