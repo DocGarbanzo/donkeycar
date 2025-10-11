@@ -336,8 +336,7 @@ class OdometerPico:
         self.frequency = frequency
 
         self.pulse_pin = pulse_in_pin_by_id(
-            pin_id, maxlen=maxlen, auto_clear=auto_clear, use_pio=use_pio
-        )
+            pin_id, maxlen=maxlen, auto_clear=auto_clear, use_pio=use_pio)
 
         start_kwargs = {"maxlen": maxlen, "auto_clear": auto_clear}
         if use_pio:
@@ -367,10 +366,8 @@ class OdometerPico:
     def _weighted_avg(self):
         weighted_avg = self.pulses[0]
         for i in range(1, len(self.pulses)):
-            weighted_avg = (
-                self._weight * self.pulses[i]
-                + (1.0 - self._weight) * weighted_avg
-            )
+            weighted_avg = (self._weight * self.pulses[i]
+                + (1.0 - self._weight) * weighted_avg)
         return weighted_avg
 
     def run(self):
@@ -389,11 +386,10 @@ class OdometerPico:
         if pulse_in is None:
             pulse_in = []
 
+        logger.debug(f"Raw pulse_in: {pulse_in}")
         # Convert cycle counts to microseconds if using PIO
         if self.use_pio and pulse_in:
-            pulse_in_us = [
-                int(cycles * self.cycles_to_us) for cycles in pulse_in
-            ]
+            pulse_in_us = [int(cycles * self.cycles_to_us) for cycles in pulse_in]
         else:
             pulse_in_us = pulse_in
 
@@ -412,19 +408,17 @@ class OdometerPico:
         else:
             self.pulses.clear()
         distance = float(self._distance) / float(self._tick_per_meter)
-        logger.debug(
-            f"Speed: {speed} InstSpeed: {inst_speed} " f"Distance: {distance}"
-        )
+        logger.debug(f"Speed: {speed} InstSpeed: {inst_speed} " 
+                     f"Distance: {distance}")
         return speed, inst_speed, distance
 
     def shutdown(self):
         """
         Donkey parts interface
         """
-        logger.info(
-            f"Maximum speed {self._max_speed:4.2f}, total distance "
-            f"{self._distance / self._tick_per_meter:4.2f}"
-        )
+        logger.info(f"Shutting down OdometerPico, maximum speed "
+                     f"{self._max_speed:4.2f}, total distance "
+                     f"{self._distance / self._tick_per_meter:4.2f}")
         self.pulse_pin.stop()
         if self._debug:
             from os import getcwd, path
