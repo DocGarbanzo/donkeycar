@@ -57,7 +57,7 @@ from donkeycar.parts.web_controller.web import LocalWebController
 
 file_handler = logging.handlers.RotatingFileHandler(
     filename='./logs/log.txt', mode='a',
-    maxBytes=1000000, backupCount=10)
+    maxBytes=100000000, backupCount=10)
 file_handler.doRollover()
 
 logging.basicConfig(

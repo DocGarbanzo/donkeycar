@@ -1,6 +1,5 @@
 import atexit
 import time
-from collections import deque
 from typing import Union
 
 import serial
@@ -318,6 +317,7 @@ class OdometerPico:
         debug=False,
         use_pio=True,
         frequency=20_000,
+        zero_speed_threshold_ms=200,
     ):
         """
         :param pin_id: pin identifier like "PICO.BCM.18"
@@ -329,6 +329,8 @@ class OdometerPico:
         :param debug: if debug info should be printed
         :param use_pio: if True, use PIO-based counter (cycle counts)
         :param frequency: PIO frequency in Hz (default 20kHz, use_pio)
+        :param zero_speed_threshold_ms: time in ms after which speed is
+                                        set to zero when no pulses received
         """
         from donkeycar.parts.pins import pulse_in_pin_by_id
 
@@ -336,7 +338,8 @@ class OdometerPico:
         self.frequency = frequency
 
         self.pulse_pin = pulse_in_pin_by_id(
-            pin_id, maxlen=maxlen, auto_clear=auto_clear, use_pio=use_pio)
+            pin_id, maxlen=maxlen, auto_clear=auto_clear, use_pio=use_pio
+        )
 
         start_kwargs = {"maxlen": maxlen, "auto_clear": auto_clear}
         if use_pio:
@@ -344,7 +347,6 @@ class OdometerPico:
         self.pulse_pin.start(**start_kwargs)
 
         self._tick_per_meter = tick_per_meter
-        self.pulses = deque(maxlen=maxlen)
         self._weight = weight
         self._max_speed = 0.0
         self._distance = 0
@@ -355,70 +357,115 @@ class OdometerPico:
         # Conversion factor: PIO mode uses cycle counts, regular mode uses us
         self.cycles_to_us = 2_000_000.0 / frequency if use_pio else 1.0
 
+        # Weighted average speed (member variable)
+        self._avg_speed = 0.0
+
+        # Time tracking for zero-pulse handling
+        self._last_pulse_time = time.time()
+        self._zero_speed_threshold = zero_speed_threshold_ms / 1000.0
+
         self._debug = debug
         logger.info(
             f"OdometerPico added with pin_id: {pin_id}, "
             f"tick_per_meter: {tick_per_meter}, weight: {weight}, "
             f"maxlen: {maxlen}, auto_clear: {auto_clear}, "
-            f"use_pio: {use_pio}, frequency: {frequency}Hz"
+            f"use_pio: {use_pio}, frequency: {frequency}Hz, "
+            f"zero_speed_threshold: {zero_speed_threshold_ms}ms"
         )
 
-    def _weighted_avg(self):
-        weighted_avg = self.pulses[0]
-        for i in range(1, len(self.pulses)):
-            weighted_avg = (self._weight * self.pulses[i]
-                + (1.0 - self._weight) * weighted_avg)
-        return weighted_avg
+    def _update_weighted_average(self, inst_speed: float) -> float:
+        """
+        Update weighted average speed with new instantaneous speed.
+
+        :param inst_speed: Current instantaneous speed measurement
+        :return: Updated average speed
+        """
+        self._avg_speed = (
+            self._weight * inst_speed + (1.0 - self._weight) * self._avg_speed
+        )
+        return self._avg_speed
 
     def run(self):
         """
-        Knowing the tick time in microseconds and the ticks/m we
-        calculate the speed. If ticks haven't been updated since the
-        last call we assume speed is zero. Then we reset the pulse
-        history.
+        Calculate speed based on pulse timing.
+
+        When pulses come in:
+        - Count them for distance calculation
+        - Calculate instantaneous speed from latest pulse
+        - Update weighted average speed
+
+        When no pulses come in:
+        - Estimate upper bound speed based on time since last pulse
+        - Set speed to zero after threshold timeout
+        - Do NOT increment distance
 
         For PIO mode: converts raw cycle counts to microseconds first
         For regular mode: pulse values are already in microseconds
 
         :return: (speed, inst_speed, distance) tuple
         """
-        pulse_in = self.pulse_pin.read_pulses()
-        if pulse_in is None:
-            pulse_in = []
-
+        current_time = time.time()
+        pulse_in = self.pulse_pin.read_pulses() or []
         logger.debug(f"Raw pulse_in: {pulse_in}")
-        # Convert cycle counts to microseconds if using PIO
-        if self.use_pio and pulse_in:
-            pulse_in_us = [int(cycles * self.cycles_to_us) for cycles in pulse_in]
-        else:
-            pulse_in_us = pulse_in
 
-        self.pulses.extend(pulse_in_us)
+        # Convert to microseconds (PIO: cycles->us, non-PIO: already us)
+        pulse_in_us = \
+            [int(p * self.cycles_to_us) for p in pulse_in] if pulse_in else []
         speed = 0.0
         inst_speed = 0.0
+
         if pulse_in_us:
-            # for distance just count number of pulses
+            # Pulses received - process them
+            # Count pulses for distance (accurate!)
             self._distance += len(pulse_in_us)
+
+            # Calculate instantaneous speed from last pulse
             inst_speed = self.scale / pulse_in_us[-1]
-            speed = self.scale / self._weighted_avg()
+
+            # Update weighted average speed
+            speed = self._update_weighted_average(inst_speed)
+
             self._max_speed = max(self._max_speed, speed)
+            self._last_pulse_time = current_time
+
             if self._debug:
-                self._debug_data["time"].append(time.time())
+                self._debug_data["time"].append(current_time)
                 self._debug_data["tick"].append(pulse_in_us)
         else:
-            self.pulses.clear()
+            # No pulses received - estimate upper bound speed
+            time_since_pulse = current_time - self._last_pulse_time
+
+            if time_since_pulse < self._zero_speed_threshold:
+                # Estimate speed based on time gap (upper bound)
+                # Convert time to microseconds
+                time_gap_us = time_since_pulse * 1.0e6
+                inst_speed = self.scale / time_gap_us
+
+                # Update weighted average with estimated inst speed
+                speed = self._update_weighted_average(inst_speed)
+            else:
+                # Timeout reached - set speed to zero
+                inst_speed = 0.0
+                speed = 0.0
+                self._avg_speed = 0.0
+
         distance = float(self._distance) / float(self._tick_per_meter)
-        logger.debug(f"Speed: {speed} InstSpeed: {inst_speed} " 
-                     f"Distance: {distance}")
+        time_since = (current_time - self._last_pulse_time) * 1000
+        logger.debug(
+            f"Speed: {speed:.2f} InstSpeed: {inst_speed:.2f} "
+            f"Distance: {distance:.2f} Time since pulse: {time_since:.1f}ms"
+        )
         return speed, inst_speed, distance
 
     def shutdown(self):
         """
         Donkey parts interface
         """
-        logger.info(f"Shutting down OdometerPico, maximum speed "
-                     f"{self._max_speed:4.2f}, total distance "
-                     f"{self._distance / self._tick_per_meter:4.2f}")
+        logger.info(
+            f"Shutting down OdometerPico, maximum speed "
+            f"{self._max_speed:4.2f}, total distance "
+            f"{self._distance / self._tick_per_meter:4.2f}"
+        )
         self.pulse_pin.stop()
         if self._debug:
             from os import getcwd, path

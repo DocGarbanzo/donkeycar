@@ -226,7 +226,7 @@ class Voltmeter:
     3.3V. The voltage divider ratio is passed in the constructor.
     """
 
-    def __init__(self, pin: str, divider_ratio: float = 4.08, warning_level=0.):
+    def __init__(self, pin: str, divider_ratio: float = 4.08, warning_level=0.1):
         """
         :param pin:                 the pin to read from
         :param divider_ratio:   the conversion factor from your voltage
@@ -267,7 +267,7 @@ class Voltmeter:
             pct = max(0., (voltage - 6.6) / (8.4 - 6.6))
         else:
             logger.warning(f"Voltage below 6V: {voltage}")
-        if pct < self.warning_level:
+        if pct <= self.warning_level:
             logger.warning(f"Battery level at {int(pct * 100)}%")
         return voltage, pct
 
