@@ -45,14 +45,14 @@ from donkeycar.parts.controller import WebFpv
 from donkeycar.parts.tub_v2 import TubWiper, TubWriter
 from donkeycar.pipeline.database import update_config_from_database
 from donkeycar.parts.file_watcher import FileWatcher
-from donkeycar.parts.transform import (ChangeDetector, ControlSwitch, 
-    ImuCombinerNormaliser, RecordingCondition, 
-    SimplePidController, SpeedRescaler)
+from donkeycar.parts.transform import (ChangeDetector, ControlSwitch,
+                                       ImuCombinerNormaliser, RecordingCondition,
+                                       SimplePidController, SpeedRescaler)
 from donkeycar.parts.image_transformations import ImageTransformations
 
 from donkeycar.parts.imu import BNO055Ada
 from donkeycar.parts.keras_2 import ModelLoader
-from donkeycar.parts.web_controller.web import LocalWebController 
+from donkeycar.parts.web_controller.web import LocalWebController
 
 
 file_handler = logging.handlers.RotatingFileHandler(
@@ -67,11 +67,14 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+
 class Renamer:
     def __init__(self):
         logger.info('Renamer initialized')
+
     def run(self, data):
         return data
+
 
 class SliderSorter:
     def __init__(self, cfg):
@@ -86,17 +89,20 @@ class SliderSorter:
             self.lap_pct = new_lap_pct
         return self.lap_pct
 
+
 class LatchedModeToggle:
     """Toggle between two modes based on changes in a latching RC signal"""
+
     def __init__(self):
         self.mode = 0
         logger.info('LatchedModeToggle initialized')
-    
+
     def run(self, changed):
         if changed:
             self.mode = 1 - self.mode  # Toggle between 0 and 1
             logger.info(f'Mode toggled to {self.mode}')
         return self.mode
+
 
 # define some strings that are used in the vehicle data flow
 CAM_IMG = 'cam/image_array'
@@ -142,10 +148,17 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     lap = LapTimer(gpio=cfg.LAP_TIMER_GPIO)
     car.add(lap, inputs=['car/distance'],
             outputs=['car/lap', 'car/m_in_lap', 'car/lap_updated'])
-    
+
     # add mpu ------------------------------------------------------------------
     mpu = BNO055Ada(record_path=record_path)
-    car.add(mpu, inputs=['car/speed'], outputs=['car/euler', 'car/accel', 'car/gyro'], threaded=True)
+    car.add(
+        mpu,
+        inputs=['car/speed'],
+        outputs=[
+            'car/euler',
+            'car/accel',
+            'car/gyro'],
+        threaded=True)
 
     # add voltmeter
     voltmeter = Voltmeter(pin=cfg.BATTERY_GPIO)
@@ -167,7 +180,7 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
                 hasattr(cfg, 'POST_TRANSFORMATIONS') and cfg.POST_TRANSFORMATIONS:
             car.add(ImageTransformations(
                     cfg, 'TRANSFORMATIONS', 'POST_TRANSFORMATIONS'),
-                inputs=[CAM_IMG], outputs=[CAM_IMG])
+                    inputs=[CAM_IMG], outputs=[CAM_IMG])
         # imu transformation and addition AI input -----------------------------
         use_imu = 'imu' in model_path
         if use_imu:
@@ -178,11 +191,11 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
             kl_inputs.append('car/imu')
         elif kl.use_lap_pct():
             ctr = LocalWebController(port=cfg.WEB_CONTROL_PORT,
-                                        mode=cfg.WEB_INIT_MODE)
+                                     mode=cfg.WEB_INIT_MODE)
             car.add(ctr,
                     inputs=[CAM_IMG, 'tub/num_records'],
                     outputs=['ctr/user/angle', 'ctr/user/throttle',
-                             'ctr/user/mode', 'ctr/recording', 
+                             'ctr/user/mode', 'ctr/recording',
                              'ctr/buttons', 'ctr/sliders'],
                     threaded=True)
             car.add(SliderSorter(cfg), inputs=['ctr/sliders'],
@@ -203,9 +216,15 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
         # pilot/steering + user/speed, or pilot/steering + pilot/speed
         # Use ChangeDetector + LatchedModeToggle for latching RC signals
         change_detector = ChangeDetector()
-        car.add(change_detector, inputs=['user/wiper_on'], outputs=['user/wiper_changed'])
+        car.add(
+            change_detector,
+            inputs=['user/wiper_on'],
+            outputs=['user/wiper_changed'])
         mode_toggle = LatchedModeToggle()
-        car.add(mode_toggle, inputs=['user/wiper_changed'], outputs=['user/mode'])
+        car.add(
+            mode_toggle,
+            inputs=['user/wiper_changed'],
+            outputs=['user/mode'])
 
         # This part dispatches between user or ai depending on the switch state
         switch = ControlSwitch(cfg)
@@ -239,38 +258,38 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
                                min_pulse=cfg.THROTTLE_REVERSE_PWM)
     # feed signal which is either rc (user) or ai
     throttle_input = 'pid/throttle' if use_pid else 'throttle'
-    
+
     # EStop processes throttle and outputs final throttle + estop signal
     car.add(EStop(car_frequency),
             inputs=[throttle_input, 'user/mode'],
             outputs=['final_throttle', 'user/estop'])
-    
+
     car.add(pwm_throttle, inputs=['final_throttle'], threaded=True)
-    
+
     # if we want to record a tub -----------------------------------------------
     if not no_cam and (model_path is None or record_on_ai) and not no_tub:
-        static_condition = None if model_path is None else record_on_ai
-        rec_cond = RecordingCondition(static_condition=static_condition)
-        rec_inputs = ['user/throttle_on', 'user/throttle'] \
-            if model_path is None else ['dummy', 'pilot_or_user/speed']
-        car.add(rec_cond, inputs=rec_inputs, outputs=['recording'])
+        # static_condition = None if model_path is None else record_on_ai
+        # rec_cond = RecordingCondition(static_condition=static_condition)
+        # rec_inputs = ['user/throttle_on', 'user/throttle'] \
+        #     if model_path is None else ['dummy', 'pilot_or_user/speed']
+        # car.add(rec_cond, inputs=rec_inputs, outputs=['recording'])
 
         # add tub to save data
         inputs = [CAM_IMG, 'user/angle', 'user/throttle', 'pilot/angle',
                   'pilot/throttle', 'user/wiper_on', 'user/mode',
-                  'car/speed', 'car/inst_speed', 'car/distance','car/m_in_lap', 
-                  'car/lap', 'car/accel', 'car/gyro', 'car/euler', 
+                  'car/speed', 'car/inst_speed', 'car/distance', 'car/m_in_lap',
+                  'car/lap', 'car/accel', 'car/gyro', 'car/euler',
                   'car/voltage']
         types = ['image_array', 'float', 'float', 'float',
                  'float', 'bool', 'int',
                  'float', 'float', 'float', 'float',
                  'int', 'vector', 'vector', 'vector',
                  'float']
-     
+
         tub_writer = TubWriter(base_path=cfg.DATA_PATH, inputs=inputs,
                                types=types, lap_timer=lap)
-        car.add(tub_writer, inputs=inputs, outputs=["tub/num_records"],
-                run_condition='recording')
+        car.add(tub_writer, inputs=inputs, outputs=["tub/num_records"])  # ,
+        #        run_condition='recording')
 
         # add a tub wiper that is triggered by channel 3 on the RC, but only
         # if we don't use channel 3 for switching between ai & manual
@@ -278,7 +297,10 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
             chgange_detector = ChangeDetector()
             car.add(chgange_detector, inputs=['user/wiper_on'],
                     outputs=['user/wiper_changed'])
-            tub_wiper = TubWiper(tub_writer.tub, min_loops=1, num_records=car_frequency)
+            tub_wiper = TubWiper(
+                tub_writer.tub,
+                min_loops=1,
+                num_records=car_frequency)
             car.add(tub_wiper, inputs=['user/wiper_changed'],
                     outputs=['user/wiper_triggered'])
         elif record_on_ai:
@@ -345,7 +367,7 @@ def calibrate(cfg, verbose=False):
     rc_throttle = RCReceiver(gpio=cfg.THROTTLE_RC_GPIO, name='throttle')
     car.add(rc_throttle, outputs=['user/throttle', 'user/rc_throttle_on'])
 
-    rc_ch_3 = RCReceiver(min_out=0, no_action=0, 
+    rc_ch_3 = RCReceiver(min_out=0, no_action=0,
                          gpio=cfg.CH3_RC_GPIO, name='ch3')
     car.add(rc_ch_3, outputs=['user/ch_3', 'user/rc_ch_3_on'])
     # Use generalized Plotter with default +4.3f formatting
@@ -377,7 +399,7 @@ def pulsein(cfg):
     car = dk.vehicle.Vehicle()
     rc_steering = RCReceiver(gpio=cfg.STEERING_RC_GPIO, name='steering')
     car.add(rc_steering, outputs=['user/angle', 'user/angle_on'])
-    # hard-wiring pin 0 for pwm output to the PULSE_IN_GPIO to check the 
+    # hard-wiring pin 0 for pwm output to the PULSE_IN_GPIO to check the
     steering_pin = pwm_pin_by_id("PICO.BCM.0")
     steering_pulse = PulseController(pwm_pin=steering_pin)
     pwm_steering = PWMSteering(controller=steering_pulse,
