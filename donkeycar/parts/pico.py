@@ -462,8 +462,8 @@ class OdometerPico:
         Donkey parts interface
         """
         logger.info(
-            f"Shutting down OdometerPico, maximum speed "
-            f"{self._max_speed:4.2f}, total distance "
+            f"Shutting down OdometerPico, ticks {self._distance}, maximum "
+            f"speed {self._max_speed:4.2f}, total distance "
             f"{self._distance / self._tick_per_meter:4.2f}"
         )
         self.pulse_pin.stop()

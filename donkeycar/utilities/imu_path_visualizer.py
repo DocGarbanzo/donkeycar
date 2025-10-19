@@ -609,31 +609,41 @@ def visualize_imu_path(csv_file='imu.csv', correct_drift=False,
 
     # Time text - position in top area above plot
     time_text = fig.text(0.02, 0.93, '', fontsize=12,
-                         bbox=dict(boxstyle='round',facecolor='black', alpha=0.8),
+                         bbox=dict(
+                             boxstyle='round',
+                             facecolor='black',
+                             alpha=0.8),
                          color='white')
 
     # Position text - below time text
     pos_text = fig.text(0.02, 0.89, '', fontsize=12,
-                        bbox=dict(boxstyle='round', facecolor='black', alpha=0.8),
+                        bbox=dict(
+                            boxstyle='round',
+                            facecolor='black',
+                            alpha=0.8),
                         color='white')
 
     # Loop text - below position text
     loop_text = fig.text(0.02, 0.85, '', fontsize=12,
-                         bbox=dict(boxstyle='round', facecolor='black', alpha=0.8),
+                         bbox=dict(
+                             boxstyle='round',
+                             facecolor='black',
+                             alpha=0.8),
                          color='white')
 
     # Debug text - below loop text
     debug_text = fig.text(0.02, 0.81, '', fontsize=12,
-                          bbox=dict(boxstyle='round', facecolor='black', alpha=0.8),
+                          bbox=dict(
+                              boxstyle='round', facecolor='black', alpha=0.8),
                           color='white')
 
     # Controls text - below debug text
-    controls_text = fig.text(0.02, 0.77,
-                             'Controls: \u2190/\u2192 arrows = navigate',
-                             fontsize=12,
-                             bbox=dict(boxstyle='round', facecolor='black',
-                                       alpha=0.8),
-                             color='cyan')
+    fig.text(0.02, 0.77,
+             'Controls: \u2190/\u2192 arrows = navigate',
+             fontsize=12,
+             bbox=dict(boxstyle='round', facecolor='black',
+                       alpha=0.8),
+             color='cyan')
 
     # Set axis limits with some padding
     x_margin = (df['x'].max() - df['x'].min()) * 0.1
@@ -722,7 +732,7 @@ def visualize_imu_path(csv_file='imu.csv', correct_drift=False,
         debug_text.set_text('Index: -- | Dist to origin: --m')
         loop_text.set_text('Loop: --')
 
-    def update_plot(val):
+    def update_plot(_val):
         import time as time_module
         current_time_val = time_slider.val
 
