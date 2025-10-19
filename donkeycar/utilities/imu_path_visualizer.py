@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 import time
 import numpy as np
 import pandas as pd
+import os
+from datetime import datetime
 
 
 def plot(mlist, limit=5, update_freq=0, running=Value('i', 1)):
@@ -511,8 +513,6 @@ def visualize_imu_path(csv_file='imu.csv', correct_drift=False,
     """
     import matplotlib.pyplot as plt
     from matplotlib.widgets import Slider
-    import os
-    from datetime import datetime
 
     # Check if file exists
     if not os.path.exists(csv_file):
@@ -561,6 +561,7 @@ def visualize_imu_path(csv_file='imu.csv', correct_drift=False,
     # Set up the figure and axis
     plt.style.use('dark_background')
     fig, ax = plt.subplots(figsize=(12, 8))
+    fig.canvas.manager.set_window_title('Donkey imupath')
     plt.subplots_adjust(bottom=0.25, right=0.95, top=0.85,
                         left=0.08)  # Room for legend at top
 
@@ -601,49 +602,37 @@ def visualize_imu_path(csv_file='imu.csv', correct_drift=False,
     current_path, = ax.plot([], [], color='#FF6B6B', linewidth=1,
                             alpha=0.8, label='Path to current time')
 
+    # Helper function to create status text elements
+    def _create_status_text(fig, y_pos, text='', color='white'):
+        """Create a standardized text element for status display."""
+        return fig.text(0.02, y_pos, text, fontsize=9,
+                        bbox=dict(boxstyle='round', facecolor='black',
+                                  alpha=0.8),
+                        color=color)
+
+    # File name text - position in top area above plot
+    file_name = os.path.basename(csv_file)
+    file_text = _create_status_text(fig, 0.97, f'File: {file_name}')
+
     # Speed text - position in top area above plot
-    speed_text = fig.text(0.02, 0.97, '', fontsize=12,
-                          bbox=dict(
-                              boxstyle='round', facecolor='black', alpha=0.8),
-                          color='white')
+    speed_text = _create_status_text(fig, 0.89)
 
     # Time text - position in top area above plot
-    time_text = fig.text(0.02, 0.93, '', fontsize=12,
-                         bbox=dict(
-                             boxstyle='round',
-                             facecolor='black',
-                             alpha=0.8),
-                         color='white')
+    time_text = _create_status_text(fig, 0.85)
 
     # Position text - below time text
-    pos_text = fig.text(0.02, 0.89, '', fontsize=12,
-                        bbox=dict(
-                            boxstyle='round',
-                            facecolor='black',
-                            alpha=0.8),
-                        color='white')
+    pos_text = _create_status_text(fig, 0.81)
 
     # Loop text - below position text
-    loop_text = fig.text(0.02, 0.85, '', fontsize=12,
-                         bbox=dict(
-                             boxstyle='round',
-                             facecolor='black',
-                             alpha=0.8),
-                         color='white')
+    loop_text = _create_status_text(fig, 0.77)
 
     # Debug text - below loop text
-    debug_text = fig.text(0.02, 0.81, '', fontsize=12,
-                          bbox=dict(
-                              boxstyle='round', facecolor='black', alpha=0.8),
-                          color='white')
+    debug_text = _create_status_text(fig, 0.73)
 
     # Controls text - below debug text
-    fig.text(0.02, 0.77,
-             'Controls: \u2190/\u2192 arrows = navigate',
-             fontsize=12,
-             bbox=dict(boxstyle='round', facecolor='black',
-                       alpha=0.8),
-             color='cyan')
+    _create_status_text(fig, 0.69,
+                        'Controls: \u2190/\u2192 arrows = navigate',
+                        color='cyan')
 
     # Set axis limits with some padding
     x_margin = (df['x'].max() - df['x'].min()) * 0.1
@@ -652,7 +641,8 @@ def visualize_imu_path(csv_file='imu.csv', correct_drift=False,
     ax.set_ylim(df['y'].min() - y_margin, df['y'].max() + y_margin)
 
     # Add colorbar for speed using actual data range
-    norm = plt.Normalize(vmin=speeds_display.min(), vmax=speeds_display.max())
+    norm = plt.Normalize(vmin=speeds_display.min(),
+                         vmax=speeds_display.max())
     sm = plt.cm.ScalarMappable(cmap='viridis', norm=norm)
     cbar = plt.colorbar(sm, ax=ax)
     cbar.set_label('Speed')
@@ -785,7 +775,7 @@ def visualize_imu_path(csv_file='imu.csv', correct_drift=False,
     update_plot(df['t'].min())
 
     # Add legend in top area underneath controls - vertical arrangement
-    ax.legend(bbox_to_anchor=(0.02, 0.73), loc='upper left',
+    ax.legend(bbox_to_anchor=(0.02, 0.65), loc='upper left',
               framealpha=0.9, ncol=1, fontsize=10,
               bbox_transform=fig.transFigure)
 
