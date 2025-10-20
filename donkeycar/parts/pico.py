@@ -440,6 +440,9 @@ class OdometerPico:
                 # Convert time to microseconds
                 time_gap_us = time_since_pulse * 1.0e6
                 inst_speed = self.scale / time_gap_us
+                # Cap instantaneous speed to current average speed, we are 
+                # definitely slowing down
+                inst_speed = min(inst_speed, self._avg_speed)
 
                 # Update weighted average with estimated inst speed
                 speed = self._update_weighted_average(inst_speed)

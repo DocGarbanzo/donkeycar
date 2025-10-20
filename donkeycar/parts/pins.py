@@ -431,7 +431,8 @@ def analog_input_pin_by_id(pin_id: str) -> AnalogInputPin:
     return analog_input_pin(pin_provider, pin_number, pin_scheme=pin_scheme)
 
 
-def pulse_in_pin_by_id(pin_id: str, maxlen: int = 2, auto_clear: bool = False, use_pio: bool = False) -> PulseInPin:
+def pulse_in_pin_by_id(pin_id: str, maxlen: int = 2, auto_clear: bool = False, 
+                       use_pio: bool = False) -> PulseInPin:
     """
     Select a pulse input pin given a pin id.
     :param pin_id: pin identifier like "PICO.BCM.15"
@@ -444,7 +445,8 @@ def pulse_in_pin_by_id(pin_id: str, maxlen: int = 2, auto_clear: bool = False, u
     if pin_provider != PinProvider.PICO:
         raise RuntimeError("Only Pico implements PulseInPin")
     pin_number = int(parts[2])
-    return pulse_in_pin(pin_provider, pin_number, maxlen=maxlen, auto_clear=auto_clear, use_pio=use_pio)
+    return pulse_in_pin(pin_provider, pin_number, maxlen=maxlen, 
+                        auto_clear=auto_clear, use_pio=use_pio)
 
 
 def input_pin(
