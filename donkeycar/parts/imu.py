@@ -223,9 +223,16 @@ class Mpu6050Ada:
 
     def shutdown(self):
         self.on = False
+        logger.info(f'Mpu6050 shutdown - saving {len(self.path)} path '
+                    f'points to imu.csv')
         df = pd.DataFrame(columns=['t', 'x', 'y', 'z', 'v'], data=self.path)
-        df.to_csv('imu.csv', index=False)
-        logger.info('Mpu6050 shutdown - saved path to imu.csv')
+        try:
+            df.to_csv('imu.csv', index=False)
+            logger.info('Mpu6050 shutdown - saved path to imu.csv')
+        except IOError as e:
+            logger.error(f'Failed to write imu.csv - IO error: {e}')
+        except Exception as e:
+            logger.error(f'Failed to write imu.csv - unexpected error: {e}')
 
 
 class BNO055Ada:
@@ -319,9 +326,19 @@ class BNO055Ada:
         self.on = False
         logger.info("Shutting down BNO055...")
         if self.record_path:
-            df = pd.DataFrame(columns=['t', 'x', 'y', 'z', 'v'], data=self.path)
-            df.to_csv('imu.csv', index=False)
-            logger.info('BNO055 shutdown - saved 2D path to imu.csv')
+            logger.info(f'BNO055 shutdown - saving {len(self.path)} path '
+                        f'points to imu.csv')
+            df = pd.DataFrame(columns=['t', 'x', 'y', 'z', 'v'],
+                              data=self.path)
+            try:
+                df.to_csv('imu.csv', index=False)
+                logger.info('BNO055 shutdown - saved 2D path to imu.csv')
+            except IOError as e:
+                logger.error(f'BNO055 - failed to write imu.csv - '
+                             f'IO error: {e}')
+            except Exception as e:
+                logger.error(f'BNO055 - failed to write imu.csv - '
+                             f'unexpected error: {e}')
 
 
 import numpy as np
