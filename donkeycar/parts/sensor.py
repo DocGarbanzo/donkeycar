@@ -299,7 +299,7 @@ class Voltmeter:
             return voltage, pct
 
         # Threshold reached - log warning
-        logger.error(
+        logger.warning(
             f'Battery low after {self.consecutive_low_count} '
             f'consecutive readings: {int(pct * 100)}%')
         self.low_voltage_warned = True
