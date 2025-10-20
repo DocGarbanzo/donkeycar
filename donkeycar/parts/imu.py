@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import math
 import time
+import os
 import board
 import busio
 import adafruit_mpu6050
@@ -17,6 +18,67 @@ SENSOR_MPU9250 = 'mpu9250'
 
 DLP_SETTING_DISABLED = 0
 CONFIG_REGISTER = 0x1A
+
+
+def _save_imu_path_to_csv(path_data, filepath, class_name, max_attempts=10):
+    """
+    Save IMU path data to CSV with retry logic and verification.
+
+    Args:
+        path_data: List of path tuples (t, x, y, z, v)
+        filepath: Target CSV file path
+        class_name: Name of calling class for logging
+        max_attempts: Maximum number of save attempts (default: 10)
+
+    Returns:
+        bool: True if save successful, False after all attempts fail
+    """
+    logger.info(f'{class_name} shutdown - saving {len(path_data)} path '
+                f'points to {filepath}')
+    df = pd.DataFrame(columns=['t', 'x', 'y', 'z', 'v'], data=path_data)
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            df.to_csv(filepath, index=False)
+        except IOError as e:
+            logger.warning(f'{class_name} - attempt {attempt}/{max_attempts} '
+                           f'failed (IO error): {e}')
+            if attempt < max_attempts:
+                time.sleep(0.1)
+            continue
+        except Exception as e:
+            logger.warning(f'{class_name} - attempt {attempt}/{max_attempts} '
+                           f'failed (unexpected error): {e}')
+            if attempt < max_attempts:
+                time.sleep(0.1)
+            continue
+
+        # Verify file was actually written
+        if not os.path.exists(filepath):
+            logger.warning(f'{class_name} - attempt {attempt}/{max_attempts} '
+                           f'failed: {filepath} missing after write')
+            if attempt < max_attempts:
+                time.sleep(0.1)
+            continue
+
+        file_size = os.path.getsize(filepath)
+        if file_size <= 0:
+            logger.warning(f'{class_name} - attempt {attempt}/{max_attempts} '
+                           f'failed: {filepath} is empty '
+                           f'({file_size} bytes)')
+            if attempt < max_attempts:
+                time.sleep(0.1)
+            continue
+
+        # Success!
+        logger.info(f'{class_name} - successfully saved {filepath} '
+                    f'({file_size} bytes) on attempt {attempt}/{max_attempts}')
+        return True
+
+    # All attempts failed
+    logger.error(f'{class_name} - failed to save {filepath} after '
+                 f'{max_attempts} attempts')
+    return False
 
 
 class IMU:
@@ -223,16 +285,7 @@ class Mpu6050Ada:
 
     def shutdown(self):
         self.on = False
-        logger.info(f'Mpu6050 shutdown - saving {len(self.path)} path '
-                    f'points to imu.csv')
-        df = pd.DataFrame(columns=['t', 'x', 'y', 'z', 'v'], data=self.path)
-        try:
-            df.to_csv('imu.csv', index=False)
-            logger.info('Mpu6050 shutdown - saved path to imu.csv')
-        except IOError as e:
-            logger.error(f'Failed to write imu.csv - IO error: {e}')
-        except Exception as e:
-            logger.error(f'Failed to write imu.csv - unexpected error: {e}')
+        _save_imu_path_to_csv(self.path, 'imu.csv', 'Mpu6050')
 
 
 class BNO055Ada:
@@ -325,20 +378,9 @@ class BNO055Ada:
     def shutdown(self):
         self.on = False
         logger.info("Shutting down BNO055...")
-        if self.record_path:
-            logger.info(f'BNO055 shutdown - saving {len(self.path)} path '
-                        f'points to imu.csv')
-            df = pd.DataFrame(columns=['t', 'x', 'y', 'z', 'v'],
-                              data=self.path)
-            try:
-                df.to_csv('imu.csv', index=False)
-                logger.info('BNO055 shutdown - saved 2D path to imu.csv')
-            except IOError as e:
-                logger.error(f'BNO055 - failed to write imu.csv - '
-                             f'IO error: {e}')
-            except Exception as e:
-                logger.error(f'BNO055 - failed to write imu.csv - '
-                             f'unexpected error: {e}')
+        if not self.record_path:
+            return
+        _save_imu_path_to_csv(self.path, 'imu.csv', 'BNO055')
 
 
 import numpy as np
