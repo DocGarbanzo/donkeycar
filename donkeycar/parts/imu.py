@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import numpy as np
 import math
 import time
 import os
@@ -32,12 +33,13 @@ def _save_imu_path_to_csv(path_data, filepath, class_name):
     df = pd.DataFrame(columns=['t', 'x', 'y', 'z', 'v'], data=path_data)
     df.to_csv(filepath, index=False)
 
-    for attempt in range(1, 11):
+    for attempt in range(10):
         if os.path.exists(filepath):
-            logger.info(f'{class_name} - saved {filepath}')
+            logger.info(
+                f'{class_name} - saved {filepath}, {attempt+1} attempts')
             return
-        if attempt < 10:
-            time.sleep(0.1)
+        time.sleep(0.1)
+        df.to_csv(filepath, index=False)
 
     logger.error(f'{class_name} - {filepath} not found after write')
 
@@ -61,20 +63,20 @@ class IMU:
 
     '''
 
-    def __init__(self, addr=0x68, poll_delay=0.0166, 
+    def __init__(self, addr=0x68, poll_delay=0.0166,
                  sensor=SENSOR_MPU6050, dlp_setting=DLP_SETTING_DISABLED):
         self.sensortype = sensor
         if self.sensortype == SENSOR_MPU6050:
             from mpu6050 import mpu6050 as MPU6050
             self.sensor = MPU6050(addr)
 
-            if(dlp_setting > 0):
-                self.sensor.bus.write_byte_data(self.sensor.address, 
+            if (dlp_setting > 0):
+                self.sensor.bus.write_byte_data(self.sensor.address,
                                                 CONFIG_REGISTER, dlp_setting)
 
         else:
-            from mpu9250_jmdev.registers import (AK8963_ADDRESS, GFS_1000, 
-                AFS_4G, AK8963_BIT_16, AK8963_MODE_C100HZ)
+            from mpu9250_jmdev.registers import (AK8963_ADDRESS, GFS_1000,
+                                                 AFS_4G, AK8963_BIT_16, AK8963_MODE_C100HZ)
             from mpu9250_jmdev.mpu_9250 import MPU9250
 
             self.sensor = MPU9250(
@@ -87,13 +89,13 @@ class IMU:
                 mfs=AK8963_BIT_16,
                 mode=AK8963_MODE_C100HZ)
 
-            if(dlp_setting > 0):
+            if (dlp_setting > 0):
                 self.sensor.writeSlave(CONFIG_REGISTER, dlp_setting)
             self.sensor.calibrateMPU6500()
             self.sensor.configure()
 
-        self.accel = { 'x' : 0., 'y' : 0., 'z' : 0. }
-        self.gyro = { 'x' : 0., 'y' : 0., 'z' : 0. }
+        self.accel = {'x': 0., 'y': 0., 'z': 0.}
+        self.gyro = {'x': 0., 'y': 0., 'z': 0.}
         self.mag = {'x': 0., 'y': 0., 'z': 0.}
         self.temp = 0.
         self.poll_delay = poll_delay
@@ -103,7 +105,7 @@ class IMU:
         while self.on:
             self.poll()
             time.sleep(self.poll_delay)
-                
+
     def poll(self):
         try:
             if self.sensortype == SENSOR_MPU6050:
@@ -111,17 +113,20 @@ class IMU:
             else:
                 from mpu9250_jmdev.registers import GRAVITY
                 ret = self.sensor.getAllData()
-                self.accel = { 'x' : ret[1] * GRAVITY, 'y' : ret[2] * GRAVITY, 'z' : ret[3] * GRAVITY }
-                self.gyro = { 'x' : ret[4], 'y' : ret[5], 'z' : ret[6] }
-                self.mag = { 'x' : ret[13], 'y' : ret[14], 'z' : ret[15] }
+                self.accel = {
+                    'x': ret[1] * GRAVITY,
+                    'y': ret[2] * GRAVITY,
+                    'z': ret[3] * GRAVITY}
+                self.gyro = {'x': ret[4], 'y': ret[5], 'z': ret[6]}
+                self.mag = {'x': ret[13], 'y': ret[14], 'z': ret[15]}
                 self.temp = ret[16]
-        except:
+        except BaseException:
             print('failed to read imu!!')
-            
+
     def run_threaded(self):
         return \
-            [a-z for a, z in zip(list(self.accel.values()), self.accel_zero)], \
-            [g-z for g, z in zip(list(self.gyro.values()), self.gyro_zero)]
+            [a - z for a, z in zip(list(self.accel.values()), self.accel_zero)], \
+            [g - z for g, z in zip(list(self.gyro.values()), self.gyro_zero)]
 
     def run(self):
         self.poll()
@@ -150,7 +155,7 @@ class Mpu6050Ada:
         self.speed = np.zeros(3)
         self.speed_drift = np.zeros(3)
         self.time = None
-        self.path = [] # [(self.time, *self.pos)]
+        self.path = []  # [(self.time, *self.pos)]
         self.sample_rate = sample_rate
         self.ahrs = imufusion.Ahrs()
         self.ahrs.settings = imufusion.Settings(
@@ -176,7 +181,7 @@ class Mpu6050Ada:
         accel = np.zeros(3)
         accel_norm = 0
         # run w/o doing anything:
-        for _ in range(num_loops//2):
+        for _ in range(num_loops // 2):
             tmp = self.mpu.gyro
             tmp = self.mpu.acceleration
         tic = time.time()
@@ -222,9 +227,10 @@ class Mpu6050Ada:
         # convert from radians to degrees
         gyro_degree = np.array(gyro) * 180 / math.pi
         adj_gyro = self.offset.update(gyro_degree)
-        self.accel = ((1-alpha) * self.accel
+        self.accel = ((1 - alpha) * self.accel
                       + alpha * np.array(self.mpu.acceleration))
-        self.ahrs.update_no_magnetometer(adj_gyro, self.accel/self.accel_norm, dt)
+        self.ahrs.update_no_magnetometer(
+            adj_gyro, self.accel / self.accel_norm, dt)
         if not self.ahrs.flags.initialising:
             self.euler = self.ahrs.quaternion.to_euler()
             self.matrix = self.ahrs.quaternion.to_matrix()
@@ -258,7 +264,7 @@ class BNO055Ada:
         self.sensor.offsets_gyroscope = (-1, -1, -1)
         self.sensor.offsets_magnetometer = (-176, 196, 17)
         self.pos = np.zeros(3)  # [x, y, z] where x=forward, y=left, z=up
-        self.accel = np.zeros(3) # np.array(self.sensor.linear_acceleration)
+        self.accel = np.zeros(3)  # np.array(self.sensor.linear_acceleration)
         self.gyro = np.array(self.sensor.gyro)
         self.path = []
         self.time = None
@@ -306,19 +312,24 @@ class BNO055Ada:
             # Convert to standard math coordinates (0° = +x, 90° = +y)
             heading_deg = (90.0 - self.euler[2]) if len(self.euler) > 2 else 0.0
             heading_rad = math.radians(heading_deg)
-            
+
             # Calculate 2D velocity components using odometer speed and heading
             # X-axis: forward direction, Y-axis: left direction
             vx = self.odometer_speed * math.cos(heading_rad)  # forward velocity
             vy = self.odometer_speed * math.sin(heading_rad)  # left velocity
-            
+
             # Update 2D position using kinematics
             self.pos[0] += vx * dt  # x position (forward)
             self.pos[1] += vy * dt  # y position (left)
             self.pos[2] = 0.0       # z position always zero (2D plane)
-            
+
             # Store path with 2D coordinates and odometer speed
-            self.path.append((self.time, self.pos[0], self.pos[1], 0.0, self.odometer_speed))
+            self.path.append(
+                (self.time,
+                 self.pos[0],
+                    self.pos[1],
+                    0.0,
+                    self.odometer_speed))
         self.time = new_time
 
     def update(self):
@@ -344,15 +355,12 @@ class BNO055Ada:
         _save_imu_path_to_csv(self.path, 'imu.csv', 'BNO055')
 
 
-import numpy as np
-
-
 if __name__ == "__main__":
     import sys
     from sys import stdout
     import threading
     from donkeycar.utilities.imu_path_visualizer import PathPlotter
-    
+
     logging.basicConfig(level=logging.INFO)
     np.set_printoptions(precision=4, sign='+', floatmode='fixed',
                         suppress=True)
@@ -369,7 +377,7 @@ if __name__ == "__main__":
     while True:
         try:
             euler, accel = mpu.run_threaded()
-            #out_str = f"\reuler: " + f",".join(f"{x:+5.3f}" for x in matrix)
+            # out_str = f"\reuler: " + f",".join(f"{x:+5.3f}" for x in matrix)
             out_str = f"\reu = " + \
                 np.array2string(euler, precision=1, separator=',',
                                 sign='+', floatmode='fixed',
@@ -397,4 +405,3 @@ if __name__ == "__main__":
           f'ms')
     inp = input("Press enter to stop plotting")
     sys.exit(0)
-
