@@ -20,65 +20,26 @@ DLP_SETTING_DISABLED = 0
 CONFIG_REGISTER = 0x1A
 
 
-def _save_imu_path_to_csv(path_data, filepath, class_name, max_attempts=10):
+def _save_imu_path_to_csv(path_data, filepath, class_name):
     """
-    Save IMU path data to CSV with retry logic and verification.
+    Save IMU path data to CSV and verify file exists.
 
     Args:
         path_data: List of path tuples (t, x, y, z, v)
         filepath: Target CSV file path
         class_name: Name of calling class for logging
-        max_attempts: Maximum number of save attempts (default: 10)
-
-    Returns:
-        bool: True if save successful, False after all attempts fail
     """
-    logger.info(f'{class_name} shutdown - saving {len(path_data)} path '
-                f'points to {filepath}')
     df = pd.DataFrame(columns=['t', 'x', 'y', 'z', 'v'], data=path_data)
+    df.to_csv(filepath, index=False)
 
-    for attempt in range(1, max_attempts + 1):
-        try:
-            df.to_csv(filepath, index=False)
-        except IOError as e:
-            logger.warning(f'{class_name} - attempt {attempt}/{max_attempts} '
-                           f'failed (IO error): {e}')
-            if attempt < max_attempts:
-                time.sleep(0.1)
-            continue
-        except Exception as e:
-            logger.warning(f'{class_name} - attempt {attempt}/{max_attempts} '
-                           f'failed (unexpected error): {e}')
-            if attempt < max_attempts:
-                time.sleep(0.1)
-            continue
+    for attempt in range(1, 11):
+        if os.path.exists(filepath):
+            logger.info(f'{class_name} - saved {filepath}')
+            return
+        if attempt < 10:
+            time.sleep(0.1)
 
-        # Verify file was actually written
-        if not os.path.exists(filepath):
-            logger.warning(f'{class_name} - attempt {attempt}/{max_attempts} '
-                           f'failed: {filepath} missing after write')
-            if attempt < max_attempts:
-                time.sleep(0.1)
-            continue
-
-        file_size = os.path.getsize(filepath)
-        if file_size <= 0:
-            logger.warning(f'{class_name} - attempt {attempt}/{max_attempts} '
-                           f'failed: {filepath} is empty '
-                           f'({file_size} bytes)')
-            if attempt < max_attempts:
-                time.sleep(0.1)
-            continue
-
-        # Success!
-        logger.info(f'{class_name} - successfully saved {filepath} '
-                    f'({file_size} bytes) on attempt {attempt}/{max_attempts}')
-        return True
-
-    # All attempts failed
-    logger.error(f'{class_name} - failed to save {filepath} after '
-                 f'{max_attempts} attempts')
-    return False
+    logger.error(f'{class_name} - {filepath} not found after write')
 
 
 class IMU:
