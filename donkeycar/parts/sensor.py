@@ -226,12 +226,16 @@ class Voltmeter:
     3.3V. The voltage divider ratio is passed in the constructor.
     """
 
-    def __init__(self, pin: str, divider_ratio: float = 4.08, warning_level=0.1):
+    def __init__(self, pin: str, divider_ratio: float = 4.08, warning_level=0.1,
+                 consecutive_low_threshold=50):
         """
         :param pin:                 the pin to read from
         :param divider_ratio:   the conversion factor from your voltage
                                     divider as the pico can only read 3.3V
                                     maximum.
+        :param warning_level:   percentage below which to warn
+        :param consecutive_low_threshold: number of consecutive low readings
+                                          required before warning (default 50)
         """
         # Here we initialise the pin using the analog_input_pin_by_id function
         # from the pins.py file. This is a factory function that returns
@@ -243,8 +247,29 @@ class Voltmeter:
         self.pin.start()
         self.divider_ratio = divider_ratio
         self.warning_level = warning_level
+        self.consecutive_low_threshold = consecutive_low_threshold
+        self.consecutive_low_count = 0
+        self.low_voltage_warned = False
         logger.info(f"PicoVoltmeter added with pin {pin} and divider ratio "
                     f"{divider_ratio}")
+
+    def _calculate_battery_percentage(self, voltage):
+        """
+        Calculate battery percentage based on voltage.
+        Supports 2S and 3S LiPo batteries.
+
+        :param voltage: measured voltage in volts
+        :return: battery percentage (0.0 to 1.0)
+        """
+        # 3S battery (9V minimum, 12.6V max)
+        if voltage > 9.:
+            return max(0., (voltage - 9.9) / (12.6 - 9.9))
+        # 2S battery (6.6V minimum, 8.4V max)
+        if voltage > 6.:
+            return max(0., (voltage - 6.6) / (8.4 - 6.6))
+        # Below minimum voltage
+        logger.warning(f"Voltage below 6V: {voltage}")
+        return 0.0
 
     def run(self):
         """
@@ -256,19 +281,29 @@ class Voltmeter:
         """
         value = self.pin.input()
         voltage = value * self.divider_ratio * 3.3 / 65535
-        # calculate relative battery level, assuming 3s battery has > 9V and
-        # minimum level should be at least 3.3V per cell
-        pct = 0.0
-        # 3S
-        if voltage > 9.:
-            pct = max(0., (voltage - 9.9) / (12.6 - 9.9))
-        # 2S
-        elif voltage > 6.:
-            pct = max(0., (voltage - 6.6) / (8.4 - 6.6))
-        else:
-            logger.warning(f"Voltage below 6V: {voltage}")
-        if pct <= self.warning_level:
-            logger.warning(f"Battery level at {int(pct * 100)}%")
+        pct = self._calculate_battery_percentage(voltage)
+
+        # Handle normal (high) voltage readings
+        if pct > self.warning_level:
+            self.consecutive_low_count = 0
+            self.low_voltage_warned = False
+            return voltage, pct
+
+        # Voltage is low - track consecutive readings
+        self.consecutive_low_count += 1
+
+        # Skip warning if already warned or threshold not reached
+        if self.low_voltage_warned:
+            return voltage, pct
+        if self.consecutive_low_count < self.consecutive_low_threshold:
+            return voltage, pct
+
+        # Threshold reached - log warning
+        logger.error(
+            f'Battery low after {self.consecutive_low_count} '
+            f'consecutive readings: {int(pct * 100)}%')
+        self.low_voltage_warned = True
+
         return voltage, pct
 
     def shutdown(self):
