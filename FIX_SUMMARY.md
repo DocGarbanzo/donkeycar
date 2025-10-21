@@ -83,3 +83,12 @@ pytest pico/circuit/test_pio_pulse.py::test_configuration -v
 ```
 
 In environments without hardware, the test should now skip with message "Pico hardware not available" instead of failing with a serial exception.
+
+## Testing
+Manual testing confirms:
+1. ✓ Serial exception is properly caught when hardware is unavailable
+2. ✓ Instance is correctly set to None when exception occurs
+3. ✓ Test skip logic works correctly when instance is None
+4. ✓ No exception is raised during module import
+
+The fix is minimal, surgical, and addresses exactly the issue described in #8.
