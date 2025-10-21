@@ -118,10 +118,11 @@ def correct_loop_drift(df, min_loop_distance=1.0, max_distance=0.5,
         max_loops (int): Maximum number of loops to detect (default 10)
 
     Returns:
-        tuple: (corrected_df, list_of_loop_end_indices)
+        tuple: (corrected_df, list_of_loop_end_indices,
+                list_of_drift_amounts)
     """
     if len(df) < 2:
-        return df.copy()
+        return df.copy(), [], []
 
     def show_sample_points(data, start_idx, end_idx, label,
                            show_timestamps=True):
@@ -361,6 +362,7 @@ def correct_loop_drift(df, min_loop_distance=1.0, max_distance=0.5,
         f"Parameters: min_loop_distance={min_loop_distance}, max_distance={max_distance}, max_loops={max_loops}")
 
     loop_end_indices = []
+    loop_drift_amounts = []
     current_loop_start = 0
     loop_num = 1
 
@@ -381,7 +383,7 @@ def correct_loop_drift(df, min_loop_distance=1.0, max_distance=0.5,
             print(f"No Loop {loop_num} closure found!")
             if loop_num == 1:
                 print("No loops detected in data")
-                return corrected_df, []
+                return corrected_df, [], []
             else:
                 print(f"Found {loop_num-1} loops total")
                 break
@@ -403,6 +405,7 @@ def correct_loop_drift(df, min_loop_distance=1.0, max_distance=0.5,
             corrected_df.iloc[loop_end_idx]['y']
         ])
         loop_drift = loop_end_pos - loop_start_pos
+        loop_drift_amounts.append(loop_drift)
 
         print(
             f"{loop_num+1}) CORRECTION AMOUNT for Loop {loop_num}: [{loop_drift[0]:.3f}, {loop_drift[1]:.3f}]")
@@ -491,7 +494,7 @@ def correct_loop_drift(df, min_loop_distance=1.0, max_distance=0.5,
           f"y=[{corrected_df['y'].min():.3f}, "
           f"{corrected_df['y'].max():.3f}]")
 
-    return corrected_df, loop_end_indices
+    return corrected_df, loop_end_indices, loop_drift_amounts
 
 
 def visualize_imu_path(csv_file='imu.csv', correct_drift=False,
@@ -530,9 +533,10 @@ def visualize_imu_path(csv_file='imu.csv', correct_drift=False,
 
     # Apply drift correction if requested
     loop_end_indices = []
+    loop_drift_amounts = []
     if correct_drift:
         print("Applying loop drift correction...")
-        df, loop_end_indices = correct_loop_drift(
+        df, loop_end_indices, loop_drift_amounts = correct_loop_drift(
             df, min_loop_distance, max_distance)
         print("Drift correction completed.")
 
@@ -629,8 +633,11 @@ def visualize_imu_path(csv_file='imu.csv', correct_drift=False,
     # Debug text - below loop text
     debug_text = _create_status_text(fig, 0.73)
 
-    # Controls text - below debug text
-    _create_status_text(fig, 0.69,
+    # Drift correction text - below debug text
+    drift_text = _create_status_text(fig, 0.65)
+
+    # Controls text - below drift text
+    _create_status_text(fig, 0.57,
                         'Controls: \u2190/\u2192 arrows = navigate',
                         color='cyan')
 
@@ -685,6 +692,21 @@ def visualize_imu_path(csv_file='imu.csv', correct_drift=False,
 
         return len(loop_end_indices) + 1
 
+    def get_drift_display_text(current_loop):
+        """Get drift correction display text for current loop"""
+        if not loop_drift_amounts:
+            return 'Drift: --'
+        if not current_loop:
+            return 'Drift: --'
+        if current_loop > len(loop_drift_amounts):
+            return 'Drift: --'
+
+        drift = loop_drift_amounts[current_loop - 1]
+        drift_magnitude = np.sqrt(drift[0]**2 + drift[1]**2)
+        return (f'Drift ({current_loop}): '
+                f'[{drift[0]:.3f}, {drift[1]:.3f}] '
+                f'(mag: {drift_magnitude:.3f}m)')
+
     def update_displays_with_data(last_point, current_time_val,
                                   current_idx, loop_end_indices):
         """Update all text displays with current data"""
@@ -709,6 +731,8 @@ def visualize_imu_path(csv_file='imu.csv', correct_drift=False,
         else:
             loop_text.set_text(f'Loop: After {len(loop_end_indices)}')
 
+        drift_text.set_text(get_drift_display_text(current_loop))
+
     def update_displays_empty(current_time_val):
         """Update displays when no data is available"""
         current_datetime = datetime.fromtimestamp(current_time_val)
@@ -721,6 +745,7 @@ def visualize_imu_path(csv_file='imu.csv', correct_drift=False,
         pos_text.set_text('Position: [---, ---]')
         debug_text.set_text('Index: -- | Dist to origin: --m')
         loop_text.set_text('Loop: --')
+        drift_text.set_text('Drift: --')
 
     def update_plot(_val):
         import time as time_module
