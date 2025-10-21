@@ -297,7 +297,12 @@ class Pico:
         return self.receive_dict[gpio]
 
 
-instance = Pico()
+try:
+    instance = Pico()
+except (serial.serialutil.SerialException, FileNotFoundError, OSError) as e:
+    logger.warning(f"Failed to create Pico instance: {e}. "
+                   f"Pico hardware not available.")
+    instance = None
 
 
 class OdometerPico:

@@ -4,6 +4,7 @@ Test script to compare regular PULSE_IN vs PIO-based PULSE_IN_PIO
 """
 
 import time
+import pytest
 from donkeycar.parts.pins import pulse_in_pin_by_id
 
 def test_pulse_implementations():
@@ -82,6 +83,9 @@ def test_configuration():
     print("=" * 40)
     
     from donkeycar.parts.pico import instance as pico
+    
+    if pico is None:
+        pytest.skip("Pico hardware not available")
     
     # Test regular PULSE_IN setup
     print("Testing regular PULSE_IN setup...")
