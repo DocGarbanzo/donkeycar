@@ -165,21 +165,36 @@ class TubRecord(object):
             self._cache_processed_image(_image, as_nparray)
         return _image
 
-    def extend(self, session_lap_rank):
+    def extend(self, session_lap_rank, ranking_keys=None):
+        """
+        Extend record with lap performance rankings.
+
+        :param session_lap_rank: Dictionary of session -> lap -> ranking data
+        :param ranking_keys: Optional list of keys to extract for lap_pct.
+                           If None, uses default ('time', 'distance', 'gyro_z_agg')
+                           for backward compatibility.
+        :return: True if extension succeeded, False otherwise
+        """
         if not session_lap_rank:
             return True
         session_id = self.underlying['_session_id']
         lap_i = self.underlying['car/lap']
         lap_i_dict = None
 
+        # Use default keys for backward compatibility
+        if ranking_keys is None:
+            ranking_keys = ('time', 'distance', 'gyro_z_agg')
+
         if session_lap_rank:
             # we won't get a result for the last lap as this is incomplete and
             # doesn't have a time.
             lap_i_dict = session_lap_rank[session_id].get(lap_i)
             if lap_i_dict:
-                lap_pct = [lap_i_dict[key] for key
-                           in ('time', 'distance', 'gyro_z_agg')]
-                self.underlying['lap_pct'] = lap_pct
+                # Extract only keys that exist in lap_i_dict
+                lap_pct = [lap_i_dict[key] for key in ranking_keys
+                          if key in lap_i_dict]
+                if lap_pct:  # Only set if we have values
+                    self.underlying['lap_pct'] = lap_pct
 
         return lap_i_dict is not None
 
@@ -193,7 +208,18 @@ class TubDataset(object):
     """
 
     def __init__(self, config: Config, tub_paths: List[str],
-                 seq_size: int = 0, add_lap_pct: bool = False) -> None:
+                 seq_size: int = 0, add_lap_pct: bool = False,
+                 ranking_keys: Optional[List[str]] = None) -> None:
+        """
+        Initialize TubDataset.
+
+        :param config: Configuration object
+        :param tub_paths: List of paths to tub directories
+        :param seq_size: Sequence size for RNN (0 for non-sequential)
+        :param add_lap_pct: Whether to add lap_pct to records
+        :param ranking_keys: Optional list of keys to use for lap_pct rankings.
+                           If None, uses default ('time', 'distance', 'gyro_z_agg')
+        """
         self.config = config
         self.tub_paths = tub_paths
         self.tubs: List[Tub] = [Tub(tub_path, read_only=True)
@@ -204,40 +230,76 @@ class TubDataset(object):
         self.num_bins = getattr(config, 'NUM_BINS_FOR_LAP_STATS', None)
         self.add_lap_pct = add_lap_pct
         self.seq_size = seq_size
+        self.ranking_keys = ranking_keys  # New parameter for configurable ranking keys
         logger.info(f'Created TubDataset with add_lap_pct: {self.add_lap_pct} '
-                    f'compress: {self.compress} num bins {self.num_bins}')
+                    f'compress: {self.compress} num bins {self.num_bins} '
+                    f'ranking_keys: {self.ranking_keys}')
 
     def get_records(self) -> Union[List[TubRecord], List[List[TubRecord]]]:
+        """
+        Load records from tubs with optional lap performance ranking.
+
+        This method now supports configurable ranking keys and maintains
+        better separation of concerns.
+
+        :return: List of TubRecords or list of lists for sequences
+        """
         if not self.records:
             filtered_records = 0
             non_ext_records = 0
             used_records = 0
             logger.info(f'Loading tubs from paths {self.tub_paths}')
             session_lap_rank = None
+
             for tub in self.tubs:
+                # Calculate lap performance if needed
                 if self.add_lap_pct:
-                    tub_stat = TubStatistics(
-                        tub, getattr(self.config, "GYRO_Z_INDEX", 2))
-                    session_lap_rank = tub_stat.calculate_lap_performance(
-                        self.config.USE_LAP_0, num_bins=self.num_bins,
-                        compress=self.compress)
+                    session_lap_rank = self._calculate_lap_statistics(tub)
+
+                # Load and filter records
                 for underlying in tub:
                     record = TubRecord(self.config, tub.base_path, underlying)
+
+                    # Apply training filter if configured
                     if self.train_filter and not self.train_filter(record):
                         filtered_records += 1
-                    elif record.extend(session_lap_rank):
+                        continue
+
+                    # Extend record with lap rankings
+                    if record.extend(session_lap_rank, self.ranking_keys):
                         self.records.append(record)
                         used_records += 1
                     else:
                         non_ext_records += 1
+
             total_records = used_records + filtered_records + non_ext_records
             logger.info(f'Records: # Total {total_records}  # Used '
                         f'{used_records}  # Filtered {filtered_records}  # '
                         f'NonExtended {non_ext_records}')
+
+            # Create sequences if needed
             if self.seq_size > 0:
                 seq = Collator(self.seq_size, self.records)
                 self.records = list(seq)
+
         return self.records
+
+    def _calculate_lap_statistics(self, tub: Tub) -> dict:
+        """
+        Calculate lap statistics for a tub.
+
+        Separated from get_records() for better modularity.
+
+        :param tub: Tub to calculate statistics for
+        :return: Session lap rank dictionary
+        """
+        tub_stat = TubStatistics(
+            tub, getattr(self.config, "GYRO_Z_INDEX", 2))
+        session_lap_rank = tub_stat.calculate_lap_performance(
+            self.config.USE_LAP_0,
+            num_bins=self.num_bins,
+            compress=self.compress)
+        return session_lap_rank
 
     @staticmethod
     def convert_to_weight(session_lap_rank):
