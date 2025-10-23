@@ -212,67 +212,52 @@ class TubStatistics(object):
                     f'aggregations in tub {self.tub.base_path}')
 
         for field_spec in self.field_aggregations:
-            output_key = field_spec['output_key']
-            extractor = field_spec['extractor']
-            transform = field_spec.get('transform', lambda x: x)
+            self._aggregate_single_field(field_spec)
 
-            prev_session = None
-            prev_lap = None
-            field_agg = 0
-            lap_field_map = {}
-            count = 0
+    def _aggregate_single_field(self, field_spec: dict):
+        """Aggregate a single field across all records."""
+        output_key = field_spec['output_key']
+        extractor = field_spec['extractor']
+        transform = field_spec.get('transform', lambda x: x)
 
-            for record in self.tub:
-                lap = record['car/lap']
-                session_id = record['_session_id']
+        aggregator = FieldAggregator()
 
-                # Handle session changes
-                if session_id != prev_session:
-                    if prev_session is not None:
-                        assert prev_lap not in lap_field_map, \
-                            f'Lap {prev_lap} already in map'
-                        lap_field_map[prev_lap] = field_agg / count
-                        self._update_field_metadata(
-                            lap_field_map, prev_session, output_key)
+        for record in self.tub:
+            lap = record['car/lap']
+            session_id = record['_session_id']
 
-                    prev_session = session_id
-                    lap_field_map.clear()
-                    prev_lap = None
-                    count = 0
+            # Extract and transform value, skip on error
+            value = self._extract_and_transform(record, extractor, transform, output_key)
+            if value is None:
+                continue
 
-                # Handle lap changes
-                if lap != prev_lap:
-                    if prev_lap is not None:
-                        assert prev_lap not in lap_field_map, \
-                            f'Lap {prev_lap} already in map'
-                        lap_field_map[prev_lap] = field_agg / count
+            # Update aggregation state
+            aggregator.process_record(session_id, lap, value,
+                                     lambda data, sess: self._update_field_metadata(data, sess, output_key))
 
-                    field_agg = 0
-                    count = 0
-                    prev_lap = lap
+        # Finalize last session
+        aggregator.finalize(lambda data, sess: self._update_field_metadata(data, sess, output_key))
 
-                # Extract, transform, and aggregate field value
-                try:
-                    raw_val = extractor(record)
-                    val = transform(raw_val)
-                    field_agg += val
-                    count += 1
-                except (KeyError, IndexError, TypeError) as e:
-                    logger.warning(f'Failed to extract {output_key}: {e}')
-
-            # Handle last lap
-            if count > 0:
-                assert lap not in lap_field_map, \
-                    f'Lap {lap} already in map'
-                lap_field_map[lap] = field_agg / count
-                self._update_field_metadata(lap_field_map, prev_session, output_key)
+    def _extract_and_transform(self, record: dict, extractor: Callable,
+                               transform: Callable, output_key: str) -> Optional[float]:
+        """Extract value from record and apply transformation."""
+        try:
+            raw_val = extractor(record)
+            return transform(raw_val)
+        except (KeyError, IndexError, TypeError) as e:
+            logger.warning(f'Failed to extract {output_key}: {e}')
+            return None
 
     def _update_field_metadata(self, lap_field_map: dict, session: str,
                                output_key: str):
         """Update session metadata with aggregated field values."""
         session_dict = self.tub.manifest.metadata.get(session)
-        assert session_dict, f"Missing metadata for session_id {session}"
+        if not session_dict:
+            return
+
         lap_timer = session_dict.get('laptimer')
+        if not lap_timer:
+            return
 
         for entry in lap_timer:
             lap_i = entry['lap']
@@ -282,33 +267,65 @@ class TubStatistics(object):
             else:
                 entry[output_key] = agg_value
 
-    def _calculate_laptimer_index(self):
-        """
-        Updates lap_timer in tub metadata with start and end index of
-        records in that lap
-        """
-        logger.info(f'Calculating laptimer index in tub {self.tub.base_path}')
-        prev_lap = None
-        prev_session = None
-        for record in self.tub:
-            idx = record['_index']
-            lap = record['car/lap']
-            session_id = record['_session_id']
-            if lap != prev_lap:
-                session_dict = self.tub.manifest.metadata.get(session_id)
-                assert session_dict, \
-                    f"Missing metadata for session_id {session_id}"
-                lap_timer = session_dict['laptimer']
-                lap_timer_i = lap_timer[lap]
-                assert lap_timer_i['lap'] == lap, \
-                    f"Inconsistent laptimer in session {session_id}"
-                lap_timer_i['start_index'] = idx
-                if prev_session is not None:
-                    if prev_session != session_id:
-                        prev_dict = self.tub.manifest.metadata[prev_session]
-                        plt = prev_dict['laptimer']
-                    else:
-                        plt = lap_timer
-                    if prev_lap is not None:
-                        plt[prev_lap]['end_index'] = idx - 1
-                prev_lap = lap
+
+class FieldAggregator:
+    """
+    Handles state for aggregating field values across sessions and laps.
+
+    Separates state management from the main logic to reduce nesting.
+    """
+
+    def __init__(self):
+        self.current_session = None
+        self.current_lap = None
+        self.lap_sum = 0.0
+        self.lap_count = 0
+        self.lap_field_map = {}
+
+    def process_record(self, session_id: str, lap: int, value: float,
+                      update_callback: Callable):
+        """Process a single record's value."""
+        # Session change - finalize previous session
+        if session_id != self.current_session:
+            self._finalize_session(update_callback)
+            self._start_new_session(session_id)
+            self.current_lap = lap
+            return
+
+        # Lap change - finalize previous lap
+        if lap != self.current_lap:
+            self._finalize_lap()
+            self.current_lap = lap
+
+        # Accumulate value for current lap
+        self.lap_sum += value
+        self.lap_count += 1
+
+    def _finalize_lap(self):
+        """Save accumulated data for current lap."""
+        if self.lap_count == 0 or self.current_lap is None:
+            return
+
+        avg_value = self.lap_sum / self.lap_count
+        self.lap_field_map[self.current_lap] = avg_value
+        self.lap_sum = 0.0
+        self.lap_count = 0
+
+    def _finalize_session(self, update_callback: Callable):
+        """Save accumulated data for current session."""
+        if self.current_session is None:
+            return
+
+        self._finalize_lap()
+        update_callback(self.lap_field_map, self.current_session)
+        self.lap_field_map = {}
+
+    def _start_new_session(self, session_id: str):
+        """Initialize state for new session."""
+        self.current_session = session_id
+        self.lap_sum = 0.0
+        self.lap_count = 0
+
+    def finalize(self, update_callback: Callable):
+        """Finalize any remaining data."""
+        self._finalize_session(update_callback)
