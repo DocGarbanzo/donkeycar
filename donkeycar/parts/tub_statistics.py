@@ -2,13 +2,11 @@ from collections import defaultdict
 from operator import itemgetter
 import logging
 from copy import copy
-from typing import Optional
+from typing import Optional, List, Dict, Callable, Any
 
 from donkeycar.parts.tub_v2 import Tub
 from donkeycar.pipeline.transformations import (
-    Transformation,
     SortingStrategy,
-    abs_transform,
     default_lap_sorting_strategy
 )
 
@@ -25,26 +23,37 @@ class TubStatistics(object):
                  tub: Tub,
                  gyro_z_index: int = 1,
                  sorting_strategy: Optional[SortingStrategy] = None,
-                 gyro_transformation: Optional[Transformation] = None):
+                 field_aggregations: Optional[List[Dict[str, Any]]] = None):
         """
         Construct tub statistics calculator for tub
 
         :param tub:                 input tub
-        :param gyro_z_index:        z coordinate in 3d gyro vector (this is 1 in
-                                    sim and 2 in car)
+        :param gyro_z_index:        z coordinate in 3d gyro vector (backward compat)
         :param sorting_strategy:    Optional custom sorting strategy for lap ranking.
                                     If None, uses default (time, distance, gyro_z_agg)
-        :param gyro_transformation: Optional transformation to apply to gyro values.
-                                    If None, uses abs() for backward compatibility
+        :param field_aggregations:  Optional list of field aggregation specs:
+                                    [{'field': 'car/gyro',
+                                      'output_key': 'gyro_z_agg',
+                                      'extractor': lambda r: r['car/gyro'][1],
+                                      'transform': abs}]
+                                    If None, uses default gyro aggregation
         """
         self.tub = tub
-        self.gyro_z_index = gyro_z_index
         self.sorting_strategy = sorting_strategy or default_lap_sorting_strategy()
-        self.gyro_transformation = gyro_transformation or abs_transform()
-        logger.info(f'Creating TubStatistics with gyro_z index {gyro_z_index}'
-                    f' assuming use {"gym" if gyro_z_index==1 else "real"}'
-                    f' with sorting strategy {self.sorting_strategy}'
-                    f' and gyro transformation {self.gyro_transformation}')
+
+        # Default field aggregation (backward compatible)
+        if field_aggregations is None:
+            self.field_aggregations = [{
+                'field': 'car/gyro',
+                'output_key': 'gyro_z_agg',
+                'extractor': lambda record: record['car/gyro'][gyro_z_index],
+                'transform': abs
+            }]
+        else:
+            self.field_aggregations = field_aggregations
+
+        logger.info(f'Creating TubStatistics with '
+                    f'{len(self.field_aggregations)} field aggregations')
 
     def generate_laptimes_from_records(self, overwrite=False):
 
@@ -135,7 +144,7 @@ class TubStatistics(object):
         :return:            dict of type
                             {sess_id: {lap_i: {'time': ti,...,'distance': di }}}
         """
-        self._calculate_aggregated_gyro()
+        self._calculate_aggregated_fields()
         logger.info(f'Calculating lap performance in tub {self.tub.base_path}')
         sessions \
             = self.tub.manifest.manifest_metadata['sessions']['all_full_ids']
@@ -192,89 +201,86 @@ class TubStatistics(object):
              self.tub.manifest.metadata.items()}
         return d
 
-    def _calculate_aggregated_gyro(self):
+    def _calculate_aggregated_fields(self):
         """
-        Updates lap_timer in tub metadate with values of aggregated gyro_z
-        values. Note, in the sim, thy gyro z is in the middle coordinate,
-        not the last.
+        Calculate aggregated values for configured fields per lap.
+
+        Generic implementation that handles any field with custom
+        extractor and transform functions.
         """
+        logger.info(f'Calculating {len(self.field_aggregations)} field '
+                    f'aggregations in tub {self.tub.base_path}')
 
-        def update_metadata(lap_gyro_map, session):
-            session_dict = self.tub.manifest.metadata.get(session)
-            assert session_dict, \
-                f"Missing metadata for session_id {session}"
-            lap_timer = session_dict.get('laptimer')
-            # Update lap_timer with aggregated values and mark each lap that
-            # is not in the map as invalid, so it will not be used in the
-            # statistics.
-            for entry in lap_timer:
-                lap_i = entry['lap']
-                agg_value = lap_gyro_map.get(lap_i)
-                if agg_value is None:
-                    entry['valid'] = False
-                else:
-                    entry['gyro_z_agg'] = agg_value
+        for field_spec in self.field_aggregations:
+            output_key = field_spec['output_key']
+            extractor = field_spec['extractor']
+            transform = field_spec.get('transform', lambda x: x)
 
-        logger.info(f'Calculating aggregated gyro in tub {self.tub.base_path}')
-        prev_session = None
-        prev_lap = None
-        gyro_z_agg = 0
-        lap_gyro_map = {}
-        count = 0   # counts the number of records in each lap
-        for record in self.tub:
-            lap = record['car/lap']
-            session_id = record['_session_id']
+            prev_session = None
+            prev_lap = None
+            field_agg = 0
+            lap_field_map = {}
+            count = 0
 
-            if session_id != prev_session:
-                # If new session found update the map with the value of the
-                # last lap of the prev session and update the lap timer of
-                # the previous session
-                if prev_session is not None:
-                    # we should never overwrite anything in the map,
-                    # otherwise there is a data problem.
-                    assert prev_lap not in lap_gyro_map, \
-                        f'Lap {prev_lap} should not be in the map'
-                    lap_gyro_map[prev_lap] = gyro_z_agg / count
-                    update_metadata(lap_gyro_map, prev_session)
+            for record in self.tub:
+                lap = record['car/lap']
+                session_id = record['_session_id']
 
-                # update current session to new session
-                prev_session = session_id
-                # reset lap / gyro map
-                lap_gyro_map.clear()
-                prev_lap = None
-                count = 0
+                # Handle session changes
+                if session_id != prev_session:
+                    if prev_session is not None:
+                        assert prev_lap not in lap_field_map, \
+                            f'Lap {prev_lap} already in map'
+                        lap_field_map[prev_lap] = field_agg / count
+                        self._update_field_metadata(
+                            lap_field_map, prev_session, output_key)
 
-            if lap != prev_lap:
-                # only update map if we haven't started a fresh session
-                if prev_lap is not None:
-                    # we should never overwrite anything in the map,
-                    # otherwise there is a data problem.
-                    assert prev_lap not in lap_gyro_map, \
-                        f'Lap {prev_lap} should not be in the map'
-                    # add aggregated normalised gyro value to map
-                    lap_gyro_map[prev_lap] = gyro_z_agg / count
-                # zero the aggregation value and update lap
-                gyro_z_agg = 0
-                count = 0
-                prev_lap = lap
+                    prev_session = session_id
+                    lap_field_map.clear()
+                    prev_lap = None
+                    count = 0
 
-            # Apply configurable transformation (default is abs())
-            raw_val = record['car/gyro'][self.gyro_z_index]
-            val = self.gyro_transformation(raw_val)
-            gyro_z_agg += val
-            count += 1
+                # Handle lap changes
+                if lap != prev_lap:
+                    if prev_lap is not None:
+                        assert prev_lap not in lap_field_map, \
+                            f'Lap {prev_lap} already in map'
+                        lap_field_map[prev_lap] = field_agg / count
 
-        # update for last lap, because we didn't go through the if lap !=
-        # prev_lap part any more and hence need to update the map with the
-        # last lap info
+                    field_agg = 0
+                    count = 0
+                    prev_lap = lap
 
-        # we should never overwrite anything in the map,
-        # otherwise there is a data problem.
-        assert lap not in lap_gyro_map, \
-            f'Lap {lap} should not be in the map'
+                # Extract, transform, and aggregate field value
+                try:
+                    raw_val = extractor(record)
+                    val = transform(raw_val)
+                    field_agg += val
+                    count += 1
+                except (KeyError, IndexError, TypeError) as e:
+                    logger.warning(f'Failed to extract {output_key}: {e}')
 
-        lap_gyro_map[lap] = gyro_z_agg / count
-        update_metadata(lap_gyro_map, prev_session)
+            # Handle last lap
+            if count > 0:
+                assert lap not in lap_field_map, \
+                    f'Lap {lap} already in map'
+                lap_field_map[lap] = field_agg / count
+                self._update_field_metadata(lap_field_map, prev_session, output_key)
+
+    def _update_field_metadata(self, lap_field_map: dict, session: str,
+                               output_key: str):
+        """Update session metadata with aggregated field values."""
+        session_dict = self.tub.manifest.metadata.get(session)
+        assert session_dict, f"Missing metadata for session_id {session}"
+        lap_timer = session_dict.get('laptimer')
+
+        for entry in lap_timer:
+            lap_i = entry['lap']
+            agg_value = lap_field_map.get(lap_i)
+            if agg_value is None:
+                entry['valid'] = False
+            else:
+                entry[output_key] = agg_value
 
     def _calculate_laptimer_index(self):
         """

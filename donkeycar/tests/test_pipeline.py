@@ -14,15 +14,9 @@ from donkeycar.pipeline.types import TubRecord, TubDataset
 from donkeycar.parts.tub_v2 import Tub
 from donkeycar.parts.tub_statistics import TubStatistics
 from donkeycar.pipeline.transformations import (
-    Transformation,
     SortingStrategy,
-    SortingCriterion,
-    abs_transform,
-    clamp_transform,
-    scale_transform,
-    identity_transform,
     default_lap_sorting_strategy,
-    custom_lap_sorting_strategy
+    clamp
 )
 
 
@@ -429,43 +423,14 @@ class TestTubDatasetSortingAndTransformation(unittest.TestCase):
             self.assertLessEqual(y, 0.7)
 
 
-class TestTransformations(unittest.TestCase):
-    """Test suite for the new Transformation classes."""
+class TestUtilityFunctions(unittest.TestCase):
+    """Test suite for utility functions."""
 
-    def test_abs_transformation(self):
-        """Test absolute value transformation."""
-        abs_t = abs_transform()
-        self.assertEqual(abs_t(-5.0), 5.0)
-        self.assertEqual(abs_t(3.0), 3.0)
-        self.assertEqual(abs_t(0.0), 0.0)
-
-    def test_clamp_transformation(self):
-        """Test clamp transformation."""
-        clamp_t = clamp_transform(-1.0, 1.0)
-        self.assertEqual(clamp_t(0.5), 0.5)
-        self.assertEqual(clamp_t(2.0), 1.0)
-        self.assertEqual(clamp_t(-2.0), -1.0)
-
-    def test_scale_transformation(self):
-        """Test scale transformation."""
-        scale_t = scale_transform(2.0)
-        self.assertEqual(scale_t(5.0), 10.0)
-        self.assertEqual(scale_t(-3.0), -6.0)
-
-    def test_transformation_composition(self):
-        """Test composing multiple transformations."""
-        # abs -> scale(2) -> clamp(0, 5)
-        abs_t = abs_transform()
-        scale_t = scale_transform(2.0)
-        clamp_t = clamp_transform(0.0, 5.0)
-
-        # Compose: abs -> scale
-        composed1 = abs_t.compose(scale_t)
-        self.assertEqual(composed1(-3.0), 6.0)  # abs(-3) * 2 = 6
-
-        # Compose: abs -> scale -> clamp
-        composed2 = composed1.compose(clamp_t)
-        self.assertEqual(composed2(-3.0), 5.0)  # abs(-3) * 2 = 6, clamped to 5
+    def test_clamp_function(self):
+        """Test clamp utility function."""
+        self.assertEqual(clamp(0.5, -1.0, 1.0), 0.5)
+        self.assertEqual(clamp(2.0, -1.0, 1.0), 1.0)
+        self.assertEqual(clamp(-2.0, -1.0, 1.0), -1.0)
 
 
 class TestSortingStrategy(unittest.TestCase):
@@ -475,26 +440,27 @@ class TestSortingStrategy(unittest.TestCase):
         """Test default sorting strategy (time, distance, gyro_z_agg)."""
         strategy = default_lap_sorting_strategy()
         self.assertEqual(len(strategy.criteria), 3)
-        self.assertEqual(strategy.criteria[0].key, 'time')
-        self.assertEqual(strategy.criteria[1].key, 'distance')
-        self.assertEqual(strategy.criteria[2].key, 'gyro_z_agg')
+        self.assertEqual(strategy.criteria[0]['key'], 'time')
+        self.assertEqual(strategy.criteria[1]['key'], 'distance')
+        self.assertEqual(strategy.criteria[2]['key'], 'gyro_z_agg')
 
-    def test_sorting_criterion_extraction(self):
-        """Test that SortingCriterion extracts values correctly."""
-        criterion = SortingCriterion('time')
-        data = {'time': 10.5, 'distance': 50.0}
-        self.assertEqual(criterion.get_sort_value(data), 10.5)
+    def test_sorting_with_transformation(self):
+        """Test sorting with transformation using plain functions."""
+        # Create strategy with abs() transform
+        strategy = SortingStrategy([
+            {'key': 'value', 'transform': abs}
+        ])
 
-    def test_sorting_criterion_with_transformation(self):
-        """Test SortingCriterion with transformation."""
-        # Create criterion that takes abs of value before sorting
-        criterion = SortingCriterion(
-            'custom',
-            extractor=lambda d: d.get('value'),
-            transformation=abs_transform()
-        )
-        data = {'value': -5.0}
-        self.assertEqual(criterion.get_sort_value(data), 5.0)
+        laps = [
+            {'value': -5.0},
+            {'value': 3.0},
+            {'value': -10.0}
+        ]
+
+        rankings = strategy.rank_laps(laps)
+        # Should rank by abs value: 3.0 < 5.0 < 10.0
+        self.assertLess(rankings[1]['value'], rankings[0]['value'])
+        self.assertLess(rankings[0]['value'], rankings[2]['value'])
 
     def test_rank_laps_basic(self):
         """Test basic lap ranking."""
@@ -534,17 +500,17 @@ class TestSortingStrategy(unittest.TestCase):
         self.assertEqual(time_rankings, expected_bins)
 
     def test_custom_sorting_strategy(self):
-        """Test creating custom sorting strategy."""
-        criteria_specs = [
-            {'key': 'speed', 'transformation': 'abs'},
+        """Test creating custom sorting strategy with simple dicts."""
+        # Create strategy with custom criteria
+        strategy = SortingStrategy([
+            {'key': 'speed', 'transform': abs},
             {'key': 'accuracy', 'reverse': True},  # Higher is better
-        ]
+        ])
 
-        strategy = custom_lap_sorting_strategy(criteria_specs)
         self.assertEqual(len(strategy.criteria), 2)
-        self.assertEqual(strategy.criteria[0].key, 'speed')
-        self.assertEqual(strategy.criteria[1].key, 'accuracy')
-        self.assertTrue(strategy.criteria[1].reverse)
+        self.assertEqual(strategy.criteria[0]['key'], 'speed')
+        self.assertEqual(strategy.criteria[1]['key'], 'accuracy')
+        self.assertTrue(strategy.criteria[1]['reverse'])
 
 
 class TestModularTubStatistics(unittest.TestCase):
@@ -582,10 +548,10 @@ class TestModularTubStatistics(unittest.TestCase):
         """Test TubStatistics with custom sorting strategy."""
         tub = self._create_simple_tub(num_laps=3)
 
-        # Create custom sorting strategy
+        # Create custom sorting strategy (simple dicts)
         custom_strategy = SortingStrategy([
-            SortingCriterion('time'),
-            SortingCriterion('distance'),
+            {'key': 'time'},
+            {'key': 'distance'},
         ])
 
         stats = TubStatistics(tub, gyro_z_index=1, sorting_strategy=custom_strategy)
@@ -609,21 +575,24 @@ class TestModularTubStatistics(unittest.TestCase):
                 lap_perf = session_perf[lap_num]
                 self.assertIn('time', lap_perf)
                 self.assertIn('distance', lap_perf)
-                # gyro_z_agg should still exist from _calculate_aggregated_gyro
-                # but may not be in rankings if not in sorting strategy
 
         tub.close()
 
-    def test_tub_statistics_with_custom_transformation(self):
-        """Test TubStatistics with custom gyro transformation."""
+    def test_tub_statistics_with_custom_field_aggregation(self):
+        """Test TubStatistics with custom field aggregation."""
         tub = self._create_simple_tub(num_laps=2)
 
-        # Use identity transformation instead of abs
-        identity_trans = identity_transform()
+        # Use identity instead of abs for gyro aggregation
+        field_aggs = [{
+            'field': 'car/gyro',
+            'output_key': 'gyro_z_agg',
+            'extractor': lambda r: r['car/gyro'][1],
+            'transform': lambda x: x  # identity
+        }]
 
-        stats = TubStatistics(tub, gyro_z_index=1, gyro_transformation=identity_trans)
+        stats = TubStatistics(tub, field_aggregations=field_aggs)
         stats.generate_laptimes_from_records()
-        stats._calculate_aggregated_gyro()
+        stats._calculate_aggregated_fields()
 
         session_id = tub.manifest.session_id[1]
         lap_times = tub.manifest.metadata[session_id]['laptimer']
