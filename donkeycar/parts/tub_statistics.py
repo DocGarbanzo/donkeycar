@@ -298,10 +298,9 @@ class FieldAggregator:
             self._finalize_session(update_callback)
             self._start_new_session(session_id)
             self.current_lap = lap
-            return
 
         # Lap change - finalize previous lap
-        if lap != self.current_lap:
+        elif lap != self.current_lap:
             self._finalize_lap()
             self.current_lap = lap
 
