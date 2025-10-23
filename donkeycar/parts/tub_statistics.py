@@ -214,6 +214,14 @@ class TubStatistics(object):
         for field_spec in self.field_aggregations:
             self._aggregate_single_field(field_spec)
 
+    def _calculate_aggregated_gyro(self):
+        """
+        Backward compatibility alias for _calculate_aggregated_fields().
+
+        Deprecated: Use _calculate_aggregated_fields() instead.
+        """
+        self._calculate_aggregated_fields()
+
     def _aggregate_single_field(self, field_spec: dict):
         """Aggregate a single field across all records."""
         output_key = field_spec['output_key']
