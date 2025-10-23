@@ -2,8 +2,15 @@ from collections import defaultdict
 from operator import itemgetter
 import logging
 from copy import copy
+from typing import Optional
 
 from donkeycar.parts.tub_v2 import Tub
+from donkeycar.pipeline.transformations import (
+    Transformation,
+    SortingStrategy,
+    abs_transform,
+    default_lap_sorting_strategy
+)
 
 logger = logging.getLogger(__name__)
 
@@ -14,18 +21,30 @@ class TubStatistics(object):
     lap times, distances and gyro data.
     """
 
-    def __init__(self, tub: Tub, gyro_z_index: int = 1):
+    def __init__(self,
+                 tub: Tub,
+                 gyro_z_index: int = 1,
+                 sorting_strategy: Optional[SortingStrategy] = None,
+                 gyro_transformation: Optional[Transformation] = None):
         """
         Construct tub statistics calculator for tub
 
-        :param tub:             input tub
-        :param gyro_z_index:    z coordinate in 3d gyro vector (this is 1 in
-                                sim and 2 in car)
+        :param tub:                 input tub
+        :param gyro_z_index:        z coordinate in 3d gyro vector (this is 1 in
+                                    sim and 2 in car)
+        :param sorting_strategy:    Optional custom sorting strategy for lap ranking.
+                                    If None, uses default (time, distance, gyro_z_agg)
+        :param gyro_transformation: Optional transformation to apply to gyro values.
+                                    If None, uses abs() for backward compatibility
         """
         self.tub = tub
         self.gyro_z_index = gyro_z_index
+        self.sorting_strategy = sorting_strategy or default_lap_sorting_strategy()
+        self.gyro_transformation = gyro_transformation or abs_transform()
         logger.info(f'Creating TubStatistics with gyro_z index {gyro_z_index}'
-                    f' assuming use {"gym" if gyro_z_index==1 else "real"}')
+                    f' assuming use {"gym" if gyro_z_index==1 else "real"}'
+                    f' with sorting strategy {self.sorting_strategy}'
+                    f' and gyro transformation {self.gyro_transformation}')
 
     def generate_laptimes_from_records(self, overwrite=False):
 
@@ -99,6 +118,9 @@ class TubStatistics(object):
         returned for the slowest 20%. We can also get info on 'distance' and
         'gyro_z_agg' which stands for aggregated gyro_z values of the whole lap.
 
+        Uses the configured sorting_strategy to rank laps, making this method
+        modular and extensible.
+
         :param use_lap_0:   If the 0'th lap should be ignored. On the
                             real car lap zero shows up when the line is
                             crossed the first time hence the lap is
@@ -113,29 +135,13 @@ class TubStatistics(object):
         :return:            dict of type
                             {sess_id: {lap_i: {'time': ti,...,'distance': di }}}
         """
-        def rank_laps(laps_filtered, num_buckets, session_lap_rank):
-            num_laps = len(laps_filtered)
-            num_buckets = num_buckets or num_laps
-            for sort_by in ('time', 'distance', 'gyro_z_agg'):
-                laps_sorted = sorted(laps_filtered, key=itemgetter(sort_by))
-                session_ids = set()
-                for i, lap_i in enumerate(laps_sorted):
-                    rel_i = int(i * num_buckets / num_laps + 1) / num_buckets
-                    session_id = lap_i['session_id']
-                    session_lap_rank[session_id][lap_i['lap']][sort_by] = rel_i
-                    session_ids.add(session_id)
-                log_text = f'Session {session_ids} with {num_laps} valid laps'
-                if num_laps > 0:
-                    log_text \
-                        += f', min {sort_by}: {laps_sorted[0][sort_by]:5.2f}, '\
-                           f'max {sort_by}: {laps_sorted[-1][sort_by]:5.2f}'
-                logger.info(log_text)
-
         self._calculate_aggregated_gyro()
         logger.info(f'Calculating lap performance in tub {self.tub.base_path}')
         sessions \
             = self.tub.manifest.manifest_metadata['sessions']['all_full_ids']
         session_lap_data = list()
+        session_lap_metadata = list()  # Track which session each lap belongs to
+
         for session_id in sessions:
             session_dict = self.tub.manifest.metadata.get(session_id)
             assert session_dict, f"Missing metadata for session_id {session_id}"
@@ -151,18 +157,31 @@ class TubStatistics(object):
             # Remove laps that are not valid and add in session id
             laps_filtered = [l | {'session_id': session_id} for l in lap_timer
                              if l.get('valid', True)]
-            # lap_timer is a list of dictionaries, sort by time, distance and
-            # gyro_z aggregated respectively and record the quantile bins for
-            # each of these values per lap in the session_lap_rank dict.
+            # Track laps and their metadata
             session_lap_data.append(laps_filtered)
+            session_lap_metadata.append(session_id)
 
         # Now we could compress all data per session_id into a single rank
         if compress:
-            session_lap_data = [[e for ld in session_lap_data for e in ld]]
+            all_laps = [e for ld in session_lap_data for e in ld]
+            session_lap_data = [all_laps]
+            session_lap_metadata = [session_lap_metadata[0] if session_lap_metadata else 'compressed']
 
+        # Use SortingStrategy to rank laps (replaces nested rank_laps function)
         session_lap_rank = defaultdict(lambda: defaultdict(dict))
         for laps_data in session_lap_data:
-            rank_laps(laps_data, num_bins, session_lap_rank)
+            if not laps_data:
+                continue
+
+            # Rank laps using the sorting strategy
+            rankings = self.sorting_strategy.rank_laps(laps_data, num_bins)
+
+            # Convert rankings back to session_lap_rank format
+            for lap_idx, lap_rankings in rankings.items():
+                lap_data = laps_data[lap_idx]
+                session_id = lap_data['session_id']
+                lap_num = lap_data['lap']
+                session_lap_rank[session_id][lap_num] = lap_rankings
 
         return session_lap_rank
 
@@ -239,7 +258,9 @@ class TubStatistics(object):
                 count = 0
                 prev_lap = lap
 
-            val = abs(record['car/gyro'][self.gyro_z_index])
+            # Apply configurable transformation (default is abs())
+            raw_val = record['car/gyro'][self.gyro_z_index]
+            val = self.gyro_transformation(raw_val)
             gyro_z_agg += val
             count += 1
 
