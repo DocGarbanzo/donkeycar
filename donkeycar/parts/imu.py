@@ -323,6 +323,10 @@ class BNO055Ada:
             self.pos[1] += vy * dt  # y position (left)
             self.pos[2] = 0.0       # z position always zero (2D plane)
 
+            # correction term
+            step_distance = self.odometer_speed * dt
+            self.pos[0] += step_distance * 0.0152
+
             # Store path with 2D coordinates and odometer speed
             self.path.append(
                 (self.time,
