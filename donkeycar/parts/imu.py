@@ -324,16 +324,13 @@ class BNO055Ada:
             self.pos[2] = 0.0       # z position always zero (2D plane)
 
             # correction term
-            # step_distance = self.odometer_speed * dt
-            # self.pos[0] -= step_distance * 0.0152
+            step_distance = self.odometer_speed * dt
+            self.pos[0] -= step_distance * 0.01
 
             # Store path with 2D coordinates and odometer speed
-            self.path.append(
-                (self.time,
-                 self.pos[0],
-                    self.pos[1],
-                    0.0,
-                    self.odometer_speed))
+            self.path.append((self.time, self.pos[0], self.pos[1],
+                              0.0, self.odometer_speed))
+
         self.time = new_time
 
     def update(self):
