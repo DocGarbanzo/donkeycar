@@ -30,20 +30,27 @@ def _save_imu_path_to_csv(path_data, filepath, class_name):
         filepath: Target CSV file path
         class_name: Name of calling class for logging
     """
-    length = 0
-    filtered_pd = []
+    if not path_data:
+        logger.warning(f'{class_name} - no path data to save')
+        return
+
+    expected_length = len(path_data[0])
+    filtered_data = []
+
     for i, p in enumerate(path_data):
-        if i == 0:
-            length = len(p)
-        if len(p) != length:
-            logger.warning(f'Inconsistent path data at index {i}: {p} removed')
-        else:
-            filtered_pd.append(p)
-    df = pd.DataFrame(columns=['t', 'x', 'y', 'z', 'v'], data=filtered_pd)
-    logger.info(f'{class_name} - saving IMU path to {filepath} '
-                f'with {len(df)} entries')
+        if len(p) != expected_length:
+            msg = f'Inconsistent path data at index {i}: {p} removed'
+            logger.warning(msg)
+            continue
+        filtered_data.append(p)
+
+    df = pd.DataFrame(
+        columns=['t', 'x', 'y', 'z', 'v'],
+        data=filtered_data
+    )
     df.to_csv(filepath, index=False)
-    logger.info(f'{class_name} - saved {filepath}')
+    msg = f'{class_name} - saved {filepath} with {len(df)} entries'
+    logger.info(msg)
 
 
 class IMU:
@@ -258,7 +265,7 @@ class Mpu6050Ada:
 
 
 class BNO055Ada:
-    def __init__(self, alpha=1.0, record_path=False):
+    def __init__(self, alpha=1.0, record_path=False, correction=None):
         i2c = board.I2C()  # uses board.SCL and board.SDA
         self.sensor = adafruit_bno055.BNO055_I2C(i2c)
         self.last_val = 0xFFFF
@@ -275,6 +282,7 @@ class BNO055Ada:
         self.euler = np.array(self.sensor.euler[::-1])
         self.alpha = alpha
         self.record_path = record_path
+        self.correction = correction  # (corr_x, corr_y) 
         self.odometer_speed = 0.0
         logger.info(f"Created BNO055, with alpha={self.alpha}, "
                     f"record_path={self.record_path}")
@@ -317,18 +325,20 @@ class BNO055Ada:
             heading_rad = math.radians(heading_deg)
 
             # Calculate 2D velocity components using odometer speed and heading
-            # X-axis: forward direction, Y-axis: left direction
-            vx = self.odometer_speed * math.cos(heading_rad)  # forward velocity
-            vy = self.odometer_speed * math.sin(heading_rad)  # left velocity
-
+            # X-axis: right direction, Y-axis: forward direction
+            vx = self.odometer_speed * math.cos(heading_rad)  # right velocity
+            vy = self.odometer_speed * math.sin(heading_rad)  # forward velocity
+          
             # Update 2D position using kinematics
-            self.pos[0] += vx * dt  # x position (forward)
-            self.pos[1] += vy * dt  # y position (left)
-            self.pos[2] = 0.0       # z position always zero (2D plane)
+            self.pos[0] += vx * dt 
+            self.pos[1] += vy * dt  
+            self.pos[2] = 0.0   
 
             # correction term
-            # step_distance = self.odometer_speed * dt
-            # self.pos[0] -= step_distance * 0.01
+            if self.correction:
+                step_distance = self.odometer_speed * dt
+                self.pos[0] += step_distance * self.correction[0]
+                self.pos[1] += step_distance * self.correction[1]
 
             # Store path with 2D coordinates and odometer speed
             self.path.append((new_time, self.pos[0], self.pos[1],
