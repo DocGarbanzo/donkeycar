@@ -282,10 +282,10 @@ class BNO055Ada:
         self.euler = np.array(self.sensor.euler[::-1])
         self.alpha = alpha
         self.record_path = record_path
-        self.correction = correction  # (corr_x, corr_y) 
+        self.correction = correction  # (corr_x, corr_y)
         self.odometer_speed = 0.0
-        logger.info(f"Created BNO055, with alpha={self.alpha}, "
-                    f"record_path={self.record_path}")
+        logger.info(f"Created BNO055, with alpha={self.alpha}, record_path="
+                    f"{self.record_path} and correction={self.correction}")
 
     def temperature(self):
         result = self.sensor.temperature
@@ -328,11 +328,11 @@ class BNO055Ada:
             # X-axis: right direction, Y-axis: forward direction
             vx = self.odometer_speed * math.cos(heading_rad)  # right velocity
             vy = self.odometer_speed * math.sin(heading_rad)  # forward velocity
-          
+
             # Update 2D position using kinematics
-            self.pos[0] += vx * dt 
-            self.pos[1] += vy * dt  
-            self.pos[2] = 0.0   
+            self.pos[0] += vx * dt
+            self.pos[1] += vy * dt
+            self.pos[2] = 0.0
 
             # correction term
             if self.correction:
