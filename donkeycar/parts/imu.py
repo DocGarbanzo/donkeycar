@@ -30,20 +30,18 @@ def _save_imu_path_to_csv(path_data, filepath, class_name):
         filepath: Target CSV file path
         class_name: Name of calling class for logging
     """
+    length = 0
+    for i, p in enumerate(path_data):
+        if i == 0:
+            length = len(p)
+        if len(p) != length:
+            logger.warning(f'Inconsistent path data at index {i}: {p} removed')
+
     df = pd.DataFrame(columns=['t', 'x', 'y', 'z', 'v'], data=path_data)
     logger.info(f'{class_name} - saving IMU path to {filepath} '
                 f'with {len(df)} entries')
     df.to_csv(filepath, index=False)
-
-    for attempt in range(10):
-        if os.path.exists(filepath):
-            logger.info(
-                f'{class_name} - saved {filepath}, {attempt+1} attempts')
-            return
-        time.sleep(0.1)
-        df.to_csv(filepath, index=False)
-
-    logger.error(f'{class_name} - {filepath} not found after write')
+    logger.info(f'{class_name} - saved {filepath}')
 
 
 class IMU:
@@ -331,7 +329,7 @@ class BNO055Ada:
             # self.pos[0] -= step_distance * 0.01
 
             # Store path with 2D coordinates and odometer speed
-            self.path.append((self.time, self.pos[0], self.pos[1],
+            self.path.append((new_time, self.pos[0], self.pos[1],
                               0.0, self.odometer_speed))
 
         self.time = new_time
