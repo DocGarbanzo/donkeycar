@@ -637,7 +637,7 @@ def visualize_imu_path(csv_file='imu.csv', correct_drift=False,
     drift_text = _create_status_text(fig, 0.65)
 
     # Controls text - below drift text
-    _create_status_text(fig, 0.57,
+    _create_status_text(fig, 0.50,
                         'Controls: \u2190/\u2192 arrows = navigate',
                         color='cyan')
 
@@ -800,7 +800,7 @@ def visualize_imu_path(csv_file='imu.csv', correct_drift=False,
     update_plot(df['t'].min())
 
     # Add legend in top area underneath controls - vertical arrangement
-    ax.legend(bbox_to_anchor=(0.02, 0.65), loc='upper left',
+    ax.legend(bbox_to_anchor=(0.02, 0.48), loc='upper left',
               framealpha=0.9, ncol=1, fontsize=10,
               bbox_transform=fig.transFigure)
 
