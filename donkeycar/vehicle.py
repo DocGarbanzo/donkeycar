@@ -109,7 +109,8 @@ class Vehicle:
         """
         self.parts.remove(part)
 
-    def start(self, rate_hz: int=10, max_loop_count: int=None) -> tuple[int, float]:
+    def start(self, rate_hz: int = 10,
+              max_loop_count: int = None) -> tuple[int, float]:
         """
         Start vehicle's main drive loop.
 
@@ -169,8 +170,8 @@ class Vehicle:
                     if avg_exceed_time > 1:
                         logger.warning(f'jitter violation in vehicle loop with '
                                        f'{avg_exceed_time:5.1f}ms')
-                
-            return self.loop_count, time.time() - loop_start_time   
+
+            return self.loop_count, time.time() - loop_start_time
 
         except KeyboardInterrupt:
             pass
@@ -190,7 +191,7 @@ class Vehicle:
             if entry.get('run_condition'):
                 run_condition = entry.get('run_condition')
                 run = self.mem.get([run_condition])[0]
-            
+
             if run:
                 # get part
                 p = entry['part']
@@ -209,11 +210,12 @@ class Vehicle:
                 # finish timing part run
                 self.profiler.on_part_finished(p)
 
-    def stop(self):        
+    def stop(self):
         logger.info('Shutting down vehicle and its parts...')
         for entry in self.parts:
             try:
                 entry['part'].shutdown()
+                time.sleep(0.1)
             except AttributeError:
                 # usually from missing shutdown method, which should be optional
                 pass
@@ -222,7 +224,7 @@ class Vehicle:
 
         count = max(self.loop_count, 1)
         logger.info(f'Ran {self.loop_count} vehicle loops with '
-                    f'{100.0 * self.loop_exceed / count:.2f}% ' 
+                    f'{100.0 * self.loop_exceed / count:.2f}% '
                     f'exceeding loop time.')
         logger.info(f'Average excess time '
                     f'{1000.0 * self.excess_time / count:.1f}ms, average loop '
