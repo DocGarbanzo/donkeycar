@@ -31,6 +31,8 @@ def _save_imu_path_to_csv(path_data, filepath, class_name):
         class_name: Name of calling class for logging
     """
     df = pd.DataFrame(columns=['t', 'x', 'y', 'z', 'v'], data=path_data)
+    logger.info(f'{class_name} - saving IMU path to {filepath} '
+                f'with {len(df)} entries')
     df.to_csv(filepath, index=False)
 
     for attempt in range(10):
