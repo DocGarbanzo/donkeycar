@@ -308,9 +308,10 @@ class BNO055Ada:
 
         if self.record_path and self.odometer_speed is not None:
             # Use 2D position estimation with odometer speed and heading (Euler z-angle)
-            # Euler z-angle (heading/yaw) is in degrees, 360° = 0° = forward (parallel to x-axis)
-            # Convert to standard math coordinates (0° = +x, 90° = +y)
-            heading_deg = (90.0 - self.euler[2]) if len(self.euler) > 2 else 0.0
+            # Euler z-angle (heading/yaw) is in degrees, 360° = 0° = forward (parallel to y-axis)
+            # Convert to standard math coordinates (0° = +y, 90° = +x)
+            # add angular correction
+            heading_deg = (90.0 - self.euler[2]) + 1.0
             heading_rad = math.radians(heading_deg)
 
             # Calculate 2D velocity components using odometer speed and heading
@@ -324,8 +325,8 @@ class BNO055Ada:
             self.pos[2] = 0.0       # z position always zero (2D plane)
 
             # correction term
-            step_distance = self.odometer_speed * dt
-            self.pos[0] -= step_distance * 0.01
+            # step_distance = self.odometer_speed * dt
+            # self.pos[0] -= step_distance * 0.01
 
             # Store path with 2D coordinates and odometer speed
             self.path.append((self.time, self.pos[0], self.pos[1],
