@@ -44,10 +44,7 @@ def _save_imu_path_to_csv(path_data, filepath, class_name):
             continue
         filtered_data.append(p)
 
-    df = pd.DataFrame(
-        columns=['t', 'x', 'y', 'z', 'v'],
-        data=filtered_data
-    )
+    df = pd.DataFrame(columns=['t', 'x', 'y', 'h', 'v'], data=filtered_data)
     df.to_csv(filepath, index=False)
     msg = f'{class_name} - saved {filepath} with {len(df)} entries'
     logger.info(msg)
@@ -321,7 +318,7 @@ class BNO055Ada:
             # Euler z-angle (heading/yaw) is in degrees, 360° = 0° = forward (parallel to y-axis)
             # Convert to standard math coordinates (0° = +y, 90° = +x)
             # add angular correction
-            heading_deg = (90.0 - self.euler[2]) + 1.0
+            heading_deg = (90.0 - self.euler[2])
             heading_rad = math.radians(heading_deg)
 
             # Calculate 2D velocity components using odometer speed and heading
@@ -342,7 +339,7 @@ class BNO055Ada:
 
             # Store path with 2D coordinates and odometer speed
             self.path.append((new_time, self.pos[0], self.pos[1],
-                              0.0, self.odometer_speed))
+                              self.euler[2], self.odometer_speed))
 
         self.time = new_time
 
