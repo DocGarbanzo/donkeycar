@@ -25,54 +25,54 @@ class TestAngleFunctions(unittest.TestCase):
     """Test angle utility functions"""
 
     def test_normalize_angle(self):
-        """Test angle normalization"""
+        """Test angle normalization - angles in radians"""
         self.assertAlmostEqual(0, normalize_angle(0))
-        self.assertAlmostEqual(90, normalize_angle(90))
-        self.assertAlmostEqual(-90, normalize_angle(270))
-        # 180 can be either 180 or -180, both are valid
-        self.assertIn(normalize_angle(180), [180, -180])
-        self.assertAlmostEqual(0, normalize_angle(360))
-        self.assertAlmostEqual(10, normalize_angle(370))
-        self.assertAlmostEqual(-10, normalize_angle(-10))
+        self.assertAlmostEqual(np.pi/2, normalize_angle(np.pi/2))  # 90 deg
+        self.assertAlmostEqual(-np.pi/2, normalize_angle(3*np.pi/2))  # 270 deg
+        # pi can be either pi or -pi, both are valid
+        self.assertIn(normalize_angle(np.pi), [np.pi, -np.pi])
+        self.assertAlmostEqual(0, normalize_angle(2*np.pi))  # 360 deg
+        self.assertAlmostEqual(np.pi/18, normalize_angle(2*np.pi + np.pi/18))  # 370 deg
+        self.assertAlmostEqual(-np.pi/18, normalize_angle(-np.pi/18))  # -10 deg
 
     def test_angle_difference(self):
-        """Test angle difference calculation"""
+        """Test angle difference calculation - angles in radians"""
         self.assertAlmostEqual(0, angle_difference(0, 0))
-        self.assertAlmostEqual(90, angle_difference(0, 90))
-        self.assertAlmostEqual(-90, angle_difference(90, 0))
-        self.assertAlmostEqual(180, angle_difference(0, 180))
-        self.assertAlmostEqual(-179, angle_difference(0, 181))
-        self.assertAlmostEqual(10, angle_difference(350, 0))
+        self.assertAlmostEqual(np.pi/2, angle_difference(0, np.pi/2))  # 90 deg
+        self.assertAlmostEqual(-np.pi/2, angle_difference(np.pi/2, 0))  # -90 deg
+        self.assertAlmostEqual(np.pi, angle_difference(0, np.pi))  # 180 deg
+        self.assertAlmostEqual(-np.pi + np.pi/180, angle_difference(0, np.pi + np.pi/180), places=5)  # -179 deg
+        self.assertAlmostEqual(np.pi/18, angle_difference(35*np.pi/18, 2*np.pi))  # 10 deg (350 to 0)
 
     def test_circular_mean(self):
-        """Test circular mean calculation"""
+        """Test circular mean calculation - angles in radians"""
         # Simple cases
-        angles = np.array([0, 90, 180, 270])
+        angles = np.array([0, np.pi/2, np.pi, 3*np.pi/2])  # 0, 90, 180, 270 deg
         mean = circular_mean(angles)
         # Mean should be undefined (close to origin) but atan2 will give some value
-        self.assertTrue(-180 <= mean <= 180)
+        self.assertTrue(-np.pi <= mean <= np.pi)
 
         # All same angle
-        angles = np.array([45, 45, 45])
+        angles = np.array([np.pi/4, np.pi/4, np.pi/4])  # 45 deg
         mean = circular_mean(angles)
-        self.assertAlmostEqual(45, mean, places=5)
+        self.assertAlmostEqual(np.pi/4, mean, places=5)
 
         # Crossing 0 degrees
-        angles = np.array([350, 10, 0, 360])
+        angles = np.array([35*np.pi/18, np.pi/18, 0, 2*np.pi])  # 350, 10, 0, 360 deg
         mean = circular_mean(angles)
         self.assertAlmostEqual(0, mean, places=0)  # Should be close to 0
 
     def test_circular_std(self):
-        """Test circular standard deviation"""
+        """Test circular standard deviation - angles in radians"""
         # All same angle - zero std
-        angles = np.array([45, 45, 45])
+        angles = np.array([np.pi/4, np.pi/4, np.pi/4])  # 45 deg
         std = circular_std(angles)
         self.assertAlmostEqual(0, std, places=3)
 
         # Small spread
-        angles = np.array([44, 45, 46])
+        angles = np.array([44*np.pi/180, np.pi/4, 46*np.pi/180])  # 44, 45, 46 deg
         std = circular_std(angles)
-        self.assertLess(std, 5)  # Should be small
+        self.assertLess(std, 5*np.pi/180)  # Should be small (< 5 deg in radians)
 
 
 class TestMultiLapData(unittest.TestCase):
