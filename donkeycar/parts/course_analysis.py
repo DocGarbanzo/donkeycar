@@ -150,6 +150,8 @@ class MultiLapData:
         # Detect laps
         self._detect_laps(lap_detection_threshold, min_lap_length)
 
+        if self.raw_data is None:
+            raise ValueError("No data loaded from source")
         logger.info(f"Loaded {len(self.raw_data)} points from {source}")
         logger.info(f"Detected {self.num_laps} laps")
 
@@ -178,8 +180,9 @@ class MultiLapData:
 
         # Check required columns
         required_cols = ['timestamp', 'x', 'y', 'heading']
+        dtype_names = self.raw_data.dtype.names or ()
         for col in required_cols:
-            if col not in self.raw_data.dtype.names:
+            if col not in dtype_names:
                 raise ValueError(f"Missing required column: {col}")
 
     def _load_from_tub(self, tub_path: str) -> None:
@@ -226,6 +229,9 @@ class MultiLapData:
             threshold: Distance threshold for lap closure (meters)
             min_length: Minimum points per lap
         """
+        if self.raw_data is None:
+            raise ValueError("No raw data available for lap detection")
+
         if len(self.raw_data) < min_length:
             logger.warning("Data too short for lap detection")
             return
@@ -570,13 +576,23 @@ class MeanCourse:
         Args:
             filepath: Output file path (CSV or JSON)
         """
+        if (self.x is None or self.y is None or
+                self.heading is None or self.distance is None):
+            raise ValueError("Mean course data not computed; call compute() "
+                             "before saving.")
+
+        x = self.x
+        y = self.y
+        heading = self.heading
+        distance = self.distance
+
         if filepath.endswith('.json'):
             # Save as JSON
             data = {
-                'x': self.x.tolist(),
-                'y': self.y.tolist(),
-                'heading': self.heading.tolist(),
-                'distance': self.distance.tolist(),
+                'x': x.tolist(),
+                'y': y.tolist(),
+                'heading': heading.tolist(),
+                'distance': distance.tolist(),
                 'num_laps': self.num_laps,
                 'params': self.params,
                 'metadata': {
