@@ -29,10 +29,9 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras.layers import (Dense, Input,Convolution2D,
     MaxPooling2D, Activation, Dropout, Flatten, LSTM, BatchNormalization,
-    Conv3D, MaxPooling3D, Conv2DTranspose)
+    Conv3D, MaxPooling3D, Conv2DTranspose, Concatenate)
 
 from tensorflow.keras.layers import TimeDistributed as TD
-from tensorflow.keras.backend import concatenate
 from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, \
     TensorBoard
@@ -923,7 +922,7 @@ def default_memory(input_shape=(120, 160, 3), mem_length=3, mem_depth=0):
     for i in range(1, mem_length):
         y = Dense(2 * (mem_length - i), activation='relu', name=f'mem_c_{i}')(y)
         y = Dropout(drop2)(y)
-    x = concatenate([x, y])
+    x = Concatenate()([x, y])
     x = Dense(100, activation='relu', name='dense_1')(x)
     x = Dropout(drop)(x)
     x = Dense(50, activation='relu', name='dense_2')(x)
@@ -967,7 +966,7 @@ def default_imu(num_outputs, num_imu_inputs, input_shape):
     y = Dense(14, activation='relu')(y)
     y = Dense(14, activation='relu')(y)
     
-    z = concatenate([x, y])
+    z = Concatenate()([x, y])
     z = Dense(50, activation='relu')(z)
     z = Dropout(.1)(z)
     z = Dense(50, activation='relu')(z)
@@ -997,7 +996,7 @@ def default_bhv(num_bvh_inputs, input_shape):
     y = Dense(num_bvh_inputs * 2, activation='relu')(y)
     y = Dense(num_bvh_inputs * 2, activation='relu')(y)
     
-    z = concatenate([x, y])
+    z = Concatenate()([x, y])
     z = Dense(100, activation='relu')(z)
     z = Dropout(.1)(z)
     z = Dense(50, activation='relu')(z)

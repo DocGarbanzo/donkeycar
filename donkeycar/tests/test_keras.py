@@ -35,7 +35,12 @@ def create_models(keras_pilot, dir):
     kl.load(tflite_model_path)
     # save model in savedmodel format
     savedmodel_path = os.path.join(dir, 'model.savedmodel')
-    interpreter.model.save(savedmodel_path)
+    # Keras 3 compatibility: use export() for SavedModel format
+    if hasattr(interpreter.model, 'export'):
+        interpreter.model.export(savedmodel_path, format='tf_saved_model')
+    else:
+        # Keras 2 compatibility
+        interpreter.model.save(savedmodel_path)
     krt = None
     # load tensorrt only if supported
     if has_trt_support():

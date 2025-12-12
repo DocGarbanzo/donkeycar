@@ -142,8 +142,21 @@ class KerasInterpreter(Interpreter):
         if type(output_shape) is not list:
             output_shape = [output_shape]
 
-        self.input_keys = self.model.input_names
-        self.output_keys = self.model.output_names
+        # Keras 3 compatibility: extract names from inputs/outputs layers
+        # instead of using input_names/output_names attributes
+        if hasattr(self.model, 'input_names'):
+            # Keras 2 compatibility
+            self.input_keys = self.model.input_names
+        else:
+            # Keras 3: get names from input layers
+            self.input_keys = [inp.name for inp in self.model.inputs]
+        
+        if hasattr(self.model, 'output_names'):
+            self.output_keys = self.model.output_names
+        else:
+            # Keras 3: get names from output layers
+            self.output_keys = [out.name for out in self.model.outputs]
+        
         self.shapes = (dict(zip(self.input_keys, input_shape)),
                        dict(zip(self.output_keys, output_shape)))
 
@@ -329,8 +342,15 @@ class TensorRT(Interpreter):
             if ext == '.savedmodel':
                 # first load tf model format to extract input and output keys
                 model = tf.keras.models.load_model(model_path, compile=False)
-                self.input_keys = model.input_names
-                self.output_keys = model.output_names
+                # Keras 3 compatibility: extract names from inputs/outputs
+                if hasattr(model, 'input_names'):
+                    # Keras 2 compatibility
+                    self.input_keys = model.input_names
+                    self.output_keys = model.output_names
+                else:
+                    # Keras 3: get names from input/output layers
+                    self.input_keys = [inp.name for inp in model.inputs]
+                    self.output_keys = [out.name for out in model.outputs]
                 converter \
                     = trt.TrtGraphConverterV2(input_saved_model_dir=model_path)
                 self.graph_func = converter.convert()
