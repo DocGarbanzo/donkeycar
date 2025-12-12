@@ -41,18 +41,18 @@ class SegmentType(Enum):
 
 def normalize_angle(angle):
     """
-    Normalize angle to range [-180, 180] degrees
+    Normalize angle to range [-pi, pi] radians
 
     Args:
-        angle: Angle in degrees
+        angle: Angle in radians
 
     Returns:
-        Normalized angle in range [-180, 180]
+        Normalized angle in range [-pi, pi]
     """
-    while angle > 180:
-        angle -= 360
-    while angle < -180:
-        angle += 360
+    while angle > np.pi:
+        angle -= 2 * np.pi
+    while angle < -np.pi:
+        angle += 2 * np.pi
     return angle
 
 
@@ -61,11 +61,11 @@ def angle_difference(a1, a2):
     Calculate smallest difference between two angles
 
     Args:
-        a1: First angle in degrees
-        a2: Second angle in degrees
+        a1: First angle in radians
+        a2: Second angle in radians
 
     Returns:
-        Smallest angular difference in degrees
+        Smallest angular difference in radians
     """
     diff = normalize_angle(a2 - a1)
     return diff
@@ -76,15 +76,14 @@ def circular_mean(angles):
     Calculate mean of circular quantities (angles)
 
     Args:
-        angles: Array of angles in degrees
+        angles: Array of angles in radians
 
     Returns:
-        Mean angle in degrees
+        Mean angle in radians
     """
-    angles_rad = np.deg2rad(angles)
-    sin_mean = np.mean(np.sin(angles_rad))
-    cos_mean = np.mean(np.cos(angles_rad))
-    return np.rad2deg(np.arctan2(sin_mean, cos_mean))
+    sin_mean = np.mean(np.sin(angles))
+    cos_mean = np.mean(np.cos(angles))
+    return np.arctan2(sin_mean, cos_mean)
 
 
 def circular_std(angles):
@@ -92,25 +91,26 @@ def circular_std(angles):
     Calculate standard deviation of circular quantities (angles)
 
     Args:
-        angles: Array of angles in degrees
+        angles: Array of angles in radians
 
     Returns:
-        Standard deviation in degrees
+        Standard deviation in radians
     """
-    angles_rad = np.deg2rad(angles)
-    sin_mean = np.mean(np.sin(angles_rad))
-    cos_mean = np.mean(np.cos(angles_rad))
+    sin_mean = np.mean(np.sin(angles))
+    cos_mean = np.mean(np.cos(angles))
     R = np.sqrt(sin_mean**2 + cos_mean**2)
     # Circular standard deviation
     std_rad = np.sqrt(-2 * np.log(R))
-    return np.rad2deg(std_rad)
+    return std_rad
 
 
 class MultiLapData:
     """
     Container for raw multi-lap course data
 
-    Loads CSV data with columns: timestamp, x, y, heading
+    Loads data from CSV files or Tub directories
+    CSV columns: timestamp, x, y, heading (radians)
+    Tub fields: _timestamp_ms, car/pos, car/heading (radians)
     Automatically detects and separates individual laps
     """
 
@@ -119,21 +119,59 @@ class MultiLapData:
         self.laps = []
         self.num_laps = 0
 
+    def load_data(self, source: str,
+                  lap_detection_threshold: float = 2.0,
+                  min_lap_length: int = 50) -> None:
+        """
+        Load multi-lap data from CSV file or Tub directory
+
+        Args:
+            source: Path to CSV file or Tub directory
+            lap_detection_threshold: Distance threshold for lap (meters)
+            min_lap_length: Minimum number of points per lap
+        """
+        import os
+
+        if not os.path.exists(source):
+            raise FileNotFoundError(f"Source not found: {source}")
+
+        is_csv = os.path.isfile(source) and source.endswith('.csv')
+        is_tub = os.path.isdir(source)
+
+        if not is_csv and not is_tub:
+            raise ValueError(
+                "Source must be CSV file or Tub directory")
+
+        if is_csv:
+            self._load_from_csv(source)
+        else:
+            self._load_from_tub(source)
+
+        # Detect laps
+        self._detect_laps(lap_detection_threshold, min_lap_length)
+
+        logger.info(f"Loaded {len(self.raw_data)} points from {source}")
+        logger.info(f"Detected {self.num_laps} laps")
+
     def load_csv(self, filepath: str,
                  lap_detection_threshold: float = 2.0,
                  min_lap_length: int = 50) -> None:
         """
-        Load multi-lap data from CSV file
+        Load multi-lap data from CSV file (backward compatibility)
 
         Args:
             filepath: Path to CSV file
-            lap_detection_threshold: Distance threshold for lap detection (meters)
+            lap_detection_threshold: Distance threshold for lap (meters)
             min_lap_length: Minimum number of points per lap
         """
-        # Load CSV data
+        self.load_data(filepath, lap_detection_threshold, min_lap_length)
+
+    def _load_from_csv(self, filepath: str) -> None:
+        """Load data from CSV file"""
         try:
-            self.raw_data = np.genfromtxt(filepath, delimiter=',',
-                                         names=True, dtype=None, encoding='utf-8')
+            self.raw_data = np.genfromtxt(
+                filepath, delimiter=',',
+                names=True, dtype=None, encoding='utf-8')
         except Exception as e:
             logger.error(f"Failed to load CSV file: {e}")
             raise
@@ -144,11 +182,39 @@ class MultiLapData:
             if col not in self.raw_data.dtype.names:
                 raise ValueError(f"Missing required column: {col}")
 
-        # Detect laps
-        self._detect_laps(lap_detection_threshold, min_lap_length)
+    def _load_from_tub(self, tub_path: str) -> None:
+        """Load data from Tub directory"""
+        from donkeycar.parts.tub_v2 import Tub
 
-        logger.info(f"Loaded {len(self.raw_data)} points from {filepath}")
-        logger.info(f"Detected {self.num_laps} laps")
+        tub = Tub(tub_path, read_only=True)
+
+        # Extract data from tub records
+        data_rows = []
+        for record in tub:
+            # Get timestamp in seconds
+            timestamp = record.get('_timestamp_ms', 0) / 1000.0
+
+            # Get position (car/pos is [x, y, z])
+            pos = record.get('car/pos')
+            if pos is None or len(pos) < 2:
+                continue
+            x, y = pos[0], pos[1]
+
+            # Get heading in radians
+            heading = record.get('car/heading', 0.0)
+
+            data_rows.append((timestamp, x, y, heading))
+
+        tub.close()
+
+        if not data_rows:
+            raise ValueError(f"No IMU path data found in Tub: {tub_path}")
+
+        # Convert to structured array matching CSV format
+        self.raw_data = np.array(
+            data_rows,
+            dtype=[('timestamp', 'f8'), ('x', 'f8'),
+                   ('y', 'f8'), ('heading', 'f8')])
 
     def _detect_laps(self, threshold: float, min_length: int) -> None:
         """
@@ -359,13 +425,12 @@ class MeanCourse:
             x_new = np.interp(s_new, s, x)
             y_new = np.interp(s_new, s, y)
 
-            # Interpolate heading (circular)
-            heading_rad = np.deg2rad(heading)
-            sin_h = np.sin(heading_rad)
-            cos_h = np.cos(heading_rad)
+            # Interpolate heading (circular, already in radians)
+            sin_h = np.sin(heading)
+            cos_h = np.cos(heading)
             sin_h_new = np.interp(s_new, s, sin_h)
             cos_h_new = np.interp(s_new, s, cos_h)
-            heading_new = np.rad2deg(np.arctan2(sin_h_new, cos_h_new))
+            heading_new = np.arctan2(sin_h_new, cos_h_new)
 
             resampled.append({'x': x_new, 'y': y_new, 'heading': heading_new})
 
@@ -477,18 +542,17 @@ class MeanCourse:
             self.x = savgol_filter(self.x, pos_window, pos_order)
             self.y = savgol_filter(self.y, pos_window, pos_order)
 
-        # Moving average for heading (circular)
+        # Moving average for heading (circular, already in radians)
         if head_window >= 3:
-            heading_rad = np.deg2rad(self.heading)
-            sin_h = np.sin(heading_rad)
-            cos_h = np.cos(heading_rad)
+            sin_h = np.sin(self.heading)
+            cos_h = np.cos(self.heading)
 
             # Convolve with uniform kernel
             kernel = np.ones(head_window) / head_window
             sin_h_smooth = np.convolve(sin_h, kernel, mode='same')
             cos_h_smooth = np.convolve(cos_h, kernel, mode='same')
 
-            self.heading = np.rad2deg(np.arctan2(sin_h_smooth, cos_h_smooth))
+            self.heading = np.arctan2(sin_h_smooth, cos_h_smooth)
 
     def _compute_distance(self) -> None:
         """
@@ -688,22 +752,23 @@ class CourseSegmentation:
         """
         x = self.mean_course.x
         y = self.mean_course.y
-        heading = np.deg2rad(self.mean_course.heading)
+        heading = self.mean_course.heading  # Already in radians
         distance = self.mean_course.distance
 
         # Calculate curvature using finite differences
-        # κ = dθ/ds
+        # κ = dθ/ds (radians/meter)
         window = self.params['curvature_window']
 
         curvature = np.zeros(len(heading))
 
         for i in range(window, len(heading) - window):
-            # Central difference
-            dtheta = normalize_angle(np.rad2deg(heading[i + window] - heading[i - window]))
+            # Central difference (in radians)
+            dtheta = normalize_angle(
+                heading[i + window] - heading[i - window])
             ds = distance[i + window] - distance[i - window]
 
             if ds > 0:
-                curvature[i] = np.deg2rad(dtheta) / ds
+                curvature[i] = dtheta / ds
 
         # Handle edges
         curvature[:window] = curvature[window]

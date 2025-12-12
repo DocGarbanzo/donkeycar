@@ -277,6 +277,7 @@ class BNO055Ada:
         self.on = True
         # euler angles are in z, y, x order in the sensor
         self.euler = np.array(self.sensor.euler[::-1])
+        self.heading = math.radians(90 - self.euler[2])
         self.alpha = alpha
         self.record_path = record_path
         self.correction = correction  # (corr_x, corr_y)
@@ -313,18 +314,19 @@ class BNO055Ada:
             self.euler *= (1.0 - self.alpha)
             self.euler += self.alpha * euler_reading
 
-        if self.record_path and self.odometer_speed is not None:
+        heading_deg = (90.0 - self.euler[2])
+        self.heading = math.radians(heading_deg)
+        
+        if self.odometer_speed is not None:
             # Use 2D position estimation with odometer speed and heading (Euler z-angle)
             # Euler z-angle (heading/yaw) is in degrees, 360° = 0° = forward (parallel to y-axis)
             # Convert to standard math coordinates (0° = +y, 90° = +x)
             # add angular correction
-            heading_deg = (90.0 - self.euler[2])
-            heading_rad = math.radians(heading_deg)
 
             # Calculate 2D velocity components using odometer speed and heading
             # X-axis: right direction, Y-axis: forward direction
-            vx = self.odometer_speed * math.cos(heading_rad)  # right velocity
-            vy = self.odometer_speed * math.sin(heading_rad)  # forward velocity
+            vx = self.odometer_speed * math.cos(self.heading)  # right velocity
+            vy = self.odometer_speed * math.sin(self.heading)  # forward velocity
 
             # Update 2D position using kinematics
             self.pos[0] += vx * dt
@@ -338,8 +340,9 @@ class BNO055Ada:
                 self.pos[1] += step_distance * self.correction[1]
 
             # Store path with 2D coordinates and odometer speed
-            self.path.append((new_time, self.pos[0], self.pos[1],
-                              self.euler[2], self.odometer_speed))
+            if self.record_path:
+                self.path.append((new_time, self.pos[0], self.pos[1],
+                                  self.heading, self.odometer_speed))
 
         self.time = new_time
 
@@ -348,29 +351,26 @@ class BNO055Ada:
             self.poll()
 
     def run_threaded(self, odometer_speed=None):
-        if odometer_speed is not None:
-            self.odometer_speed = odometer_speed
-        return self.euler, self.accel, self.gyro
+        self.odometer_speed = odometer_speed
+        return self.euler, self.accel, self.gyro, self.pos, self.heading
 
     def run(self, odometer_speed=None):
-        if odometer_speed is not None:
-            self.odometer_speed = odometer_speed
+        self.odometer_speed = odometer_speed
         self.poll()
-        return self.euler, self.accel
+        return self.euler, self.accel, self.gyro, self.pos, self.heading
 
     def shutdown(self):
         self.on = False
         logger.info("Shutting down BNO055...")
-        if not self.record_path:
-            return
-        _save_imu_path_to_csv(self.path, 'imu.csv', 'BNO055')
+        if self.record_path:
+            _save_imu_path_to_csv(self.path, 'imu.csv', 'BNO055')
 
 
 if __name__ == "__main__":
     import sys
     from sys import stdout
     import threading
-    from donkeycar.utilities.imu_path_visualizer import PathPlotter
+    from donkeycar.scripts.imu_path_visualizer import PathPlotter
 
     logging.basicConfig(level=logging.INFO)
     np.set_printoptions(precision=4, sign='+', floatmode='fixed',

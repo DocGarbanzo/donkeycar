@@ -682,14 +682,14 @@ class Monitor(BaseCommand):
 
 
 class ImuPathVisualizer(BaseCommand):
-    """Command for visualizing IMU path data from CSV files."""
+    """Command for visualizing IMU path data from CSV files or Tub directories."""
 
     def parse_args(self, args):
         parser = argparse.ArgumentParser(
             prog='imupath',
-            usage='%(prog)s [options] [csv_file]')
-        parser.add_argument('csv_file', nargs='?', default='imu.csv',
-                           help='path to IMU CSV file (default: imu.csv)')
+            usage='%(prog)s [options] [data_source]')
+        parser.add_argument('data_source', nargs='?', default='imu.csv',
+                           help='path to IMU CSV file or Tub directory (default: imu.csv)')
         parser.add_argument('--drift-correction', action='store_true',
                            help='enable loop drift correction')
         parser.add_argument('--downsample-factor', type=int, default=None,
@@ -701,10 +701,10 @@ class ImuPathVisualizer(BaseCommand):
 
     def run(self, args):
         args = self.parse_args(args)
-        from donkeycar.utilities.imu_path_visualizer import (
+        from donkeycar.scripts.imu_path_visualizer import (
             visualize_imu_path)
 
-        visualize_imu_path(args.csv_file,
+        visualize_imu_path(args.data_source,
                           correct_drift=args.drift_correction,
                           downsample_factor=args.downsample_factor)
 

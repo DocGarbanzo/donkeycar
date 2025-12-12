@@ -86,7 +86,8 @@ class PathPlotter:
     def stop(self):
         """Stop the plotting process."""
         self.running.value = 0
-        self.plot_proc.join()
+        if self.plot_proc is not None:
+            self.plot_proc.join()
 
     def append(self, x):
         """
@@ -137,12 +138,14 @@ def correct_loop_drift(df, min_loop_distance=1.0, max_distance=0.5,
         for i, idx in enumerate(indices):
             x = data.iloc[idx]['x']
             y = data.iloc[idx]['y']
-            if show_timestamps:
-                t = data.iloc[idx]['t']
-                print(f"    [{i+1}] idx={idx}, t={t:.1f}, "
-                      f"pos=[{x:.3f}, {y:.3f}]")
-            else:
+
+            if not show_timestamps:
                 print(f"    [{i+1}] idx={idx}, pos=[{x:.3f}, {y:.3f}]")
+                continue
+
+            t = data.iloc[idx]['t']
+            print(f"    [{i+1}] idx={idx}, t={t:.1f}, "
+                  f"pos=[{x:.3f}, {y:.3f}]")
 
     def find_loop_end(data, start_idx, min_distance_traveled,
                       max_distance_from_origin):
@@ -282,20 +285,22 @@ def correct_loop_drift(df, min_loop_distance=1.0, max_distance=0.5,
             if len(next_points) == 3:
                 next_avg = sum(next_points) / len(next_points)
 
-                # If the next average is higher, this is a potential reversal
-                # Use smaller threshold for real data (0.1% instead of 2%)
-                if next_avg > current_avg * 1.001:  # 0.1% tolerance for gentle increases
+                # If next average is higher, this is a potential reversal
+                # 0.1% tolerance for gentle increases
+                if next_avg > current_avg * 1.001:
                     actual_idx = vicinity_start_idx + i
                     potential_reversals.append(
                         (actual_idx, current_avg, next_avg))
 
-        # Select reversal that occurs soon after entering vicinity (prioritize early + close)
+        # Select reversal occurring soon after entering vicinity
+        # (prioritize early + close)
         # This prevents selecting late coincidental approaches to the origin
         if potential_reversals:
             # Filter for reversals that are reasonably close (within 2x of
             # max_distance)
             good_reversals = [
-                r for r in potential_reversals if r[1] <= max_distance_from_origin * 2]
+                r for r in potential_reversals
+                if r[1] <= max_distance_from_origin * 2]
 
             if good_reversals:
                 # Prioritize reversals that occur soon after entering vicinity
@@ -311,36 +316,43 @@ def correct_loop_drift(df, min_loop_distance=1.0, max_distance=0.5,
                     if idx <= vicinity_start_idx + vicinity_window:
                         time_factor = (idx - vicinity_start_idx) / \
                             vicinity_window  # 0 = earliest, 1 = latest
-                        distance_factor = distance / max_distance_from_origin  # 0 = closest, 1+ = farther
-                        score = time_factor * 0.7 + distance_factor * 0.3  # Prioritize early time
+                        # 0 = closest, 1+ = farther
+                        distance_factor = (distance /
+                                           max_distance_from_origin)
+                        # Prioritize early time
+                        score = (time_factor * 0.7 +
+                                 distance_factor * 0.3)
                         scored_reversals.append((score, reversal))
 
                 if scored_reversals:
                     # Select the reversal with the best (lowest) score
                     best_score, best_reversal = min(scored_reversals)
                     reversal_idx, current_avg, next_avg = best_reversal
-                    print(
-                        f"  Found {len(potential_reversals)} potential reversals, {len(good_reversals)} within 2x max_distance")
-                    print(
-                        f"  {len(scored_reversals)} within vicinity window, selected best scoring at index {reversal_idx}")
-                    print(
-                        f"    Score: {best_score:.3f} (lower=better), Distance: {current_avg:.3f}m")
-                    print(
-                        f"    Distance increase: {((next_avg/current_avg - 1)*100):.1f}%")
+                    print(f"  Found {len(potential_reversals)} potential "
+                          f"reversals, {len(good_reversals)} within 2x "
+                          f"max_distance")
+                    print(f"  {len(scored_reversals)} within vicinity "
+                          f"window, selected best scoring at index "
+                          f"{reversal_idx}")
+                    print(f"    Score: {best_score:.3f} (lower=better), "
+                          f"Distance: {current_avg:.3f}m")
+                    pct_increase = ((next_avg/current_avg - 1)*100)
+                    print(f"    Distance increase: {pct_increase:.1f}%")
                     return reversal_idx
                 else:
                     # No reversals in vicinity window, take earliest good one
                     best_reversal = min(good_reversals, key=lambda x: x[0])
                     reversal_idx, current_avg, next_avg = best_reversal
-                    print(
-                        f"  No reversals in vicinity window, selected earliest good reversal at index {reversal_idx}")
+                    print(f"  No reversals in vicinity window, "
+                          f"selected earliest good reversal at "
+                          f"index {reversal_idx}")
                     return reversal_idx
             else:
                 # Fallback: if no good reversals, take the earliest of all
                 best_reversal = min(potential_reversals, key=lambda x: x[0])
                 reversal_idx, current_avg, next_avg = best_reversal
-                print(
-                    f"  Found {len(potential_reversals)} potential reversals, none within 2x max_distance")
+                print(f"  Found {len(potential_reversals)} potential "
+                      f"reversals, none within 2x max_distance")
                 print(f"  Selected EARLIEST reversal at index {reversal_idx}")
                 print(f"    Current avg distance: {current_avg:.3f}m")
                 return reversal_idx
@@ -349,8 +361,8 @@ def correct_loop_drift(df, min_loop_distance=1.0, max_distance=0.5,
         min_distance = min(distances_to_start)
         min_idx = distances_to_start.index(min_distance)
         min_distance_idx = vicinity_start_idx + min_idx
-        print(
-            f"  No clear reversal found, using minimum distance point at index {min_distance_idx}")
+        print(f"  No clear reversal found, using minimum distance "
+              f"point at index {min_distance_idx}")
         print(f"    Minimum distance: {min_distance:.3f}m")
         return min_distance_idx
 
@@ -358,8 +370,8 @@ def correct_loop_drift(df, min_loop_distance=1.0, max_distance=0.5,
     corrected_df = df.copy()
 
     print(f"Starting drift correction with {len(df)} total points")
-    print(
-        f"Parameters: min_loop_distance={min_loop_distance}, max_distance={max_distance}, max_loops={max_loops}")
+    print(f"Parameters: min_loop_distance={min_loop_distance}, "
+          f"max_distance={max_distance}, max_loops={max_loops}")
 
     loop_end_indices = []
     loop_drift_amounts = []
@@ -390,8 +402,8 @@ def correct_loop_drift(df, min_loop_distance=1.0, max_distance=0.5,
 
         # Found a loop!
         t = corrected_df.iloc[loop_end_idx]['t']
-        print(
-            f"{loop_num}) LOOP {loop_num} END FOUND: index={loop_end_idx}, timestamp={t:.1f}")
+        print(f"{loop_num}) LOOP {loop_num} END FOUND: "
+              f"index={loop_end_idx}, timestamp={t:.1f}")
 
         loop_end_indices.append(loop_end_idx)
 
@@ -407,8 +419,8 @@ def correct_loop_drift(df, min_loop_distance=1.0, max_distance=0.5,
         loop_drift = loop_end_pos - loop_start_pos
         loop_drift_amounts.append(loop_drift)
 
-        print(
-            f"{loop_num+1}) CORRECTION AMOUNT for Loop {loop_num}: [{loop_drift[0]:.3f}, {loop_drift[1]:.3f}]")
+        print(f"{loop_num+1}) CORRECTION AMOUNT for Loop {loop_num}: "
+              f"[{loop_drift[0]:.3f}, {loop_drift[1]:.3f}]")
 
         # Show loop points before correction
         print(f"{loop_num+2}) LOOP {loop_num} BEFORE CORRECTION:")
@@ -483,11 +495,12 @@ def correct_loop_drift(df, min_loop_distance=1.0, max_distance=0.5,
     for i, end_idx in enumerate(loop_end_indices):
         loop_start = 0 if i == 0 else loop_end_indices[i - 1]
         print(f"  Loop {i+1}: indices {loop_start} to {end_idx}")
-        print(
-            f"    End position: [{corrected_df.iloc[end_idx]['x']:.6f}, {corrected_df.iloc[end_idx]['y']:.6f}]")
+        end_x = corrected_df.iloc[end_idx]['x']
+        end_y = corrected_df.iloc[end_idx]['y']
+        print(f"    End position: [{end_x:.6f}, {end_y:.6f}]")
 
-    print(
-        f"\nFinal result: {len(corrected_df)} points with {num_loops_found} loops corrected")
+    print(f"\nFinal result: {len(corrected_df)} points with "
+          f"{num_loops_found} loops corrected")
     print(f"Final data range: "
           f"x=[{corrected_df['x'].min():.3f}, "
           f"{corrected_df['x'].max():.3f}], "
@@ -497,14 +510,15 @@ def correct_loop_drift(df, min_loop_distance=1.0, max_distance=0.5,
     return corrected_df, loop_end_indices, loop_drift_amounts
 
 
-def visualize_imu_path(csv_file='imu.csv', correct_drift=False,
+def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                        min_loop_distance=1.0, max_distance=0.5,
                        downsample_factor=None):
     """
     Load and visualize IMU path data with interactive time slider.
 
     Args:
-        csv_file (str): Path to CSV file containing t,x,y,z,v columns
+        data_source (str): Path to CSV file or Tub directory containing
+                           IMU path data
         correct_drift (bool): Apply loop drift correction to path data
                               (default: False)
         min_loop_distance (float): Minimum distance to travel before
@@ -516,20 +530,67 @@ def visualize_imu_path(csv_file='imu.csv', correct_drift=False,
     """
     import matplotlib.pyplot as plt
     from matplotlib.widgets import Slider
+    import math
 
-    # Check if file exists
-    if not os.path.exists(csv_file):
-        print(
-            f"File {csv_file} not found. Run the IMU with record_path=True first.")
+    # Check if source exists
+    if not os.path.exists(data_source):
+        print(f"File or directory {data_source} not found.")
         return
 
-    # Load CSV data
-    df = pd.read_csv(csv_file)
-    if df.empty:
-        print(f"No data found in {csv_file}")
+    # Determine if source is CSV or Tub directory
+    is_csv = os.path.isfile(data_source) and data_source.endswith('.csv')
+    is_tub = os.path.isdir(data_source)
+
+    if not is_csv and not is_tub:
+        print(f"Source must be either a CSV file or a Tub directory")
         return
 
-    print(f"Loaded {len(df)} data points from {csv_file}")
+    # Load data based on source type
+    if is_csv:
+        df = pd.read_csv(data_source)
+        if df.empty:
+            print(f"No data found in {data_source}")
+            return
+        # CSV format: t, x, y, h (heading in degrees), v (velocity)
+        # Ensure expected columns exist
+        if not all(col in df.columns for col in ['t', 'x', 'y', 'v']):
+            print(f"CSV must contain columns: t, x, y, v")
+            return
+        print(f"Loaded {len(df)} data points from CSV: {data_source}")
+    else:
+        # Load from Tub
+        from donkeycar.parts.tub_v2 import Tub
+        tub = Tub(data_source, read_only=True)
+
+        # Extract data from tub records
+        data_rows = []
+        for record in tub:
+            # Get timestamp in seconds (tub stores milliseconds)
+            t = record.get('_timestamp_ms', 0) / 1000.0
+
+            # Get position (car/pos is a vector [x, y, z])
+            pos = record.get('car/pos')
+            if pos is None or len(pos) < 2:
+                continue
+            x, y = pos[0], pos[1]
+
+            # Get velocity (car/speed)
+            v = record.get('car/speed', 0.0)
+
+            # Get heading (in radians, convert to degrees for consistency)
+            h_rad = record.get('car/heading', 0.0)
+            h = math.degrees(h_rad) if h_rad is not None else 0.0
+
+            data_rows.append({'t': t, 'x': x, 'y': y, 'h': h, 'v': v})
+
+        tub.close()
+
+        if not data_rows:
+            print(f"No IMU path data found in Tub: {data_source}")
+            return
+
+        df = pd.DataFrame(data_rows)
+        print(f"Loaded {len(df)} data points from Tub: {data_source}")
 
     # Apply drift correction if requested
     loop_end_indices = []
@@ -577,7 +638,7 @@ def visualize_imu_path(csv_file='imu.csv', correct_drift=False,
     ax.set_aspect('equal')
 
     # Create color map based on speed
-    speeds = df['v'].values
+    speeds: np.ndarray = df['v'].to_numpy(dtype=np.float32)
 
     # Plot full trajectory (faded) - downsample for better performance
     if downsample_factor is None:
@@ -615,8 +676,10 @@ def visualize_imu_path(csv_file='imu.csv', correct_drift=False,
                         color=color)
 
     # File name text - position in top area above plot
-    file_name = os.path.basename(csv_file)
-    file_text = _create_status_text(fig, 0.97, f'File: {file_name}')
+    source_name = os.path.basename(data_source)
+    source_type = "CSV" if is_csv else "Tub"
+    file_text = _create_status_text(
+        fig, 0.97, f'{source_type}: {source_name}')
 
     # Speed text - position in top area above plot
     speed_text = _create_status_text(fig, 0.89)

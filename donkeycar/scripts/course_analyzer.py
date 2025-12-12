@@ -29,7 +29,7 @@ import numpy as np
 from pathlib import Path
 
 # Add parent directory to path to import donkeycar modules
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from donkeycar.parts.course_analysis import (
     MultiLapData, MeanCourse, CourseSegmentation, SegmentEstimator, SegmentType
@@ -49,9 +49,10 @@ Examples:
     )
 
     # Input/output
-    parser.add_argument('input_csv', help='Input CSV file with multi-lap data')
+    parser.add_argument('data_source',
+                        help='Input CSV file or Tub directory with multi-lap data')
     parser.add_argument('--output-dir', '-o', default='./course_output',
-                        help='Output directory for results (default: ./course_output)')
+                        help='Output directory (default: ./course_output)')
 
     # Lap detection parameters
     parser.add_argument('--lap-threshold', type=float, default=2.0,
@@ -83,10 +84,16 @@ Examples:
 
     args = parser.parse_args()
 
-    # Check input file exists
-    if not os.path.exists(args.input_csv):
-        print(f"Error: Input file '{args.input_csv}' not found")
+    # Check input source exists
+    if not os.path.exists(args.data_source):
+        print(f"Error: Source '{args.data_source}' not found")
         return 1
+
+    # Determine source type
+    is_csv = os.path.isfile(args.data_source) and \
+        args.data_source.endswith('.csv')
+    is_tub = os.path.isdir(args.data_source)
+    source_type = "CSV" if is_csv else "Tub"
 
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
@@ -94,7 +101,7 @@ Examples:
     print("=" * 70)
     print("DonkeyCar Course Analyzer")
     print("=" * 70)
-    print(f"Input file: {args.input_csv}")
+    print(f"Input source ({source_type}): {args.data_source}")
     print(f"Output directory: {args.output_dir}")
     print()
 
@@ -104,13 +111,13 @@ Examples:
 
     multilap_data = MultiLapData()
     try:
-        multilap_data.load_csv(
-            args.input_csv,
+        multilap_data.load_data(
+            args.data_source,
             lap_detection_threshold=args.lap_threshold,
             min_lap_length=args.min_lap_points
         )
     except Exception as e:
-        print(f"Error loading CSV: {e}")
+        print(f"Error loading data: {e}")
         return 1
 
     print(f"  Loaded {len(multilap_data.raw_data)} data points")
