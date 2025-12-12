@@ -573,7 +573,7 @@ class TestSegmentEstimator(unittest.TestCase):
         # Find a point on the course
         x, y = mean_course.x[100], mean_course.y[100]
         correct_heading = mean_course.heading[100]
-        wrong_heading = normalize_angle(correct_heading + 180)
+        wrong_heading = normalize_angle(correct_heading + np.pi)  # Add 180 degrees in radians
 
         # Estimate with correct heading
         estimate1 = estimator.estimate(x, y, correct_heading)
