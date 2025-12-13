@@ -577,9 +577,9 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
             # Get velocity (car/speed)
             v = record.get('car/speed', 0.0)
 
-            # Get heading (in radians, convert to degrees for consistency)
-            h_rad = record.get('car/heading', 0.0)
-            h = math.degrees(h_rad) if h_rad is not None else 0.0
+            # Calculate heading from euler angles (car/euler is [x, y, z] in degrees)
+            euler = record.get('car/euler', [0, 0, 0])
+            h = 90.0 - euler[2]
 
             data_rows.append({'t': t, 'x': x, 'y': y, 'h': h, 'v': v})
 

@@ -20,6 +20,7 @@ Date: 2025
 import numpy as np
 import json
 import logging
+import math
 from typing import List, Optional, Tuple, Dict, Any
 from enum import Enum
 from scipy.signal import savgol_filter
@@ -110,7 +111,7 @@ class MultiLapData:
 
     Loads data from CSV files or Tub directories
     CSV columns: timestamp, x, y, heading (radians)
-    Tub fields: _timestamp_ms, car/pos, car/heading (radians)
+    Tub fields: _timestamp_ms, car/pos, car/euler (heading derived from euler[2])
     Automatically detects and separates individual laps
     """
 
@@ -203,8 +204,10 @@ class MultiLapData:
                 continue
             x, y = pos[0], pos[1]
 
-            # Get heading in radians
-            heading = record.get('car/heading', 0.0)
+            # Calculate heading from euler angles (car/euler is [x, y, z] in degrees)
+            euler = record.get('car/euler', [0, 0, 0])
+            heading_deg = 90.0 - euler[2]
+            heading = math.radians(heading_deg)
 
             data_rows.append((timestamp, x, y, heading))
 

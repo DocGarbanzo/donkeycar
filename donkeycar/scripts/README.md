@@ -56,7 +56,7 @@ python imu_path_visualizer.py imu.csv --drift-correction
 - Automatically extracts from Tub records:
   - `_timestamp_ms` → time
   - `car/pos` → x, y coordinates
-  - `car/heading` → heading (radians, converted to degrees)
+  - `car/euler` → heading (derived from euler[2]: 90° - euler[2])
   - `car/speed` → velocity
 
 ### Controls
@@ -156,7 +156,7 @@ timestamp,x,y,heading
 Extracts from Tub records:
 - `_timestamp_ms` → timestamp (converted to seconds)
 - `car/pos` → x, y coordinates
-- `car/heading` → heading (radians)
+- `car/euler` → heading (derived from euler[2]: 90° - euler[2], then converted to radians)
 
 ### Output Files
 
@@ -285,7 +285,8 @@ rows = []
 for record in tub:
     t = record['_timestamp_ms'] / 1000.0
     pos = record['car/pos']
-    heading = record['car/heading']
+    euler = record['car/euler']
+    heading = math.radians(90.0 - euler[2])  # Convert euler to heading
     speed = record['car/speed']
     rows.append({
         'timestamp': t,
