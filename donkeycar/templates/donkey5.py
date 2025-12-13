@@ -153,8 +153,7 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
     mpu = BNO055Ada(record_path=record_path, correction=cfg.IMU_PATH_CORRECTION)
     car.add(
         mpu, inputs=['car/speed'],
-        outputs=['car/euler', 'car/accel',
-                 'car/gyro', 'car/pos', 'car/heading'],
+        outputs=['car/euler', 'car/accel', 'car/gyro', 'car/pos'],
         threaded=True)
 
     # add voltmeter
@@ -276,12 +275,12 @@ def drive(cfg, use_pid=False, no_cam=True, model_path=None, model_type=None,
                   'pilot/throttle', 'user/wiper_on', 'user/mode',
                   'car/speed', 'car/inst_speed', 'car/distance', 'car/m_in_lap',
                   'car/lap', 'car/accel', 'car/gyro', 'car/euler',
-                  'car/pos', 'car/heading', 'car/voltage']
+                  'car/pos', 'car/voltage']
         types = ['image_array', 'float', 'float', 'float',
                  'float', 'bool', 'int',
                  'float', 'float', 'float', 'float',
                  'int', 'vector', 'vector', 'vector',
-                 'vector', 'float', 'float']
+                 'vector', 'float']
 
         tub_writer = TubWriter(base_path=cfg.DATA_PATH, inputs=inputs,
                                types=types, lap_timer=lap)

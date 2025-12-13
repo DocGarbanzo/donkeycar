@@ -316,7 +316,7 @@ class BNO055Ada:
 
         heading_deg = (90.0 - self.euler[2])
         self.heading = math.radians(heading_deg)
-        
+
         if self.odometer_speed is not None:
             # Use 2D position estimation with odometer speed and heading (Euler z-angle)
             # Euler z-angle (heading/yaw) is in degrees, 360° = 0° = forward (parallel to y-axis)
@@ -326,7 +326,8 @@ class BNO055Ada:
             # Calculate 2D velocity components using odometer speed and heading
             # X-axis: right direction, Y-axis: forward direction
             vx = self.odometer_speed * math.cos(self.heading)  # right velocity
-            vy = self.odometer_speed * math.sin(self.heading)  # forward velocity
+            vy = self.odometer_speed * \
+                math.sin(self.heading)  # forward velocity
 
             # Update 2D position using kinematics
             self.pos[0] += vx * dt
@@ -352,12 +353,12 @@ class BNO055Ada:
 
     def run_threaded(self, odometer_speed=None):
         self.odometer_speed = odometer_speed
-        return self.euler, self.accel, self.gyro, self.pos, self.heading
+        return self.euler, self.accel, self.gyro, self.pos
 
     def run(self, odometer_speed=None):
         self.odometer_speed = odometer_speed
         self.poll()
-        return self.euler, self.accel, self.gyro, self.pos, self.heading
+        return self.euler, self.accel, self.gyro, self.pos
 
     def shutdown(self):
         self.on = False
