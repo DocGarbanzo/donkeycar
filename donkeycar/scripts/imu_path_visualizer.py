@@ -631,8 +631,8 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                         left=0.08)  # Room for legend at top
 
     # Initial plot setup
-    ax.set_xlabel('X Position (Forward)')
-    ax.set_ylabel('Y Position (Left)')
+    ax.set_xlabel('X Position (Right)')
+    ax.set_ylabel('Y Position (Forward)')
     ax.set_title('IMU 2D Path Visualization')
     ax.grid(True, alpha=0.3)
     ax.set_aspect('equal')
