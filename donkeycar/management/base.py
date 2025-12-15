@@ -701,8 +701,7 @@ class ImuPathVisualizer(BaseCommand):
 
     def run(self, args):
         args = self.parse_args(args)
-        from donkeycar.scripts.imu_path_visualizer import (
-            visualize_imu_path)
+        from donkeycar.utilities.imu_visualization import visualize_imu_path
 
         visualize_imu_path(args.data_source,
                           correct_drift=args.drift_correction,

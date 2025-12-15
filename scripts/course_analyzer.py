@@ -44,7 +44,10 @@ def main():
 Examples:
   %(prog)s laps.csv
   %(prog)s laps.csv --output-dir ./output
-  %(prog)s laps.csv --lap-threshold 3.0 --resampling 0.2
+  %(prog)s laps.csv --lap-detection-method y_crossing --y-threshold 0.15
+  %(prog)s laps.csv --lap-detection-method drift --min-loop-distance 8.0
+  %(prog)s laps.csv --lap-detection-method distance --lap-threshold 3.0
+  %(prog)s laps.csv --resampling 0.2 --curvature-threshold 0.1
         """
     )
 
@@ -55,10 +58,19 @@ Examples:
                         help='Output directory (default: ./course_output)')
 
     # Lap detection parameters
+    parser.add_argument('--lap-detection-method', type=str, default='y_crossing',
+                        choices=['y_crossing', 'drift', 'distance'],
+                        help='Lap detection method (default: y_crossing)')
     parser.add_argument('--lap-threshold', type=float, default=2.0,
-                        help='Distance threshold for lap detection (meters, default: 2.0)')
-    parser.add_argument('--min-lap-points', type=int, default=50,
-                        help='Minimum points per lap (default: 50)')
+                        help='Distance threshold for lap detection with "distance" method (meters, default: 2.0)')
+    parser.add_argument('--min-lap-points', type=int, default=200,
+                        help='Minimum points per lap (default: 200)')
+    parser.add_argument('--min-loop-distance', type=float, default=1.0,
+                        help='Minimum loop distance for "drift" and "y_crossing" methods (meters, default: 1.0)')
+    parser.add_argument('--max-closure-distance', type=float, default=1.0,
+                        help='Maximum closure distance for "drift" method (meters, default: 1.0)')
+    parser.add_argument('--y-threshold', type=float, default=0.1,
+                        help='Y-coordinate threshold for "y_crossing" method (meters, default: 0.1)')
 
     # Mean course parameters
     parser.add_argument('--resampling', type=float, default=0.1,
@@ -113,8 +125,12 @@ Examples:
     try:
         multilap_data.load_data(
             args.data_source,
+            lap_detection_method=args.lap_detection_method,
             lap_detection_threshold=args.lap_threshold,
-            min_lap_length=args.min_lap_points
+            min_lap_length=args.min_lap_points,
+            min_loop_distance=args.min_loop_distance,
+            max_closure_distance=args.max_closure_distance,
+            y_threshold=args.y_threshold
         )
     except Exception as e:
         print(f"Error loading data: {e}")
