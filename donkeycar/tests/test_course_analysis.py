@@ -27,50 +27,58 @@ class TestAngleFunctions(unittest.TestCase):
     def test_normalize_angle(self):
         """Test angle normalization"""
         self.assertAlmostEqual(0, normalize_angle(0))
-        self.assertAlmostEqual(90, normalize_angle(90))
-        self.assertAlmostEqual(-90, normalize_angle(270))
-        # 180 can be either 180 or -180, both are valid
-        self.assertIn(normalize_angle(180), [180, -180])
-        self.assertAlmostEqual(0, normalize_angle(360))
-        self.assertAlmostEqual(10, normalize_angle(370))
-        self.assertAlmostEqual(-10, normalize_angle(-10))
+        self.assertAlmostEqual(np.deg2rad(90),
+                               normalize_angle(np.deg2rad(90)))
+        self.assertAlmostEqual(-np.deg2rad(90),
+                               normalize_angle(np.deg2rad(270)))
+        # pi can be either pi or -pi, both are valid
+        self.assertIn(normalize_angle(np.pi), [np.pi, -np.pi])
+        self.assertAlmostEqual(0, normalize_angle(np.deg2rad(360)))
+        self.assertAlmostEqual(np.deg2rad(10),
+                               normalize_angle(np.deg2rad(370)))
+        self.assertAlmostEqual(-np.deg2rad(10),
+                               normalize_angle(np.deg2rad(-10)))
 
     def test_angle_difference(self):
         """Test angle difference calculation"""
         self.assertAlmostEqual(0, angle_difference(0, 0))
-        self.assertAlmostEqual(90, angle_difference(0, 90))
-        self.assertAlmostEqual(-90, angle_difference(90, 0))
-        self.assertAlmostEqual(180, angle_difference(0, 180))
-        self.assertAlmostEqual(-179, angle_difference(0, 181))
-        self.assertAlmostEqual(10, angle_difference(350, 0))
+        self.assertAlmostEqual(np.deg2rad(90),
+                               angle_difference(0, np.deg2rad(90)))
+        self.assertAlmostEqual(-np.deg2rad(90),
+                               angle_difference(np.deg2rad(90), 0))
+        self.assertAlmostEqual(np.pi, angle_difference(0, np.pi))
+        self.assertAlmostEqual(-np.deg2rad(179),
+                               angle_difference(0, np.deg2rad(181)))
+        self.assertAlmostEqual(np.deg2rad(10),
+                               angle_difference(np.deg2rad(350), 0))
 
     def test_circular_mean(self):
         """Test circular mean calculation"""
         # Simple cases
-        angles = np.array([0, 90, 180, 270])
+        angles = np.deg2rad(np.array([0, 90, 180, 270]))
         mean = circular_mean(angles)
         # Mean should be undefined (close to origin) but atan2 will give some value
-        self.assertTrue(-180 <= mean <= 180)
+        self.assertTrue(-np.pi <= mean <= np.pi)
 
         # All same angle
-        angles = np.array([45, 45, 45])
+        angles = np.deg2rad(np.array([45, 45, 45]))
         mean = circular_mean(angles)
-        self.assertAlmostEqual(45, mean, places=5)
+        self.assertAlmostEqual(np.deg2rad(45), mean, places=5)
 
         # Crossing 0 degrees
-        angles = np.array([350, 10, 0, 360])
+        angles = np.deg2rad(np.array([350, 10, 0, 360]))
         mean = circular_mean(angles)
         self.assertAlmostEqual(0, mean, places=0)  # Should be close to 0
 
     def test_circular_std(self):
         """Test circular standard deviation"""
         # All same angle - zero std
-        angles = np.array([45, 45, 45])
+        angles = np.deg2rad(np.array([45, 45, 45]))
         std = circular_std(angles)
         self.assertAlmostEqual(0, std, places=3)
 
         # Small spread
-        angles = np.array([44, 45, 46])
+        angles = np.deg2rad(np.array([44, 45, 46]))
         std = circular_std(angles)
         self.assertLess(std, 5)  # Should be small
 
@@ -84,10 +92,12 @@ class TestMultiLapData(unittest.TestCase):
 
         Creates an oval track with specified number of laps
         """
-        # Generate oval track
-        t = np.linspace(0, 2 * np.pi * num_laps, num_laps * points_per_lap)
-        x = 10 * np.cos(t / num_laps)  # Oval with radius 10m
-        y = 5 * np.sin(t / num_laps)   # Oval with radius 5m
+        # Generate oval track with proper lap repetition and start below y=0
+        t = np.linspace(0, 2 * np.pi * num_laps,
+                        num_laps * points_per_lap, endpoint=False)
+        phase = -np.pi / 2  # Start below start/finish line
+        x = 10 * np.cos(t + phase)  # Oval with radius 10m
+        y = 5 * np.sin(t + phase)   # Oval with radius 5m
 
         # Add noise
         x += np.random.normal(0, 0.1, len(x))
@@ -96,7 +106,7 @@ class TestMultiLapData(unittest.TestCase):
         # Calculate heading
         dx = np.diff(x)
         dy = np.diff(y)
-        heading = np.arctan2(dy, dx) * 180 / np.pi
+        heading = np.arctan2(dy, dx)
         heading = np.append(heading, heading[-1])
 
         # Create CSV
@@ -188,7 +198,7 @@ class TestMeanCourse(unittest.TestCase):
                 # Calculate heading
                 dx = np.diff(x)
                 dy = np.diff(y)
-                heading = np.arctan2(dy, dx) * 180 / np.pi
+                heading = np.arctan2(dy, dx)
                 heading = np.append(heading, heading[-1])
 
                 # Timestamps
@@ -324,7 +334,7 @@ class TestCourseSegmentation(unittest.TestCase):
         # Calculate heading
         dx = np.diff(x)
         dy = np.diff(y)
-        heading = np.arctan2(dy, dx) * 180 / np.pi
+        heading = np.arctan2(dy, dx)
         heading = np.append(heading, heading[-1])
 
         # Calculate distance
@@ -381,7 +391,7 @@ class TestCourseSegmentation(unittest.TestCase):
         # Calculate heading
         dx = np.diff(x)
         dy = np.diff(y)
-        heading = np.arctan2(dy, dx) * 180 / np.pi
+        heading = np.arctan2(dy, dx)
         heading = np.append(heading, heading[-1])
 
         # Calculate distance
@@ -493,7 +503,7 @@ class TestSegmentEstimator(unittest.TestCase):
         # Calculate heading
         dx = np.diff(x)
         dy = np.diff(y)
-        heading = np.arctan2(dy, dx) * 180 / np.pi
+        heading = np.arctan2(dy, dx)
         heading = np.append(heading, heading[-1])
 
         # Calculate distance
@@ -573,7 +583,7 @@ class TestSegmentEstimator(unittest.TestCase):
         # Find a point on the course
         x, y = mean_course.x[100], mean_course.y[100]
         correct_heading = mean_course.heading[100]
-        wrong_heading = normalize_angle(correct_heading + 180)
+        wrong_heading = normalize_angle(correct_heading + np.pi)
 
         # Estimate with correct heading
         estimate1 = estimator.estimate(x, y, correct_heading)
@@ -650,7 +660,7 @@ class TestIntegration(unittest.TestCase):
 
                 dx = np.diff(x)
                 dy = np.diff(y)
-                heading = np.arctan2(dy, dx) * 180 / np.pi
+                heading = np.arctan2(dy, dx)
                 heading = np.append(heading, heading[-1])
 
                 timestamp = np.arange(len(t)) + lap * points_per_lap

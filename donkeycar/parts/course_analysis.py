@@ -30,6 +30,152 @@ from scipy.interpolate import interp1d
 logger = logging.getLogger(__name__)
 
 
+def find_loop_end_index_y_crossing(x: np.ndarray, y: np.ndarray,
+                                   start_idx: int = 0,
+                                   min_loop_distance: float = 1.0,
+                                   y_threshold: float = 0.1) -> Optional[int]:
+    """
+    Find loop end index by detecting when y crosses from negative to positive.
+
+    Args:
+        x: X coordinates array (unused, kept for API compatibility)
+        y: Y coordinates array
+        start_idx: Index to start searching from
+        min_loop_distance: Unused, kept for API compatibility
+        y_threshold: Unused, kept for API compatibility
+
+    Returns:
+        Index where y crosses from negative to positive, or None if not found
+    """
+    # Find first crossing from negative to positive
+    for i in range(start_idx, len(y) - 1):
+        if y[i] < 0 and y[i + 1] >= 0:
+            return i + 1
+
+    return None
+
+
+def find_loop_end_index(x: np.ndarray, y: np.ndarray,
+                        start_idx: int = 0,
+                        min_loop_distance: float = 5.0,
+                        max_distance: float = 1.0) -> Optional[int]:
+    """
+    Find loop end index using weighted average reversal point detection.
+
+    This is a simplified version of the drift correction algorithm
+    from imu_visualization.py, adapted for lap detection without
+    correction.
+
+    Args:
+        x: X coordinates array
+        y: Y coordinates array
+        start_idx: Index to start searching from
+        min_loop_distance: Minimum distance to travel before considering
+                          loop closure (meters)
+        max_distance: Maximum distance from start position to begin
+                     looking for reversal point (meters)
+
+    Returns:
+        Index of loop end point, or None if not found
+    """
+    if start_idx >= len(x) - 3:
+        return None
+
+    # Get loop start position
+    loop_start_pos = np.array([x[start_idx], y[start_idx]])
+
+    # Calculate cumulative distance from loop start
+    dx = np.diff(x[start_idx:])
+    dy = np.diff(y[start_idx:])
+    distances = np.sqrt(dx**2 + dy**2)
+    cumulative_distance = np.concatenate([[0], np.cumsum(distances)])
+
+    # Phase 1: Travel minimum distance
+    min_distance_idx = None
+    for i in range(len(cumulative_distance)):
+        if cumulative_distance[i] >= min_loop_distance:
+            min_distance_idx = start_idx + i
+            break
+
+    if min_distance_idx is None:
+        return None
+
+    # Phase 2: Find when we get close to the loop start
+    vicinity_start_idx = None
+    for i in range(min_distance_idx - start_idx, len(cumulative_distance)):
+        actual_idx = start_idx + i
+        if actual_idx >= len(x):
+            break
+
+        current_pos = np.array([x[actual_idx], y[actual_idx]])
+        distance_to_start = np.linalg.norm(current_pos - loop_start_pos)
+
+        if distance_to_start <= max_distance:
+            vicinity_start_idx = actual_idx
+            break
+
+    if vicinity_start_idx is None:
+        return None
+
+    # Phase 3: Find reversal point using weighted average
+    distances_to_start = []
+    for i in range(vicinity_start_idx, len(x)):
+        current_pos = np.array([x[i], y[i]])
+        dist = np.linalg.norm(current_pos - loop_start_pos)
+        distances_to_start.append(dist)
+
+    if len(distances_to_start) < 7:
+        return None
+
+    # Find potential reversal points
+    potential_reversals = []
+    for i in range(3, len(distances_to_start) - 3):
+        current_avg = (distances_to_start[i - 1] * 0.25 +
+                      distances_to_start[i] * 0.5 +
+                      distances_to_start[i + 1] * 0.25)
+
+        next_points = distances_to_start[i + 1:i + 4]
+        if len(next_points) == 3:
+            next_avg = sum(next_points) / len(next_points)
+
+            if next_avg > current_avg * 1.001:
+                actual_idx = vicinity_start_idx + i
+                potential_reversals.append((actual_idx, current_avg, next_avg))
+
+    # Select best reversal point
+    if potential_reversals:
+        good_reversals = [r for r in potential_reversals
+                         if r[1] <= max_distance * 2]
+
+        if good_reversals:
+            vicinity_window = min(2000, len(x) - vicinity_start_idx)
+            scored_reversals = []
+
+            for reversal in good_reversals:
+                idx, distance, next_avg = reversal
+                if idx <= vicinity_start_idx + vicinity_window:
+                    time_factor = (idx - vicinity_start_idx) / vicinity_window
+                    distance_factor = distance / max_distance
+                    score = time_factor * 0.7 + distance_factor * 0.3
+                    scored_reversals.append((score, reversal))
+
+            if scored_reversals:
+                best_score, best_reversal = min(scored_reversals)
+                reversal_idx, current_avg, next_avg = best_reversal
+                return reversal_idx
+            else:
+                best_reversal = min(good_reversals, key=lambda x: x[0])
+                return best_reversal[0]
+        else:
+            best_reversal = min(potential_reversals, key=lambda x: x[0])
+            return best_reversal[0]
+
+    # Fallback: use minimum distance point
+    min_distance = min(distances_to_start)
+    min_idx = distances_to_start.index(min_distance)
+    return vicinity_start_idx + min_idx
+
+
 class SegmentType(Enum):
     """Enumeration of course segment types"""
     STRAIGHT = "straight"
@@ -121,15 +267,30 @@ class MultiLapData:
         self.num_laps = 0
 
     def load_data(self, source: str,
+                  lap_detection_method: str = 'y_crossing',
                   lap_detection_threshold: float = 2.0,
-                  min_lap_length: int = 50) -> None:
+                  min_lap_length: int = 50,
+                  min_loop_distance: float = 1.0,
+                  max_closure_distance: float = 1.0,
+                  y_threshold: float = 0.1) -> None:
         """
         Load multi-lap data from CSV file or Tub directory
 
         Args:
             source: Path to CSV file or Tub directory
+            lap_detection_method: Method for detecting laps
+                                 ('y_crossing', 'drift', 'distance')
             lap_detection_threshold: Distance threshold for lap (meters)
+                                   Only used with 'distance' method
             min_lap_length: Minimum number of points per lap
+            min_loop_distance: Minimum distance to travel before considering
+                             loop closure (meters). Used with 'drift' and
+                             'y_crossing' methods
+            max_closure_distance: Maximum distance from start for loop
+                                closure detection (meters). Only used with
+                                'drift' method
+            y_threshold: Threshold around zero for y-crossing detection
+                        (meters). Only used with 'y_crossing' method
         """
         import os
 
@@ -148,13 +309,20 @@ class MultiLapData:
         else:
             self._load_from_tub(source)
 
-        # Detect laps
-        self._detect_laps(lap_detection_threshold, min_lap_length)
+        # Detect laps using specified method
+        self._detect_laps(
+            method=lap_detection_method,
+            distance_threshold=lap_detection_threshold,
+            min_length=min_lap_length,
+            min_loop_distance=min_loop_distance,
+            max_closure_distance=max_closure_distance,
+            y_threshold=y_threshold
+        )
 
         if self.raw_data is None:
             raise ValueError("No data loaded from source")
         logger.info(f"Loaded {len(self.raw_data)} points from {source}")
-        logger.info(f"Detected {self.num_laps} laps")
+        logger.info(f"Detected {self.num_laps} laps using '{lap_detection_method}' method")
 
     def load_csv(self, filepath: str,
                  lap_detection_threshold: float = 2.0,
@@ -167,7 +335,11 @@ class MultiLapData:
             lap_detection_threshold: Distance threshold for lap (meters)
             min_lap_length: Minimum number of points per lap
         """
-        self.load_data(filepath, lap_detection_threshold, min_lap_length)
+        self.load_data(
+            filepath,
+            lap_detection_method='y_crossing',
+            lap_detection_threshold=lap_detection_threshold,
+            min_lap_length=min_lap_length)
 
     def _load_from_csv(self, filepath: str) -> None:
         """Load data from CSV file"""
@@ -222,15 +394,22 @@ class MultiLapData:
             dtype=[('timestamp', 'f8'), ('x', 'f8'),
                    ('y', 'f8'), ('heading', 'f8')])
 
-    def _detect_laps(self, threshold: float, min_length: int) -> None:
+    def _detect_laps(self, method: str = 'y_crossing',
+                     distance_threshold: float = 2.0,
+                     min_length: int = 50,
+                     min_loop_distance: float = 5.0,
+                     max_closure_distance: float = 1.0,
+                     y_threshold: float = 0.1) -> None:
         """
-        Detect individual laps from continuous data
-
-        Detects when vehicle returns near starting position
+        Detect individual laps from continuous data using specified method
 
         Args:
-            threshold: Distance threshold for lap closure (meters)
+            method: Detection method ('y_crossing', 'drift', or 'distance')
+            distance_threshold: Distance threshold for 'distance' method
             min_length: Minimum points per lap
+            min_loop_distance: Minimum distance for 'drift' and 'y_crossing'
+            max_closure_distance: Max closure distance for 'drift' method
+            y_threshold: Y-coordinate threshold for 'y_crossing' method
         """
         if self.raw_data is None:
             raise ValueError("No raw data available for lap detection")
@@ -239,38 +418,227 @@ class MultiLapData:
             logger.warning("Data too short for lap detection")
             return
 
-        # Extract positions
+        # Dispatch to appropriate detection method
+        if method == 'y_crossing':
+            self._detect_laps_y_crossing(min_loop_distance, y_threshold)
+        elif method == 'drift':
+            self._detect_laps_drift_correction(
+                min_loop_distance, max_closure_distance)
+        elif method == 'distance':
+            self._detect_laps_distance(distance_threshold, min_length)
+        else:
+            raise ValueError(
+                f"Unknown lap detection method: {method}. "
+                f"Use 'y_crossing', 'drift', or 'distance'")
+
+        # Validate detected laps
+        self._validate_laps(
+            min_lap_distance=min_loop_distance,
+            min_points_per_lap=min_length)
+
+    def _detect_laps_distance(self, threshold: float,
+                              min_length: int) -> None:
+        """
+        Detect laps using simple distance threshold method (legacy)
+
+        This is the original naive method that can produce false positives.
+
+        Args:
+            threshold: Distance threshold for lap closure (meters)
+            min_length: Minimum points per lap
+        """
         x = self.raw_data['x']
         y = self.raw_data['y']
 
-        # Start position
         start_x, start_y = x[0], y[0]
-
-        # Find indices where vehicle returns to start
         lap_indices = [0]
 
         for i in range(min_length, len(x)):
             dist = np.sqrt((x[i] - start_x)**2 + (y[i] - start_y)**2)
 
-            # Check if we've returned to start and have enough points
             if dist < threshold and (i - lap_indices[-1]) >= min_length:
                 lap_indices.append(i)
 
-        # Add final index
         if lap_indices[-1] != len(x) - 1:
             lap_indices.append(len(x))
 
-        # Extract laps
+        self._create_laps_from_indices(lap_indices, min_length)
+
+    def _detect_laps_y_crossing(self, min_loop_distance: float = 5.0,
+                                y_threshold: float = 0.1) -> None:
+        """
+        Detect laps using y-coordinate zero crossing
+
+        Assumes the start/finish line is at y=0 and detects lap completion
+        when the y-coordinate crosses back through zero.
+
+        Args:
+            min_loop_distance: Minimum distance to travel before considering
+                             loop closure (meters)
+            y_threshold: Threshold around zero for detecting crossing (meters)
+        """
+        x = self.raw_data['x']
+        y = self.raw_data['y']
+
+        lap_indices = [0]
+        current_start = 0
+        max_loops = 100
+
+        logger.info(f"Detecting laps with y-crossing algorithm")
+        logger.info(f"  min_loop_distance={min_loop_distance}m")
+        logger.info(f"  Starting y value: {y[0]:.3f}m")
+        logger.info(f"  Y range: [{y.min():.3f}, {y.max():.3f}]m")
+
+        for loop_num in range(1, max_loops + 1):
+            loop_end = find_loop_end_index_y_crossing(
+                x, y, current_start, min_loop_distance, y_threshold)
+
+            if loop_end is None:
+                if loop_num == 1:
+                    logger.warning("No loops detected in data")
+                    logger.warning(f"  Data has {len(y)} points")
+                    logger.warning(f"  Y values around start: {y[0:10]}")
+                else:
+                    logger.info(f"Found {loop_num - 1} laps total")
+                break
+
+            logger.info(f"Lap {loop_num} end found at index {loop_end}, "
+                       f"y={y[loop_end]:.3f}m")
+            lap_indices.append(loop_end)
+            current_start = loop_end
+
+        # Create laps from detected indices
+        self._create_laps_from_indices(lap_indices, min_length=0)
+
+    def _detect_laps_drift_correction(self, min_loop_distance: float = 5.0,
+                                       max_distance: float = 1.0) -> None:
+        """
+        Detect laps using drift correction algorithm
+
+        Uses weighted average reversal point detection for accurate loop
+        closure identification. Based on the algorithm from
+        imu_visualization.py.
+
+        Args:
+            min_loop_distance: Minimum distance to travel before considering
+                             loop closure (meters)
+            max_distance: Maximum distance from origin to start looking for
+                        reversal point (meters)
+        """
+        x = self.raw_data['x']
+        y = self.raw_data['y']
+
+        lap_indices = [0]
+        current_start = 0
+        max_loops = 100
+
+        logger.info(f"Detecting laps with drift correction algorithm")
+        logger.info(f"  min_loop_distance={min_loop_distance}m, "
+                   f"max_distance={max_distance}m")
+
+        for loop_num in range(1, max_loops + 1):
+            loop_end = find_loop_end_index(
+                x, y, current_start, min_loop_distance, max_distance)
+
+            if loop_end is None:
+                if loop_num == 1:
+                    logger.warning("No loops detected in data")
+                else:
+                    logger.info(f"Found {loop_num - 1} laps total")
+                break
+
+            logger.debug(f"Loop {loop_num} end found at index {loop_end}")
+            lap_indices.append(loop_end)
+            current_start = loop_end
+
+        # Create laps from detected indices (don't add final index,
+        # find_loop_end_index already found the ends)
+        self._create_laps_from_indices(lap_indices, min_length=0)
+
+    def _create_laps_from_indices(self, lap_indices: List[int],
+                                   min_length: int = 0) -> None:
+        """
+        Create lap data arrays from list of lap boundary indices
+
+        Args:
+            lap_indices: List of indices marking lap boundaries
+            min_length: Minimum points per lap (0 to skip check)
+        """
         self.laps = []
+
         for i in range(len(lap_indices) - 1):
             start_idx = lap_indices[i]
             end_idx = lap_indices[i + 1]
 
-            if end_idx - start_idx >= min_length:
+            if min_length == 0 or (end_idx - start_idx >= min_length):
                 lap_data = self.raw_data[start_idx:end_idx]
                 self.laps.append(lap_data)
+                logger.debug(f"Lap {i+1}: indices {start_idx} to {end_idx} ({end_idx - start_idx} points)")
+            else:
+                logger.debug(f"Lap {i+1}: SKIPPED (too short: {end_idx - start_idx} < {min_length})")
 
         self.num_laps = len(self.laps)
+        logger.debug(f"Created {self.num_laps} laps from indices")
+
+    def _validate_laps(self, min_lap_distance: float = 3.0,
+                       max_lap_distance: float = 100.0,
+                       min_points_per_lap: int = 100) -> None:
+        """
+        Validate detected laps and filter out invalid ones
+
+        Args:
+            min_lap_distance: Minimum valid lap distance (meters)
+            max_lap_distance: Maximum valid lap distance (meters)
+            min_points_per_lap: Minimum data points per lap
+        """
+        if not self.laps:
+            return
+
+        valid_laps = []
+        initial_count = len(self.laps)
+
+        logger.debug(f"Validating {initial_count} laps")
+        logger.debug(f"  min_lap_distance: {min_lap_distance}m, "
+                    f"max_lap_distance: {max_lap_distance}m, "
+                    f"min_points_per_lap: {min_points_per_lap}")
+
+        for lap_num, lap in enumerate(self.laps, 1):
+            # Check point count
+            if len(lap) < min_points_per_lap:
+                logger.debug(
+                    f"Lap {lap_num} rejected: too few points ({len(lap)})")
+                continue
+
+            # Calculate total distance traveled
+            dx = np.diff(lap['x'])
+            dy = np.diff(lap['y'])
+            distances = np.sqrt(dx**2 + dy**2)
+            total_distance = np.sum(distances)
+
+            # Check distance bounds
+            if total_distance < min_lap_distance:
+                logger.debug(
+                    f"Lap {lap_num} rejected: too short "
+                    f"({total_distance:.1f}m)")
+                continue
+
+            if total_distance > max_lap_distance:
+                logger.debug(
+                    f"Lap {lap_num} rejected: too long "
+                    f"({total_distance:.1f}m)")
+                continue
+
+            # For y_crossing method, we don't check closure since laps are
+            # segments between y=0 crossings, not closed loops
+
+            logger.debug(f"Lap {lap_num} valid: {len(lap)} points, {total_distance:.1f}m")
+            valid_laps.append(lap)
+
+        logger.info(
+            f"Lap validation: {len(valid_laps)}/{initial_count} laps valid")
+
+        self.laps = valid_laps
+        self.num_laps = len(valid_laps)
 
     def get_laps(self) -> List[np.ndarray]:
         """
@@ -323,14 +691,10 @@ class MeanCourse:
 
     def compute(self) -> None:
         """
-        Compute mean course from multi-lap data
-
-        Process:
-        1. Align all laps to common reference frame
-        2. Resample to common arc-length parameterization
-        3. Remove outliers
-        4. Compute point-wise mean
-        5. Apply smoothing
+        Compute mean course by resampling every lap onto a common normalized
+        arc-length axis and then averaging with incremental weights so all
+        laps contribute equally. This produces a smooth, interpolated course
+        rather than snapping to nearest discrete points.
         """
         if self.multilap_data is None or self.multilap_data.num_laps == 0:
             raise ValueError("No lap data available")
@@ -341,187 +705,113 @@ class MeanCourse:
         if self.num_laps < 1:
             raise ValueError("Need at least 1 lap for mean course")
 
-        # Step 1: Align laps
-        aligned_laps = self._align_laps(laps)
-
-        # Step 2: Resample to common parameterization
-        resampled_laps = self._resample_laps(aligned_laps)
-
-        # Step 3: Remove outliers
-        cleaned_laps = self._remove_outliers(resampled_laps)
-
-        # Step 4: Compute mean
-        self._compute_mean(cleaned_laps)
-
-        # Step 5: Apply smoothing
+        resampled_laps = self._resample_laps_uniform(laps)
+        self._compute_weighted_mean(resampled_laps)
         self._apply_smoothing()
-
-        # Compute cumulative distance
+        self._compute_metadata_from_resampled(resampled_laps)
         self._compute_distance()
 
         logger.info(f"Computed mean course from {self.num_laps} laps")
         logger.info(f"Course length: {self.distance[-1]:.2f} meters")
 
-    def _align_laps(self, laps: List[np.ndarray]) -> List[Dict[str, np.ndarray]]:
+    def _resample_laps_uniform(self, laps: List[np.ndarray]) -> List[Dict[str, np.ndarray]]:
         """
-        Align all laps to common reference frame
-
-        Translates to common start position and rotates to common heading
-
-        Args:
-            laps: List of raw lap data
-
-        Returns:
-            List of aligned lap dictionaries with 'x', 'y', 'heading' arrays
+        Resample every lap onto a shared normalized arc-length axis so that
+        corresponding indices represent the same progress around the course.
         """
-        aligned = []
-
-        # Use first lap as reference
-        ref_x0 = laps[0]['x'][0]
-        ref_y0 = laps[0]['y'][0]
-        ref_heading0 = laps[0]['heading'][0]
+        interval = max(self.params.get('resampling_interval', 0.05), 1e-3)
+        lap_lengths: List[float] = []
+        lap_samples: List[Dict[str, np.ndarray]] = []
 
         for lap in laps:
-            x = lap['x'].copy()
-            y = lap['y'].copy()
-            heading = lap['heading'].copy()
+            x = lap['x'].astype(np.float64)
+            y = lap['y'].astype(np.float64)
+            heading = lap['heading'].astype(np.float64)
 
-            # Translate to reference start position
-            x = x - lap['x'][0] + ref_x0
-            y = y - lap['y'][0] + ref_y0
+            if len(x) < 2:
+                lap_lengths.append(0.0)
+                lap_samples.append({'x': x, 'y': y,
+                                    'heading': heading,
+                                    's_norm': np.zeros_like(x)})
+                continue
 
-            # Rotate to reference heading
-            heading_offset = ref_heading0 - lap['heading'][0]
-            heading = heading + heading_offset
-
-            # Normalize headings
-            heading = np.array([normalize_angle(h) for h in heading])
-
-            aligned.append({'x': x, 'y': y, 'heading': heading})
-
-        return aligned
-
-    def _resample_laps(self, laps: List[Dict[str, np.ndarray]]) -> List[Dict[str, np.ndarray]]:
-        """
-        Resample laps to common arc-length parameterization
-
-        Args:
-            laps: List of aligned lap data
-
-        Returns:
-            List of resampled lap data with uniform spacing
-        """
-        interval = self.params['resampling_interval']
-        resampled = []
-
-        for lap in laps:
-            x = lap['x']
-            y = lap['y']
-            heading = lap['heading']
-
-            # Compute arc length
             dx = np.diff(x)
             dy = np.diff(y)
             ds = np.sqrt(dx**2 + dy**2)
             s = np.concatenate([[0], np.cumsum(ds)])
+            length = s[-1]
+            lap_lengths.append(length if length > 0 else 0.0)
+            s_norm = s / length if length > 0 else np.linspace(0, 1, len(x))
 
-            # New arc length parameterization
-            total_length = s[-1]
-            num_points = int(total_length / interval) + 1
-            s_new = np.linspace(0, total_length, num_points)
+            lap_samples.append({'x': x, 'y': y,
+                                'heading': heading,
+                                's_norm': s_norm})
 
-            # Interpolate x, y
-            x_new = np.interp(s_new, s, x)
-            y_new = np.interp(s_new, s, y)
+        reference_length = np.mean([L for L in lap_lengths if L > 0]) \
+            if any(L > 0 for L in lap_lengths) else 1.0
+        num_samples = max(2, int(reference_length / interval) + 1)
+        s_ref = np.linspace(0.0, 1.0, num_samples)
 
-            # Interpolate heading (circular, already in radians)
-            sin_h = np.sin(heading)
-            cos_h = np.cos(heading)
-            sin_h_new = np.interp(s_new, s, sin_h)
-            cos_h_new = np.interp(s_new, s, cos_h)
-            heading_new = np.arctan2(sin_h_new, cos_h_new)
+        resampled: List[Dict[str, np.ndarray]] = []
 
-            resampled.append({'x': x_new, 'y': y_new, 'heading': heading_new})
+        for sample in lap_samples:
+            if len(sample['x']) == 0:
+                continue
+            s_norm = sample['s_norm']
+
+            x_interp = np.interp(s_ref, s_norm, sample['x'])
+            y_interp = np.interp(s_ref, s_norm, sample['y'])
+
+            sin_h = np.sin(sample['heading'])
+            cos_h = np.cos(sample['heading'])
+            sin_interp = np.interp(s_ref, s_norm, sin_h)
+            cos_interp = np.interp(s_ref, s_norm, cos_h)
+            heading_interp = np.arctan2(sin_interp, cos_interp)
+
+            resampled.append({
+                'x': x_interp,
+                'y': y_interp,
+                'heading': heading_interp
+            })
+
+        if not resampled:
+            raise ValueError("Failed to resample laps; check data quality")
 
         return resampled
 
-    def _remove_outliers(self, laps: List[Dict[str, np.ndarray]]) -> List[Dict[str, np.ndarray]]:
-        """
-        Remove outlier points that deviate from mean trajectory
+    def _compute_weighted_mean(self, laps: List[Dict[str, np.ndarray]]) -> None:
+        """Incrementally average resampled laps with equal weights."""
+        self.x = laps[0]['x'].copy()
+        self.y = laps[0]['y'].copy()
+        sin_mean = np.sin(laps[0]['heading'])
+        cos_mean = np.cos(laps[0]['heading'])
 
-        Args:
-            laps: List of resampled lap data
+        for idx, lap in enumerate(laps[1:], start=2):
+            new_weight = 1.0 / idx
+            prev_weight = 1.0 - new_weight
+            self.x = prev_weight * self.x + new_weight * lap['x']
+            self.y = prev_weight * self.y + new_weight * lap['y']
+            sin_mean = prev_weight * sin_mean + new_weight * np.sin(lap['heading'])
+            cos_mean = prev_weight * cos_mean + new_weight * np.cos(lap['heading'])
 
-        Returns:
-            List of cleaned lap data
-        """
-        threshold = self.params['outlier_std_threshold']
-        iterations = self.params['outlier_iterations']
+        self.heading = np.arctan2(sin_mean, cos_mean)
 
-        # Find minimum length
-        min_len = min(len(lap['x']) for lap in laps)
+    def _compute_metadata_from_resampled(self, laps: List[Dict[str, np.ndarray]]) -> None:
+        """Compute per-point standard deviation across resampled laps."""
+        if not laps:
+            self.metadata = {}
+            return
 
-        # Truncate all laps to same length
-        for lap in laps:
-            lap['x'] = lap['x'][:min_len]
-            lap['y'] = lap['y'][:min_len]
-            lap['heading'] = lap['heading'][:min_len]
+        stack_x = np.array([lap['x'] for lap in laps], dtype=np.float64)
+        stack_y = np.array([lap['y'] for lap in laps], dtype=np.float64)
+        stack_sin = np.sin(np.array([lap['heading'] for lap in laps]))
+        stack_cos = np.cos(np.array([lap['heading'] for lap in laps]))
 
-        # Iterative outlier removal
-        for iteration in range(iterations):
-            # Stack data
-            x_stack = np.array([lap['x'] for lap in laps])
-            y_stack = np.array([lap['y'] for lap in laps])
-
-            # Compute mean and std
-            x_mean = np.mean(x_stack, axis=0)
-            y_mean = np.mean(y_stack, axis=0)
-            x_std = np.std(x_stack, axis=0)
-            y_std = np.std(y_stack, axis=0)
-
-            # Find outliers
-            for i, lap in enumerate(laps):
-                x_dev = np.abs(lap['x'] - x_mean) / (x_std + 1e-6)
-                y_dev = np.abs(lap['y'] - y_mean) / (y_std + 1e-6)
-
-                # Mark outliers
-                outliers = (x_dev > threshold) | (y_dev > threshold)
-
-                # Replace outliers with mean
-                lap['x'][outliers] = x_mean[outliers]
-                lap['y'][outliers] = y_mean[outliers]
-
-        return laps
-
-    def _compute_mean(self, laps: List[Dict[str, np.ndarray]]) -> None:
-        """
-        Compute point-wise mean of aligned and cleaned laps
-
-        Args:
-            laps: List of cleaned lap data
-        """
-        # Stack data
-        x_stack = np.array([lap['x'] for lap in laps])
-        y_stack = np.array([lap['y'] for lap in laps])
-        heading_stack = np.array([lap['heading'] for lap in laps])
-
-        # Compute means
-        self.x = np.mean(x_stack, axis=0)
-        self.y = np.mean(y_stack, axis=0)
-
-        # Circular mean for heading
-        self.heading = np.array([
-            circular_mean(heading_stack[:, i])
-            for i in range(heading_stack.shape[1])
-        ])
-
-        # Store statistics
-        self.metadata['x_std'] = np.std(x_stack, axis=0)
-        self.metadata['y_std'] = np.std(y_stack, axis=0)
-        self.metadata['heading_std'] = np.array([
-            circular_std(heading_stack[:, i])
-            for i in range(heading_stack.shape[1])
-        ])
+        self.metadata['x_std'] = np.std(stack_x, axis=0)
+        self.metadata['y_std'] = np.std(stack_y, axis=0)
+        mean_heading = np.arctan2(stack_sin, stack_cos)
+        heading_diff = np.unwrap(mean_heading, axis=0)
+        self.metadata['heading_std'] = np.std(heading_diff, axis=0)
 
     def _apply_smoothing(self) -> None:
         """
@@ -531,15 +821,29 @@ class MeanCourse:
         pos_order = self.params['position_polynomial_order']
         head_window = self.params['heading_smoothing_window']
 
-        # Ensure window size is valid
-        if pos_window > len(self.x):
-            pos_window = len(self.x) if len(self.x) % 2 == 1 else len(self.x) - 1
+        # Ensure window size is valid for position smoothing
+        data_len = len(self.x)
+
+        # Adjust polynomial order if data is too short
+        if data_len < pos_order + 2:
+            pos_order = max(1, data_len - 2)
+
+        # Adjust window size
+        if pos_window > data_len:
+            pos_window = data_len if data_len % 2 == 1 else data_len - 1
         if pos_window % 2 == 0:
             pos_window -= 1
-        if pos_window < pos_order + 2:
-            pos_window = pos_order + 2
+
+        # Ensure window is large enough for polynomial order
+        min_window = pos_order + 2
+        if pos_window < min_window:
+            pos_window = min_window
             if pos_window % 2 == 0:
                 pos_window += 1
+
+        # Final check: window must not exceed data length
+        if pos_window > data_len:
+            pos_window = data_len if data_len % 2 == 1 else data_len - 1
 
         if head_window > len(self.heading):
             head_window = len(self.heading)
@@ -547,7 +851,8 @@ class MeanCourse:
             head_window -= 1
 
         # Savitzky-Golay filter for positions
-        if pos_window >= pos_order + 2:
+        # Only apply if we have enough data points
+        if data_len >= pos_order + 2 and pos_window >= pos_order + 2 and pos_window <= data_len:
             self.x = savgol_filter(self.x, pos_window, pos_order)
             self.y = savgol_filter(self.y, pos_window, pos_order)
 
@@ -562,6 +867,58 @@ class MeanCourse:
             cos_h_smooth = np.convolve(cos_h, kernel, mode='same')
 
             self.heading = np.arctan2(sin_h_smooth, cos_h_smooth)
+    @staticmethod
+    def _blend_heading(current: float, new_value: float,
+                       new_weight: float) -> float:
+        """Blend two headings using circular interpolation."""
+        if new_weight <= 0.0:
+            return current
+        prev_weight = 1.0 - new_weight
+        sin_val = prev_weight * np.sin(current) + new_weight * np.sin(new_value)
+        cos_val = prev_weight * np.cos(current) + new_weight * np.cos(new_value)
+        if sin_val == 0 and cos_val == 0:
+            return current
+        return np.arctan2(sin_val, cos_val)
+
+    def _compute_metadata_from_laps(self, laps: List[np.ndarray]) -> None:
+        """Compute spread statistics for diagnostics."""
+        if not laps:
+            self.metadata = {}
+            return
+
+        mean_points = np.column_stack((self.x, self.y))
+        tree = KDTree(mean_points)
+        num_points = len(self.x)
+
+        x_var = np.zeros(num_points, dtype=np.float64)
+        y_var = np.zeros(num_points, dtype=np.float64)
+        heading_var = np.zeros(num_points, dtype=np.float64)
+        counts = np.zeros(num_points, dtype=np.int32)
+
+        for lap in laps:
+            for x_val, y_val, heading_val in zip(
+                    lap['x'], lap['y'], lap['heading']):
+                _, idx = tree.query([x_val, y_val])
+                dx = x_val - self.x[idx]
+                dy = y_val - self.y[idx]
+                heading_diff = angle_difference(self.heading[idx], heading_val)
+                x_var[idx] += dx * dx
+                y_var[idx] += dy * dy
+                heading_var[idx] += heading_diff * heading_diff
+                counts[idx] += 1
+
+        x_std = np.zeros(num_points, dtype=np.float64)
+        y_std = np.zeros(num_points, dtype=np.float64)
+        heading_std = np.zeros(num_points, dtype=np.float64)
+
+        nonzero = counts > 0
+        x_std[nonzero] = np.sqrt(x_var[nonzero] / counts[nonzero])
+        y_std[nonzero] = np.sqrt(y_var[nonzero] / counts[nonzero])
+        heading_std[nonzero] = np.sqrt(heading_var[nonzero] / counts[nonzero])
+
+        self.metadata['x_std'] = x_std
+        self.metadata['y_std'] = y_std
+        self.metadata['heading_std'] = heading_std
 
     def _compute_distance(self) -> None:
         """
