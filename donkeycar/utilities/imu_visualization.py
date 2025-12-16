@@ -648,8 +648,11 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                 result = {
                     'x': mean_course.x.copy(),
                     'y': mean_course.y.copy(),
+                    'heading': mean_course.heading.copy(),
+                    'distance': mean_course.distance.copy(),
                     'length': mean_course.distance[-1],
-                    'max_laps': multilap_data.num_laps
+                    'max_laps': multilap_data.num_laps,
+                    'mean_course_obj': mean_course
                 }
                 print(f"  Mean course length: {result['length']:.2f}m")
                 # Clean up temp file
@@ -712,6 +715,20 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
 
     mean_course_data = compute_mean_course_with_laps(100)  # Use all laps
     max_laps_detected = mean_course_data['max_laps'] if mean_course_data else 1
+
+    # Segment the mean course (if available)
+    segmentation = None
+    if mean_course_data is not None:
+        try:
+            from donkeycar.parts.course_analysis import CourseSegmentation
+            segmentation = CourseSegmentation(
+                mean_course=mean_course_data['mean_course_obj'])
+            segmentation.compute()
+            print(f"Segmented mean course into "
+                  f"{segmentation.total_segments} segments")
+        except Exception as exc:
+            print(f"Could not compute segmentation: {exc}")
+            segmentation = None
 
     # Apply drift correction if requested (AFTER computing mean course)
     loop_drift_amounts = []
@@ -824,6 +841,52 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
             visible=True
         )
 
+    # Segment boundary markers (perpendicular ticks on mean course)
+    segment_markers = []
+
+    def refresh_segment_markers():
+        """Draw short perpendicular markers at segment boundaries."""
+        nonlocal segment_markers
+        for line in segment_markers:
+            line.remove()
+        segment_markers = []
+        if segmentation is None or mean_course_data is None:
+            return
+
+        headings = mean_course_data['heading']
+        marker_len = max(0.2, 0.01 * mean_course_data['length'])
+        colors = plt.cm.tab10(np.linspace(
+            0, 1, max(segmentation.total_segments, 1)))
+
+        boundaries = []
+        for seg in segmentation.segments:
+            boundaries.append((seg.start_index, seg.segment_id))
+            boundaries.append((seg.end_index, seg.segment_id))
+
+        seen = set()
+        for idx, seg_id in boundaries:
+            if idx in seen:
+                continue
+            seen.add(idx)
+
+            x_val = mean_course_data['x'][idx]
+            y_val = mean_course_data['y'][idx]
+            heading = headings[idx]
+            dx = np.cos(heading + np.pi/2.0) * marker_len * 0.5
+            dy = np.sin(heading + np.pi/2.0) * marker_len * 0.5
+            color = colors[seg_id % len(colors)]
+
+            line, = ax.plot([x_val - dx, x_val + dx],
+                            [y_val - dy, y_val + dy],
+                            color=color,
+                            linewidth=2.0,
+                            alpha=0.9,
+                            visible=(mean_course_line is None or
+                                     mean_course_line.get_visible()))
+            segment_markers.append(line)
+
+    refresh_segment_markers()
+
 
     # Helper function to create status text elements
     def _create_status_text(fig, y_pos, text='', color='white'):
@@ -880,7 +943,10 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                                     [mean_course_line.get_visible()])
 
         def toggle_mean_course(label):
-            mean_course_line.set_visible(not mean_course_line.get_visible())
+            visible = not mean_course_line.get_visible()
+            mean_course_line.set_visible(visible)
+            for line in segment_markers:
+                line.set_visible(visible)
             fig.canvas.draw_idle()
 
         check_widget.on_clicked(toggle_mean_course)
@@ -908,17 +974,30 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
     time_slider.valtext.set_visible(False)
 
     def apply_lap_selection(num_laps):
+        nonlocal mean_course_data, segmentation
         num_laps = max(1, min(num_laps, max_laps_detected))
         print(f"\nUpdating to show {num_laps} lap(s)...")
 
         new_mean_course = compute_mean_course_with_laps(num_laps)
         if new_mean_course is not None:
+            mean_course_data = new_mean_course
             mean_course_line.set_data(
                 new_mean_course['x'], new_mean_course['y'])
             mean_course_line.set_label(
                 f'Mean course ({new_mean_course["length"]:.1f}m)')
             legend.get_texts()[-1].set_text(
                 f'Mean course ({new_mean_course["length"]:.1f}m)')
+
+            try:
+                segmentation = CourseSegmentation(
+                    mean_course=new_mean_course['mean_course_obj'])
+                segmentation.compute()
+                print("  Updated segmentation for new mean course "
+                      f"({segmentation.total_segments} segments)")
+            except Exception as exc:
+                print(f"  Could not update segmentation: {exc}")
+                segmentation = None
+            refresh_segment_markers()
 
         if num_laps <= len(lap_end_indices):
             end_idx = lap_end_indices[num_laps - 1]
@@ -1154,9 +1233,16 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
 
     # Add legend in top area underneath controls - vertical arrangement
     # Use custom handles to control legend appearance
+    boundary_handle = None
+    if segmentation is not None:
+        boundary_handle = Line2D([0], [0], color='#F2C14E',
+                                 linewidth=2, label='Segment boundary')
+
     legend_handles = [full_path_legend, current_pos, current_path]
     if mean_course_line is not None:
         legend_handles.append(mean_course_line)
+    if boundary_handle is not None:
+        legend_handles.append(boundary_handle)
 
     legend = ax.legend(handles=legend_handles,
                       bbox_to_anchor=(0.02, 0.48), loc='upper left',

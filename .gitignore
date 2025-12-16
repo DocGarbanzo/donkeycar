@@ -2,11 +2,12 @@
 env/*
 data/*
 dist/*
-
+__pycache__/
+.mypy_cache/
 *.pyc
 .ipynb_checkpoints
 *.egg-info/
-.git.bfg-report
+.git.bfg-report/
 .DS_Store
 lag_log.csv
 
