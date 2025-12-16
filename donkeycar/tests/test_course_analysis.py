@@ -179,6 +179,9 @@ class TestMeanCourse(unittest.TestCase):
 
     def _create_multilap_data(self, num_laps=3):
         """Create synthetic multi-lap data"""
+        # Set random seed for reproducibility
+        np.random.seed(42)
+        
         with tempfile.TemporaryDirectory() as td:
             filename = os.path.join(td, "test_laps.csv")
 

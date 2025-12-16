@@ -965,7 +965,7 @@ class JoystickController(object):
         '''
         initiate a series of steps to try to stop the vehicle as quickly as possible
         '''
-        logger.warn('E-Stop!!!')
+        logger.warning('E-Stop!!!')
         self.mode = "user"
         self.recording = False
         self.constant_throttle = False

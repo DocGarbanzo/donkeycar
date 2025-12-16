@@ -6,7 +6,7 @@ import tempfile
 import numpy as np
 import pandas as pd
 import pytest
-from donkeycar.scripts.imu_path_visualizer import correct_loop_drift
+from donkeycar.utilities.imu_visualization import correct_loop_drift
 
 
 class TestIMUVisualizer:
@@ -83,7 +83,7 @@ class TestIMUVisualizer:
 
     def test_csv_data_loading(self):
         """Test loading data from CSV file"""
-        from donkeycar.scripts.imu_path_visualizer import (
+        from donkeycar.utilities.imu_visualization import (
             visualize_imu_path)
 
         # Create temporary CSV file
