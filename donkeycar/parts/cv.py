@@ -413,7 +413,7 @@ class ImgGammaNormaliser:
         return avg
 
     def make_table(self):
-        """ This brightness normalisation through Gamma uses the
+        r""" This brightness normalisation through Gamma uses the
         approximation that the geometric mean of the image brightness can be
         used as the arithmetric mean. As under gamma transformations it is
         easy to achieve a given input geometric mean (gm). Because:
