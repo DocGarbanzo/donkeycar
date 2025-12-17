@@ -520,7 +520,7 @@ def correct_loop_drift(df, min_loop_distance=1.0, max_distance=0.5,
 
 def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                        min_loop_distance=1.0, max_distance=0.5,
-                       downsample_factor=None):
+                       downsample_factor=None, boundary_method='gradient'):
     """
     Load and visualize IMU path data with interactive time slider.
 
@@ -535,6 +535,8 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                               looking for reversal point
         downsample_factor (int): Downsample factor for display
                                  (default: auto-calculate to ~10000 pts)
+        boundary_method (str): Segmentation method - 'threshold', 'extrema',
+                              'gradient', or 'hybrid' (default: 'gradient')
     """
     import matplotlib.pyplot as plt
     from matplotlib.widgets import Slider
@@ -725,10 +727,12 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
         try:
             from donkeycar.parts.course_analysis import CourseSegmentation
             segmentation = CourseSegmentation(
-                mean_course=mean_course_data['mean_course_obj'])
+                mean_course=mean_course_data['mean_course_obj'],
+                params={'boundary_method': boundary_method})
             segmentation.compute()
             print(f"Segmented mean course into "
-                  f"{segmentation.total_segments} segments")
+                  f"{segmentation.total_segments} segments "
+                  f"using '{boundary_method}' method")
         except Exception as exc:
             print(f"Could not compute segmentation: {exc}")
             segmentation = None
@@ -917,11 +921,21 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
 
         headings = mean_course_data['heading']
         marker_len = max(0.3, 0.02 * mean_course_data['length'])
+        max_idx = len(mean_course_data['x']) - 1
 
+        # Collect unique boundary indices
+        # For closed loops:
+        # - Skip index 0 (arbitrary start point)
+        # - Skip last index (same physical location as index 0)
+        # Only show actual transition points between segments
         boundaries = []
         for seg in segmentation.segments:
-            boundaries.append((seg.start_index, seg.segment_id))
-            boundaries.append((seg.end_index, seg.segment_id))
+            # Skip start_index if it's 0 (arbitrary loop start)
+            if seg.start_index != 0:
+                boundaries.append((seg.start_index, seg.segment_id))
+            # Skip end_index if it's the last point (loop closure)
+            if seg.end_index < max_idx:
+                boundaries.append((seg.end_index, seg.segment_id))
 
         seen = set()
         for idx, seg_id in boundaries:
@@ -1072,10 +1086,12 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
 
             try:
                 segmentation = CourseSegmentation(
-                    mean_course=new_mean_course['mean_course_obj'])
+                    mean_course=new_mean_course['mean_course_obj'],
+                    params={'boundary_method': boundary_method})
                 segmentation.compute()
                 print("  Updated segmentation for new mean course "
-                      f"({segmentation.total_segments} segments)")
+                      f"({segmentation.total_segments} segments) "
+                      f"using '{boundary_method}' method")
             except Exception as exc:
                 print(f"  Could not update segmentation: {exc}")
                 segmentation = None

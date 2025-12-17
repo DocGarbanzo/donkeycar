@@ -1128,6 +1128,8 @@ class CourseSegmentation:
             'min_segment_length': 0.8,  # meters
             'inflection_threshold': 0.05,  # rad/m
             'classification_window': 5,  # points for type classification
+            'boundary_method': 'hybrid',  # 'threshold', 'extrema', 'gradient', 'hybrid'
+            'gradient_prominence': 0.1,  # Minimum prominence for gradient peaks
         }
 
         if params is not None:
@@ -1137,15 +1139,21 @@ class CourseSegmentation:
         self.total_segments = 0
         self.segment_counts: Dict[SegmentType, int] = {}
 
-    def compute(self) -> None:
+    def compute(self, use_adaptive_threshold: bool = True) -> None:
         """
         Compute course segmentation
 
         Process:
         1. Calculate curvature
-        2. Detect segment boundaries
-        3. Classify segments
-        4. Create Segment objects
+        2. (Optional) Compute adaptive threshold
+        3. Detect segment boundaries
+        4. Classify segments
+        5. Create Segment objects
+
+        Args:
+            use_adaptive_threshold: If True, automatically adjust the
+                                   straight_curvature_threshold based on
+                                   the curvature distribution (default: True)
         """
         if self.mean_course is None:
             raise ValueError("No mean course available")
@@ -1153,13 +1161,20 @@ class CourseSegmentation:
         # Step 1: Calculate curvature
         curvature = self._calculate_curvature()
 
-        # Step 2: Detect segment boundaries
+        # Step 2: Optionally compute adaptive threshold
+        if use_adaptive_threshold:
+            self._compute_adaptive_threshold(curvature)
+
+        # Step 3: Detect segment boundaries
         boundaries = self._detect_boundaries(curvature)
 
-        # Step 3: Classify and create segments
+        # Step 4: Classify and create segments
         self._create_segments(boundaries, curvature)
 
-        # Count segment types
+        # Step 5: Merge adjacent segments of same type
+        self._merge_adjacent_segments()
+
+        # Step 6: Count segment types
         self._count_segments()
 
         logger.info(f"Segmented course into {self.total_segments} segments")
@@ -1208,12 +1223,79 @@ class CourseSegmentation:
 
         return curvature
 
+    def _compute_adaptive_threshold(self, curvature: np.ndarray) -> None:
+        """
+        Compute adaptive threshold based on curvature distribution.
+
+        Uses a gap-based approach to find natural separation between
+        straight and curved sections. Looks for the largest gap in the
+        curvature distribution and sets threshold there.
+
+        Args:
+            curvature: Array of curvature values
+        """
+        abs_curvature = np.abs(curvature)
+
+        # Sort curvature values to find gaps
+        sorted_curv = np.sort(abs_curvature)
+
+        # Find the largest gap in the lower 50% of values
+        # This helps distinguish straights from curves even in highly
+        # curved tracks
+        midpoint = len(sorted_curv) // 2
+        lower_half = sorted_curv[:midpoint]
+
+        if len(lower_half) > 1:
+            # Calculate gaps between consecutive values
+            gaps = np.diff(lower_half)
+
+            # Find the largest gap
+            max_gap_idx = np.argmax(gaps)
+
+            # Set threshold at midpoint of largest gap
+            threshold = (lower_half[max_gap_idx] +
+                        lower_half[max_gap_idx + 1]) / 2.0
+        else:
+            # Fallback: use 20th percentile
+            threshold = np.percentile(abs_curvature, 20)
+
+        # Ensure threshold is reasonable (between 0.05 and 2.0 rad/m)
+        threshold = np.clip(threshold, 0.05, 2.0)
+
+        # Additional check: if threshold would classify >90% as curves,
+        # use a more aggressive threshold
+        points_below = np.sum(abs_curvature < threshold)
+        pct_below = points_below / len(abs_curvature)
+
+        if pct_below < 0.05:
+            # Less than 5% would be "straight" - too aggressive
+            # Use 10th percentile instead
+            threshold = np.percentile(abs_curvature, 10)
+            threshold = np.clip(threshold, 0.05, 2.0)
+            logger.info(f"Adjusted threshold to 10th percentile "
+                       f"({threshold:.3f}) to avoid over-classification")
+
+        # Update parameter
+        old_threshold = self.params['straight_curvature_threshold']
+        self.params['straight_curvature_threshold'] = threshold
+
+        logger.info(f"Adaptive threshold: {threshold:.3f} rad/m "
+                   f"(was {old_threshold:.3f} rad/m)")
+        logger.info(f"Curvature stats: min={abs_curvature.min():.3f}, "
+                   f"max={abs_curvature.max():.3f}, "
+                   f"mean={abs_curvature.mean():.3f}, "
+                   f"median={np.median(abs_curvature):.3f}, "
+                   f"{pct_below*100:.1f}% below threshold")
+
     def _detect_boundaries(self, curvature: np.ndarray) -> List[int]:
         """
-        Detect segment boundaries where curvature type changes.
+        Detect segment boundaries using configurable method.
 
-        Detects transitions between straight/left/right sections.
-        For closed loops, handles wrap-around properly.
+        Methods:
+        - 'threshold': Detects transitions between straight/left/right
+        - 'extrema': Detects local peaks and valleys in curvature
+        - 'gradient': Detects where curvature changes most rapidly
+        - 'hybrid': Combines threshold + extrema methods
 
         Args:
             curvature: Array of curvature values
@@ -1221,26 +1303,123 @@ class CourseSegmentation:
         Returns:
             List of boundary indices
         """
+        method = self.params.get('boundary_method', 'hybrid')
         threshold = self.params['straight_curvature_threshold']
         min_length = self.params['min_segment_length']
         distance = self.mean_course.distance
 
-        point_types = self._classify_point_types(curvature, threshold)
-        boundaries = self._find_all_type_changes(point_types)
+        # Get boundaries based on method
+        if method == 'threshold':
+            point_types = self._classify_point_types(curvature, threshold)
+            all_boundaries = self._find_all_type_changes(point_types)
 
-        if not boundaries:
-            return [0, len(curvature) - 1]
+        elif method == 'extrema':
+            point_types = self._classify_point_types(curvature, threshold)
+            all_boundaries = self._find_curvature_extrema(curvature)
 
-        boundaries = self._filter_by_min_length(
-            boundaries, distance, min_length)
+        elif method == 'gradient':
+            point_types = self._classify_point_types(curvature, threshold)
+            all_boundaries = self._find_curvature_gradients(curvature)
 
-        if not boundaries:
-            return [0, len(curvature) - 1]
+        else:  # 'hybrid' or unknown -> use hybrid
+            point_types = self._classify_point_types(curvature, threshold)
+            threshold_boundaries = self._find_all_type_changes(point_types)
+            extrema_boundaries = self._find_curvature_extrema(curvature)
+            all_boundaries = sorted(set(threshold_boundaries + extrema_boundaries))
 
-        boundaries = self._handle_closed_loop(
-            boundaries, point_types, distance, min_length)
+        if not all_boundaries:
+            return [0]
 
-        return boundaries
+        # Filter by minimum length
+        all_boundaries = self._filter_by_min_length(
+            all_boundaries, distance, min_length)
+
+        if not all_boundaries:
+            return [0]
+
+        # Handle closed loop wrap-around
+        all_boundaries = self._handle_closed_loop(
+            all_boundaries, point_types, distance, min_length)
+
+        return all_boundaries
+
+    def _find_curvature_extrema(self, curvature: np.ndarray) -> List[int]:
+        """
+        Find local extrema (peaks and valleys) in absolute curvature.
+
+        These represent transitions between different curvature levels,
+        such as from tight curves to gentle curves or straights.
+
+        Args:
+            curvature: Array of curvature values
+
+        Returns:
+            List of indices where extrema occur
+        """
+        from scipy.signal import find_peaks
+
+        abs_curvature = np.abs(curvature)
+
+        # Find peaks (local maxima)
+        # Use prominence to filter out minor fluctuations
+        mean_curv = np.mean(abs_curvature)
+        prominence = max(0.1, mean_curv * 0.2)  # 20% of mean curvature
+
+        peaks, _ = find_peaks(abs_curvature, prominence=prominence)
+
+        # Find valleys (local minima) by inverting
+        valleys, _ = find_peaks(-abs_curvature, prominence=prominence)
+
+        # Combine and sort
+        extrema = sorted(list(peaks) + list(valleys))
+
+        logger.debug(f"Found {len(peaks)} curvature peaks and "
+                    f"{len(valleys)} valleys")
+
+        return extrema
+
+    def _find_curvature_gradients(self, curvature: np.ndarray) -> List[int]:
+        """
+        Find points where curvature changes most rapidly (gradient peaks).
+
+        This detects entry/exit points of curves rather than apex/valley
+        points. Uses the rate of change of curvature: d(kappa)/ds.
+
+        Args:
+            curvature: Array of curvature values
+
+        Returns:
+            List of indices where curvature gradient is highest
+        """
+        from scipy.signal import find_peaks
+
+        distance = self.mean_course.distance
+
+        # Calculate curvature gradient (rate of change)
+        # d(kappa)/ds where s is arc length
+        gradient = np.zeros_like(curvature)
+
+        for i in range(1, len(curvature) - 1):
+            dk = curvature[i + 1] - curvature[i - 1]
+            ds = distance[i + 1] - distance[i - 1]
+            if ds > 0:
+                gradient[i] = dk / ds
+
+        # Use absolute gradient to find rapid changes in either direction
+        abs_gradient = np.abs(gradient)
+
+        # Find peaks in gradient (points of rapid curvature change)
+        mean_grad = np.mean(abs_gradient)
+        prominence_param = self.params.get('gradient_prominence', 0.1)
+        prominence = max(prominence_param, mean_grad * 0.3)
+
+        peaks, _ = find_peaks(abs_gradient, prominence=prominence)
+
+        logger.debug(f"Found {len(peaks)} curvature gradient peaks "
+                    f"(mean gradient: {mean_grad:.4f})")
+
+        return sorted(list(peaks))
+
 
     def _classify_point_types(self, curvature: np.ndarray,
                                threshold: float) -> np.ndarray:
@@ -1339,8 +1518,8 @@ class CourseSegmentation:
         """
         Handle closed loop wrap-around.
 
-        If first and last points are same type, they're part of same
-        segment. Remove or adjust boundaries accordingly.
+        For closed loops, ensure we don't create duplicate boundaries at
+        start/end point (which are the same physical location).
 
         Args:
             boundaries: List of boundary indices
@@ -1352,30 +1531,19 @@ class CourseSegmentation:
             Adjusted boundaries for closed loop
         """
         if not boundaries:
-            return [0, len(point_types) - 1]
+            # No boundaries found - treat as single segment
+            return [0]
 
-        first_type = point_types[0]
-        last_type = point_types[-1]
-
-        if first_type == last_type and len(boundaries) > 0:
-            first_seg_len = distance[boundaries[0]]
-            last_seg_len = (distance[-1] -
-                           distance[boundaries[-1]])
-            wrap_seg_len = first_seg_len + last_seg_len
-
-            if wrap_seg_len >= min_length:
-                result = boundaries[:]
-            else:
-                result = boundaries[1:] if len(boundaries) > 1 else []
-
-            if not result:
-                return [0, len(point_types) - 1]
-
+        # For closed loops, we want boundaries but NOT both 0 and N-1
+        # since they represent the same physical location.
+        # Only add 0 if it's not already there
+        result = boundaries[:]
+        if 0 not in result:
             result.insert(0, 0)
-            result.append(len(point_types) - 1)
-            return result
 
-        result = [0] + boundaries + [len(point_types) - 1]
+        # Never add len-1 for closed loops - it duplicates the 0 marker
+        # The segments will wrap around naturally
+
         return result
 
     def _merge_short_segments(self, boundaries: List[int], min_length: float) -> List[int]:
@@ -1413,6 +1581,7 @@ class CourseSegmentation:
         """
         self.segments = []
 
+        # Create segments between consecutive boundaries
         for i in range(len(boundaries) - 1):
             start_idx = boundaries[i]
             end_idx = boundaries[i + 1]
@@ -1441,6 +1610,38 @@ class CourseSegmentation:
             )
 
             self.segments.append(segment)
+
+        # Add wrap-around segment for closed loops (from last boundary to first)
+        if len(boundaries) > 0:
+            start_idx = boundaries[-1]
+            end_idx = len(curvature) - 1
+
+            # Only create wrap segment if there's actual distance to cover
+            if end_idx > start_idx:
+                # Extract data from last boundary to end of course
+                seg_x = self.mean_course.x[start_idx:]
+                seg_y = self.mean_course.y[start_idx:]
+                seg_heading = self.mean_course.heading[start_idx:]
+                seg_distance = self.mean_course.distance[start_idx:]
+                seg_curvature = curvature[start_idx:]
+
+                # Classify segment
+                seg_type = self._classify_segment(seg_curvature)
+
+                # Create wrap-around Segment object
+                segment = Segment(
+                    segment_id=len(self.segments),
+                    segment_type=seg_type,
+                    start_index=start_idx,
+                    end_index=end_idx,
+                    x=seg_x,
+                    y=seg_y,
+                    heading=seg_heading,
+                    distance=seg_distance,
+                    curvature=seg_curvature
+                )
+
+                self.segments.append(segment)
 
         self.total_segments = len(self.segments)
 
@@ -1494,6 +1695,108 @@ class CourseSegmentation:
                 return SegmentType.LEFT_TURN
             else:
                 return SegmentType.RIGHT_TURN
+
+    def _merge_adjacent_segments(self) -> None:
+        """
+        Merge adjacent segments of the same type.
+
+        This reduces over-segmentation by combining consecutive segments
+        that have the same classification.
+        """
+        if len(self.segments) <= 1:
+            return
+
+        merged_segments = []
+        current_segment = self.segments[0]
+
+        for next_segment in self.segments[1:]:
+            # Check if segments are same type and should be merged
+            if (current_segment.segment_type == next_segment.segment_type and
+                self._should_merge_segments(current_segment, next_segment)):
+                # Merge next_segment into current_segment
+                current_segment = self._merge_two_segments(
+                    current_segment, next_segment)
+            else:
+                # Different type or shouldn't merge - save current and
+                # start new one
+                merged_segments.append(current_segment)
+                current_segment = next_segment
+
+        # Don't forget the last segment
+        merged_segments.append(current_segment)
+
+        # Update segment IDs
+        for i, seg in enumerate(merged_segments):
+            seg.segment_id = i
+
+        # Update segment list
+        old_count = len(self.segments)
+        self.segments = merged_segments
+        self.total_segments = len(self.segments)
+
+        logger.info(f"Merged {old_count} segments into {self.total_segments}")
+
+    def _should_merge_segments(self, seg1: Segment, seg2: Segment) -> bool:
+        """
+        Determine if two adjacent segments should be merged.
+
+        Conservative policy: Only merge straight sections to avoid losing
+        information about curves. Extrema-based boundaries between curves
+        represent meaningful geometry changes (peaks/valleys) and should be
+        preserved.
+
+        Args:
+            seg1: First segment
+            seg2: Second segment (adjacent to seg1)
+
+        Returns:
+            True if segments should be merged
+        """
+        # Don't merge if types are different
+        if seg1.segment_type != seg2.segment_type:
+            return False
+
+        # Only merge straights - preserve all curve boundaries from extrema
+        # detection
+        if seg1.segment_type == SegmentType.STRAIGHT:
+            return True
+
+        # Don't merge curves - extrema boundaries represent meaningful
+        # geometric features
+        return False
+
+    def _merge_two_segments(self, seg1: Segment, seg2: Segment) -> Segment:
+        """
+        Merge two adjacent segments into one.
+
+        Args:
+            seg1: First segment
+            seg2: Second segment (must be adjacent)
+
+        Returns:
+            New merged segment
+        """
+        # Combine arrays
+        merged_x = np.concatenate([seg1.x, seg2.x[1:]])  # Skip duplicate point
+        merged_y = np.concatenate([seg1.y, seg2.y[1:]])
+        merged_heading = np.concatenate([seg1.heading, seg2.heading[1:]])
+        merged_distance = np.concatenate([seg1.distance, seg2.distance[1:]])
+        merged_curvature = np.concatenate([seg1.curvature, seg2.curvature[1:]])
+
+        # Create new merged segment
+        merged = Segment(
+            segment_id=seg1.segment_id,
+            segment_type=seg1.segment_type,
+            start_index=seg1.start_index,
+            end_index=seg2.end_index,
+            x=merged_x,
+            y=merged_y,
+            heading=merged_heading,
+            distance=merged_distance,
+            curvature=merged_curvature
+        )
+
+        return merged
 
     def _count_segments(self) -> None:
         """

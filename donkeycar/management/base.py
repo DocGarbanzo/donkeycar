@@ -695,6 +695,12 @@ class ImuPathVisualizer(BaseCommand):
         parser.add_argument('--downsample-factor', type=int, default=None,
                            help='downsample factor for display '
                                 '(default: auto-calculate to ~10000 pts)')
+        parser.add_argument('--boundary-method', type=str,
+                           choices=['threshold', 'extrema', 'gradient', 'hybrid'],
+                           default='gradient',
+                           help='segmentation method: threshold (simple), '
+                                'extrema (apex points), gradient (entry/exit), '
+                                'hybrid (combined) (default: gradient)')
 
         parsed_args = parser.parse_args(args)
         return parsed_args
@@ -705,7 +711,8 @@ class ImuPathVisualizer(BaseCommand):
 
         visualize_imu_path(args.data_source,
                           correct_drift=args.drift_correction,
-                          downsample_factor=args.downsample_factor)
+                          downsample_factor=args.downsample_factor,
+                          boundary_method=args.boundary_method)
 
 
 def execute_from_command_line():
