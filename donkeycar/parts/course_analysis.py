@@ -708,6 +708,7 @@ class MeanCourse:
         resampled_laps = self._resample_laps_uniform(laps)
         self._compute_weighted_mean(resampled_laps)
         self._apply_smoothing()
+        self._apply_loop_closure()
         self._compute_metadata_from_resampled(resampled_laps)
         self._compute_distance()
 
@@ -867,6 +868,50 @@ class MeanCourse:
             cos_h_smooth = np.convolve(cos_h, kernel, mode='same')
 
             self.heading = np.arctan2(sin_h_smooth, cos_h_smooth)
+
+    def _apply_loop_closure(self) -> None:
+        """
+        Apply loop closure to glue start and end of course together.
+
+        For closed-loop courses, this ensures the start and end connect
+        smoothly at y=0 by applying a gradual correction to the first
+        and last 2.5% of points.
+        """
+        if self.x is None or self.y is None or len(self.x) < 10:
+            return
+
+        # Calculate midpoint x between start and end
+        x_mid = (self.x[0] + self.x[-1]) / 2.0
+
+        # Calculate how far start and end are from y=0
+        y_start_error = self.y[0]
+        y_end_error = self.y[-1]
+
+        # Calculate x errors from midpoint
+        x_start_error = self.x[0] - x_mid
+        x_end_error = self.x[-1] - x_mid
+
+        # Determine number of points to correct (2.5% at each end)
+        num_points = len(self.x)
+        correction_length = max(1, int(num_points * 0.025))
+
+        # Apply gradual correction to first 2.5% of points
+        for i in range(correction_length):
+            factor = 1.0 - (i / correction_length)
+            self.x[i] -= x_start_error * factor
+            self.y[i] -= y_start_error * factor
+
+        # Apply gradual correction to last 2.5% of points
+        for i in range(correction_length):
+            idx = num_points - 1 - i
+            factor = 1.0 - (i / correction_length)
+            self.x[idx] -= x_end_error * factor
+            self.y[idx] -= y_end_error * factor
+
+        logger.debug(
+            f"Applied loop closure: x_mid={x_mid:.3f}, "
+            f"y_errors=[{y_start_error:.3f}, {y_end_error:.3f}]")
+
     @staticmethod
     def _blend_heading(current: float, new_value: float,
                        new_weight: float) -> float:
@@ -1078,10 +1123,11 @@ class CourseSegmentation:
         # Default parameters
         self.params = {
             'curvature_window': 5,
-            'curvature_smoothing_window': 11,
-            'straight_curvature_threshold': 0.05,  # rad/m
-            'min_segment_length': 0.5,  # meters
-            'inflection_threshold': 0.02,  # rad/m
+            'curvature_smoothing_window': 21,
+            'straight_curvature_threshold': 0.08,  # rad/m
+            'min_segment_length': 0.8,  # meters
+            'inflection_threshold': 0.05,  # rad/m
+            'classification_window': 5,  # points for type classification
         }
 
         if params is not None:
@@ -1164,7 +1210,10 @@ class CourseSegmentation:
 
     def _detect_boundaries(self, curvature: np.ndarray) -> List[int]:
         """
-        Detect segment boundaries based on curvature
+        Detect segment boundaries where curvature type changes.
+
+        Detects transitions between straight/left/right sections.
+        For closed loops, handles wrap-around properly.
 
         Args:
             curvature: Array of curvature values
@@ -1173,33 +1222,161 @@ class CourseSegmentation:
             List of boundary indices
         """
         threshold = self.params['straight_curvature_threshold']
-        inflection_threshold = self.params['inflection_threshold']
         min_length = self.params['min_segment_length']
+        distance = self.mean_course.distance
 
-        boundaries = [0]
+        point_types = self._classify_point_types(curvature, threshold)
+        boundaries = self._find_all_type_changes(point_types)
 
-        # Detect sign changes and threshold crossings
-        for i in range(1, len(curvature) - 1):
-            # Check for inflection point (sign change)
-            if curvature[i - 1] * curvature[i] < 0:
-                # Only if curvature is significant
-                if abs(curvature[i - 1]) > inflection_threshold or abs(curvature[i]) > inflection_threshold:
-                    boundaries.append(i)
+        if not boundaries:
+            return [0, len(curvature) - 1]
 
-            # Check for transition from straight to curve
-            elif abs(curvature[i - 1]) < threshold and abs(curvature[i]) >= threshold:
-                boundaries.append(i)
+        boundaries = self._filter_by_min_length(
+            boundaries, distance, min_length)
 
-            # Check for transition from curve to straight
-            elif abs(curvature[i - 1]) >= threshold and abs(curvature[i]) < threshold:
-                boundaries.append(i)
+        if not boundaries:
+            return [0, len(curvature) - 1]
 
-        boundaries.append(len(curvature) - 1)
-
-        # Merge short segments
-        boundaries = self._merge_short_segments(boundaries, min_length)
+        boundaries = self._handle_closed_loop(
+            boundaries, point_types, distance, min_length)
 
         return boundaries
+
+    def _classify_point_types(self, curvature: np.ndarray,
+                               threshold: float) -> np.ndarray:
+        """
+        Classify each point as left turn, right turn, or straight.
+
+        Args:
+            curvature: Array of curvature values
+            threshold: Curvature threshold for straight sections
+
+        Returns:
+            Array of point types (-1: right, 0: straight, 1: left)
+        """
+        window_size = self.params.get('classification_window', 5)
+        point_types = np.zeros(len(curvature), dtype=int)
+
+        for i in range(len(curvature)):
+            start_idx = max(0, i - window_size // 2)
+            end_idx = min(len(curvature), i + window_size // 2 + 1)
+            window_curv = curvature[start_idx:end_idx]
+            avg_curv = np.mean(window_curv)
+            point_types[i] = self._classify_curvature(avg_curv, threshold)
+
+        return point_types
+
+    def _classify_curvature(self, avg_curv: float,
+                             threshold: float) -> int:
+        """
+        Classify curvature value as turn type.
+
+        Args:
+            avg_curv: Average curvature value
+            threshold: Threshold for straight sections
+
+        Returns:
+            Turn type (-1: right, 0: straight, 1: left)
+        """
+        if abs(avg_curv) < threshold:
+            return 0
+        if avg_curv > 0:
+            return 1
+        return -1
+
+    def _find_all_type_changes(self, point_types: np.ndarray) -> List[int]:
+        """
+        Find all indices where point type changes.
+
+        Args:
+            point_types: Array of classified point types
+
+        Returns:
+            List of indices where type changes
+        """
+        boundaries = []
+        for i in range(1, len(point_types)):
+            if point_types[i] != point_types[i - 1]:
+                boundaries.append(i)
+        return boundaries
+
+    def _filter_by_min_length(self, boundaries: List[int],
+                                distance: np.ndarray,
+                                min_length: float) -> List[int]:
+        """
+        Filter out segments shorter than minimum length.
+
+        Args:
+            boundaries: List of boundary indices
+            distance: Distance array
+            min_length: Minimum segment length
+
+        Returns:
+            Filtered list of boundaries
+        """
+        if len(boundaries) < 2:
+            return boundaries
+
+        filtered = [boundaries[0]]
+
+        for i in range(1, len(boundaries)):
+            seg_start = filtered[-1]
+            seg_end = boundaries[i]
+            seg_length = distance[seg_end] - distance[seg_start]
+
+            if seg_length >= min_length:
+                filtered.append(boundaries[i])
+
+        if len(filtered) < 2:
+            return boundaries
+
+        return filtered
+
+    def _handle_closed_loop(self, boundaries: List[int],
+                             point_types: np.ndarray,
+                             distance: np.ndarray,
+                             min_length: float) -> List[int]:
+        """
+        Handle closed loop wrap-around.
+
+        If first and last points are same type, they're part of same
+        segment. Remove or adjust boundaries accordingly.
+
+        Args:
+            boundaries: List of boundary indices
+            point_types: Array of point types
+            distance: Distance array
+            min_length: Minimum segment length
+
+        Returns:
+            Adjusted boundaries for closed loop
+        """
+        if not boundaries:
+            return [0, len(point_types) - 1]
+
+        first_type = point_types[0]
+        last_type = point_types[-1]
+
+        if first_type == last_type and len(boundaries) > 0:
+            first_seg_len = distance[boundaries[0]]
+            last_seg_len = (distance[-1] -
+                           distance[boundaries[-1]])
+            wrap_seg_len = first_seg_len + last_seg_len
+
+            if wrap_seg_len >= min_length:
+                result = boundaries[:]
+            else:
+                result = boundaries[1:] if len(boundaries) > 1 else []
+
+            if not result:
+                return [0, len(point_types) - 1]
+
+            result.insert(0, 0)
+            result.append(len(point_types) - 1)
+            return result
+
+        result = [0] + boundaries + [len(point_types) - 1]
+        return result
 
     def _merge_short_segments(self, boundaries: List[int], min_length: float) -> List[int]:
         """

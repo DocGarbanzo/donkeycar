@@ -540,6 +540,9 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
     from matplotlib.widgets import Slider
     import math
 
+    # Expand user path
+    data_source = os.path.expanduser(data_source)
+
     # Check if source exists
     if not os.path.exists(data_source):
         print(f"File or directory {data_source} not found.")
@@ -830,16 +833,73 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
 
     # Mean course overlay (if available)
     mean_course_line = None
-    if mean_course_data is not None:
+    mean_course_segments = []
+
+    def refresh_mean_course():
+        """Draw mean course with each segment in a different color."""
+        nonlocal mean_course_line, mean_course_segments
+
+        # Clear existing segment lines
+        for line in mean_course_segments:
+            line.remove()
+        mean_course_segments = []
+
+        # Clear existing legend line
+        if mean_course_line is not None:
+            mean_course_line.remove()
+            mean_course_line = None
+
+        if mean_course_data is None:
+            return
+
+        if segmentation is None or segmentation.total_segments == 0:
+            _draw_unsegmented_mean_course()
+            return
+
+        _draw_segmented_mean_course()
+
+    def _draw_unsegmented_mean_course():
+        """Draw mean course as single orange line."""
+        nonlocal mean_course_line
+        course_len = mean_course_data["length"]
         mean_course_line, = ax.plot(
             mean_course_data['x'],
             mean_course_data['y'],
             color='#C04A00',
             linewidth=1.8,
             alpha=0.95,
-            label=f'Mean course ({mean_course_data["length"]:.1f}m)',
+            label=f'Mean course ({course_len:.1f}m)',
             visible=True
         )
+
+    def _draw_segmented_mean_course():
+        """Draw mean course with all segments in orange."""
+        nonlocal mean_course_line, mean_course_segments
+
+        # Draw all segments in the same orange color
+        for seg in segmentation.segments:
+            line, = ax.plot(
+                seg.x, seg.y,
+                color='#C04A00',
+                linewidth=2.5,
+                alpha=0.95,
+                visible=True)
+            mean_course_segments.append(line)
+
+        if not mean_course_segments:
+            return
+
+        course_len = mean_course_data["length"]
+        mean_course_line, = ax.plot(
+            [], [],
+            color='#C04A00',
+            linewidth=2.5,
+            alpha=0.95,
+            label=f'Mean course ({course_len:.1f}m)',
+            visible=True
+        )
+
+    refresh_mean_course()
 
     # Segment boundary markers (perpendicular ticks on mean course)
     segment_markers = []
@@ -852,11 +912,11 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
         segment_markers = []
         if segmentation is None or mean_course_data is None:
             return
+        if segmentation.total_segments == 0:
+            return
 
         headings = mean_course_data['heading']
-        marker_len = max(0.2, 0.01 * mean_course_data['length'])
-        colors = plt.cm.tab10(np.linspace(
-            0, 1, max(segmentation.total_segments, 1)))
+        marker_len = max(0.3, 0.02 * mean_course_data['length'])
 
         boundaries = []
         for seg in segmentation.segments:
@@ -874,15 +934,13 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
             heading = headings[idx]
             dx = np.cos(heading + np.pi/2.0) * marker_len * 0.5
             dy = np.sin(heading + np.pi/2.0) * marker_len * 0.5
-            color = colors[seg_id % len(colors)]
 
             line, = ax.plot([x_val - dx, x_val + dx],
                             [y_val - dy, y_val + dy],
-                            color=color,
-                            linewidth=2.0,
-                            alpha=0.9,
-                            visible=(mean_course_line is None or
-                                     mean_course_line.get_visible()))
+                            color='#F2C14E',
+                            linewidth=2.5,
+                            alpha=1.0,
+                            visible=True)
             segment_markers.append(line)
 
     refresh_segment_markers()
@@ -933,23 +991,53 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                         'Controls: \u2190/\u2192 arrows = navigate',
                         color='cyan')
 
-    # Toggle button for mean course (if available)
+    # Toggle buttons for driven path and mean course
     check_widget = None
+    # Create checkbox for toggling driven path and mean course (below legend)
+    rax = plt.axes([0.02, 0.23, 0.18, 0.09])
+    rax.set_facecolor('#1a1a1a')
+
+    # Determine which checkboxes to show based on available data
+    labels = ['Driven Path']
+    visibility = [True]  # Driven path visible by default
+
     if mean_course_line is not None:
-        # Create checkbox for toggling mean course (below legend)
-        rax = plt.axes([0.02, 0.27, 0.18, 0.05])
-        rax.set_facecolor('#1a1a1a')
-        check_widget = CheckButtons(rax, ['Mean Course'],
-                                    [mean_course_line.get_visible()])
+        labels.append('Mean Course')
+        visibility.append(mean_course_line.get_visible())
 
-        def toggle_mean_course(label):
-            visible = not mean_course_line.get_visible()
-            mean_course_line.set_visible(visible)
-            for line in segment_markers:
-                line.set_visible(visible)
+    check_widget = CheckButtons(rax, labels, visibility)
+
+    def toggle_display(label):
+        if label == 'Driven Path':
+            _toggle_driven_path()
             fig.canvas.draw_idle()
+            return
 
-        check_widget.on_clicked(toggle_mean_course)
+        if label == 'Mean Course':
+            _toggle_mean_course()
+            fig.canvas.draw_idle()
+            return
+
+    def _toggle_driven_path():
+        """Toggle driven path visibility."""
+        visible = not full_path_scatter.get_visible()
+        full_path_scatter.set_visible(visible)
+
+    def _toggle_mean_course():
+        """Toggle mean course and segment visibility."""
+        if mean_course_line is None:
+            return
+
+        visible = not mean_course_line.get_visible()
+        mean_course_line.set_visible(visible)
+
+        for line in mean_course_segments:
+            line.set_visible(visible)
+
+        for line in segment_markers:
+            line.set_visible(visible)
+
+    check_widget.on_clicked(toggle_display)
 
     # Set axis limits with some padding
     x_margin = (df['x'].max() - df['x'].min()) * 0.1
@@ -974,19 +1062,13 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
     time_slider.valtext.set_visible(False)
 
     def apply_lap_selection(num_laps):
-        nonlocal mean_course_data, segmentation
+        nonlocal mean_course_data, segmentation, legend
         num_laps = max(1, min(num_laps, max_laps_detected))
         print(f"\nUpdating to show {num_laps} lap(s)...")
 
         new_mean_course = compute_mean_course_with_laps(num_laps)
         if new_mean_course is not None:
             mean_course_data = new_mean_course
-            mean_course_line.set_data(
-                new_mean_course['x'], new_mean_course['y'])
-            mean_course_line.set_label(
-                f'Mean course ({new_mean_course["length"]:.1f}m)')
-            legend.get_texts()[-1].set_text(
-                f'Mean course ({new_mean_course["length"]:.1f}m)')
 
             try:
                 segmentation = CourseSegmentation(
@@ -997,7 +1079,31 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
             except Exception as exc:
                 print(f"  Could not update segmentation: {exc}")
                 segmentation = None
+
+            # Refresh both mean course segments and boundary markers
+            refresh_mean_course()
             refresh_segment_markers()
+
+            # Recreate legend with updated mean course line
+            if mean_course_line is not None:
+                mean_course_line.set_label(
+                    f'Mean course ({new_mean_course["length"]:.1f}m)')
+
+                # Rebuild legend handles
+                legend_handles = [full_path_legend, current_pos, current_path]
+                if mean_course_line is not None:
+                    legend_handles.append(mean_course_line)
+
+                # Remove old legend and create new one
+                legend.remove()
+                legend = ax.legend(
+                    handles=legend_handles,
+                    bbox_to_anchor=(0.02, 0.48),
+                    loc='upper left',
+                    framealpha=0.9,
+                    ncol=1,
+                    fontsize=10,
+                    bbox_transform=fig.transFigure)
 
         if num_laps <= len(lap_end_indices):
             end_idx = lap_end_indices[num_laps - 1]
@@ -1234,9 +1340,12 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
     # Add legend in top area underneath controls - vertical arrangement
     # Use custom handles to control legend appearance
     boundary_handle = None
-    if segmentation is not None:
-        boundary_handle = Line2D([0], [0], color='#F2C14E',
-                                 linewidth=2, label='Segment boundary')
+    if segmentation is not None and segmentation.total_segments > 0:
+        boundary_handle = Line2D(
+            [0], [0],
+            color='#F2C14E',
+            linewidth=2.5,
+            label=f'Segment boundaries ({segmentation.total_segments})')
 
     legend_handles = [full_path_legend, current_pos, current_path]
     if mean_course_line is not None:
