@@ -980,35 +980,35 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
         fig, 0.95, f'{source_type}: {display_path}')
 
     # Speed text - position in top area above plot
-    speed_text = _create_status_text(fig, 0.91)
+    speed_text = _create_status_text(fig, 0.915)
 
     # Time text - position in top area above plot
-    time_text = _create_status_text(fig, 0.87)
+    time_text = _create_status_text(fig, 0.88)
 
     # Position text - below time text
-    pos_text = _create_status_text(fig, 0.83)
+    pos_text = _create_status_text(fig, 0.845)
 
     # Lap text - below position text
-    lap_text = _create_status_text(fig, 0.79)
+    lap_text = _create_status_text(fig, 0.81)
 
-    total_dist_text = _create_status_text(fig, 0.75, 'Total dist: --')
-    lap_dist_text = _create_status_text(fig, 0.71, 'Lap dist: --')
+    total_dist_text = _create_status_text(fig, 0.775, 'Total dist: --')
+    lap_dist_text = _create_status_text(fig, 0.74, 'Lap dist: --')
 
     # Debug text - below loop text
-    debug_text = _create_status_text(fig, 0.67)
+    debug_text = _create_status_text(fig, 0.705)
 
     # Drift correction text - below debug text
-    drift_text = _create_status_text(fig, 0.63)
+    drift_text = _create_status_text(fig, 0.67)
 
-    # Controls text - below drift text
-    _create_status_text(fig, 0.58,
+    # Controls text - below drift text with more spacing
+    _create_status_text(fig, 0.62,
                         'Controls: \u2190/\u2192 arrows = navigate',
                         color='cyan')
 
     # Toggle buttons for driven path and mean course
     check_widget = None
     # Create checkbox for toggling driven path and mean course (below segment method)
-    rax = plt.axes([0.02, 0.23, 0.09, 0.09])
+    rax = plt.axes([0.02, 0.27, 0.12, 0.045])
     rax.set_facecolor('#1a1a1a')
 
     # Determine which checkboxes to show based on available data
@@ -1067,7 +1067,7 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
     cbar.set_label('Speed')
 
     # Create slider without time display (redundant with top-left display)
-    ax_slider = plt.axes([0.15, 0.1, 0.7, 0.03])
+    ax_slider = plt.axes([0.02, 0.05, 0.96, 0.03])
 
     time_slider = Slider(ax_slider, 'Time', df['t'].min(), df['t'].max(),
                          valinit=df['t'].min(), valfmt='')
@@ -1114,7 +1114,7 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                 legend.remove()
                 legend = ax.legend(
                     handles=legend_handles,
-                    bbox_to_anchor=(0.02, 0.54),
+                    bbox_to_anchor=(0.02, 0.60),
                     loc='upper left',
                     framealpha=0.9,
                     ncol=1,
@@ -1147,16 +1147,16 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
     if mean_course_line is not None and max_laps_detected > 1 and lap_end_indices:
         lap_value = [max_laps_detected]
 
-        fig.text(0.12, 0.20, 'Laps', color='white', fontsize=8,
+        fig.text(0.02, 0.20, 'Laps', color='white', fontsize=8,
                  bbox=dict(boxstyle='round', facecolor='black', alpha=0.8))
 
-        lap_text_ax = plt.axes([0.12, 0.155, 0.065, 0.035])
+        lap_text_ax = plt.axes([0.02, 0.155, 0.065, 0.035])
         lap_text_ax.set_facecolor('#d3d3d3')
         lap_textbox = TextBox(lap_text_ax, '', initial=str(lap_value[0]))
         lap_textbox.text_disp.set_color('black')
 
-        lap_minus_ax = plt.axes([0.12, 0.11, 0.03, 0.03])
-        lap_plus_ax = plt.axes([0.16, 0.11, 0.03, 0.03])
+        lap_minus_ax = plt.axes([0.02, 0.11, 0.03, 0.03])
+        lap_plus_ax = plt.axes([0.06, 0.11, 0.03, 0.03])
         for ax_button in (lap_minus_ax, lap_plus_ax):
             ax_button.set_facecolor('#1a1a1a')
         lap_minus_button = Button(lap_minus_ax, '-', color='#1a1a1a',
@@ -1198,10 +1198,10 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
     if mean_course_data is not None:
         current_segment_method = [segment_method]
 
-        fig.text(0.02, 0.38, 'Segment Method', color='white', fontsize=8,
+        fig.text(0.02, 0.45, 'Segment Method', color='white', fontsize=8,
                  bbox=dict(boxstyle='round', facecolor='black', alpha=0.8))
 
-        segment_method_ax = plt.axes([0.02, 0.26, 0.18, 0.11])
+        segment_method_ax = plt.axes([0.02, 0.33, 0.18, 0.11])
         segment_method_ax.set_facecolor('#1a1a1a')
 
         segment_radio = RadioButtons(
@@ -1254,7 +1254,7 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                 legend.remove()
                 legend = ax.legend(
                     handles=legend_handles,
-                    bbox_to_anchor=(0.02, 0.54),
+                    bbox_to_anchor=(0.02, 0.60),
                     loc='upper left',
                     framealpha=0.9,
                     ncol=1,
@@ -1446,7 +1446,7 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
         legend_handles.append(boundary_handle)
 
     legend = ax.legend(handles=legend_handles,
-                      bbox_to_anchor=(0.02, 0.54), loc='upper left',
+                      bbox_to_anchor=(0.02, 0.60), loc='upper left',
                       framealpha=0.9, ncol=1, fontsize=10,
                       bbox_transform=fig.transFigure)
 
