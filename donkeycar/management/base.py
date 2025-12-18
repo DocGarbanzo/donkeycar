@@ -692,10 +692,14 @@ class ImuPathVisualizer(BaseCommand):
                            help='path to IMU CSV file or Tub directory (default: imu.csv)')
         parser.add_argument('--drift-correction', action='store_true',
                            help='enable loop drift correction')
+        parser.add_argument('--min-loop-distance', type=float, default=1.0,
+                           help='minimum distance to travel before considering loop closure (meters) (default: 1.0)')
+        parser.add_argument('--max-distance', type=float, default=0.5,
+                           help='maximum distance from origin to start looking for reversal point (meters) (default: 0.5)')
         parser.add_argument('--downsample-factor', type=int, default=None,
                            help='downsample factor for display '
                                 '(default: auto-calculate to ~10000 pts)')
-        parser.add_argument('--boundary-method', type=str,
+        parser.add_argument('--segment-method', type=str,
                            choices=['threshold', 'extrema', 'gradient', 'hybrid'],
                            default='gradient',
                            help='segmentation method: threshold (simple), '
@@ -711,8 +715,10 @@ class ImuPathVisualizer(BaseCommand):
 
         visualize_imu_path(args.data_source,
                           correct_drift=args.drift_correction,
+                          min_loop_distance=args.min_loop_distance,
+                          max_distance=args.max_distance,
                           downsample_factor=args.downsample_factor,
-                          boundary_method=args.boundary_method)
+                          segment_method=args.segment_method)
 
 
 def execute_from_command_line():

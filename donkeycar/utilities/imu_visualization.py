@@ -17,7 +17,7 @@ Classes:
 import multiprocessing
 from multiprocessing import Process, Value
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Button, CheckButtons, Slider, TextBox
+from matplotlib.widgets import Button, CheckButtons, RadioButtons, Slider, TextBox
 import time
 import numpy as np
 import pandas as pd
@@ -520,7 +520,7 @@ def correct_loop_drift(df, min_loop_distance=1.0, max_distance=0.5,
 
 def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                        min_loop_distance=1.0, max_distance=0.5,
-                       downsample_factor=None, boundary_method='gradient'):
+                       downsample_factor=None, segment_method='gradient'):
     """
     Load and visualize IMU path data with interactive time slider.
 
@@ -535,7 +535,7 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                               looking for reversal point
         downsample_factor (int): Downsample factor for display
                                  (default: auto-calculate to ~10000 pts)
-        boundary_method (str): Segmentation method - 'threshold', 'extrema',
+        segment_method (str): Segmentation method - 'threshold', 'extrema',
                               'gradient', or 'hybrid' (default: 'gradient')
     """
     import matplotlib.pyplot as plt
@@ -728,11 +728,11 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
             from donkeycar.parts.course_analysis import CourseSegmentation
             segmentation = CourseSegmentation(
                 mean_course=mean_course_data['mean_course_obj'],
-                params={'boundary_method': boundary_method})
+                params={'boundary_method': segment_method})
             segmentation.compute()
             print(f"Segmented mean course into "
                   f"{segmentation.total_segments} segments "
-                  f"using '{boundary_method}' method")
+                  f"using '{segment_method}' method")
         except Exception as exc:
             print(f"Could not compute segmentation: {exc}")
             segmentation = None
@@ -951,7 +951,7 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
 
             line, = ax.plot([x_val - dx, x_val + dx],
                             [y_val - dy, y_val + dy],
-                            color='#F2C14E',
+                            color='#C04A00',
                             linewidth=2.5,
                             alpha=1.0,
                             visible=True)
@@ -1001,14 +1001,14 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
     drift_text = _create_status_text(fig, 0.63)
 
     # Controls text - below drift text
-    _create_status_text(fig, 0.48,
+    _create_status_text(fig, 0.58,
                         'Controls: \u2190/\u2192 arrows = navigate',
                         color='cyan')
 
     # Toggle buttons for driven path and mean course
     check_widget = None
-    # Create checkbox for toggling driven path and mean course (below legend)
-    rax = plt.axes([0.02, 0.23, 0.18, 0.09])
+    # Create checkbox for toggling driven path and mean course (below segment method)
+    rax = plt.axes([0.02, 0.23, 0.09, 0.09])
     rax.set_facecolor('#1a1a1a')
 
     # Determine which checkboxes to show based on available data
@@ -1087,11 +1087,11 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
             try:
                 segmentation = CourseSegmentation(
                     mean_course=new_mean_course['mean_course_obj'],
-                    params={'boundary_method': boundary_method})
+                    params={'boundary_method': segment_method})
                 segmentation.compute()
                 print("  Updated segmentation for new mean course "
                       f"({segmentation.total_segments} segments) "
-                      f"using '{boundary_method}' method")
+                      f"using '{segment_method}' method")
             except Exception as exc:
                 print(f"  Could not update segmentation: {exc}")
                 segmentation = None
@@ -1114,7 +1114,7 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                 legend.remove()
                 legend = ax.legend(
                     handles=legend_handles,
-                    bbox_to_anchor=(0.02, 0.48),
+                    bbox_to_anchor=(0.02, 0.54),
                     loc='upper left',
                     framealpha=0.9,
                     ncol=1,
@@ -1147,16 +1147,16 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
     if mean_course_line is not None and max_laps_detected > 1 and lap_end_indices:
         lap_value = [max_laps_detected]
 
-        fig.text(0.02, 0.20, 'Laps', color='white', fontsize=8,
+        fig.text(0.12, 0.20, 'Laps', color='white', fontsize=8,
                  bbox=dict(boxstyle='round', facecolor='black', alpha=0.8))
 
-        lap_text_ax = plt.axes([0.02, 0.155, 0.065, 0.035])
+        lap_text_ax = plt.axes([0.12, 0.155, 0.065, 0.035])
         lap_text_ax.set_facecolor('#d3d3d3')
         lap_textbox = TextBox(lap_text_ax, '', initial=str(lap_value[0]))
         lap_textbox.text_disp.set_color('black')
 
-        lap_minus_ax = plt.axes([0.02, 0.11, 0.03, 0.03])
-        lap_plus_ax = plt.axes([0.06, 0.11, 0.03, 0.03])
+        lap_minus_ax = plt.axes([0.12, 0.11, 0.03, 0.03])
+        lap_plus_ax = plt.axes([0.16, 0.11, 0.03, 0.03])
         for ax_button in (lap_minus_ax, lap_plus_ax):
             ax_button.set_facecolor('#1a1a1a')
         lap_minus_button = Button(lap_minus_ax, '-', color='#1a1a1a',
@@ -1193,6 +1193,82 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
         lap_textbox.on_submit(on_text_submit)
         lap_minus_button.on_clicked(on_minus)
         lap_plus_button.on_clicked(on_plus)
+
+    # Segment method selector (if segmentation exists) - between legend and checkboxes
+    if mean_course_data is not None:
+        current_segment_method = [segment_method]
+
+        fig.text(0.02, 0.38, 'Segment Method', color='white', fontsize=8,
+                 bbox=dict(boxstyle='round', facecolor='black', alpha=0.8))
+
+        segment_method_ax = plt.axes([0.02, 0.26, 0.18, 0.11])
+        segment_method_ax.set_facecolor('#1a1a1a')
+
+        segment_radio = RadioButtons(
+            segment_method_ax,
+            ('Threshold', 'Extrema', 'Gradient', 'Hybrid'),
+            active={'threshold': 0, 'extrema': 1, 'gradient': 2,
+                    'hybrid': 3}.get(segment_method, 2))
+
+        def on_segment_method_change(label):
+            nonlocal segmentation, mean_course_data, legend
+            method_map = {
+                'Threshold': 'threshold',
+                'Extrema': 'extrema',
+                'Gradient': 'gradient',
+                'Hybrid': 'hybrid'
+            }
+            new_method = method_map[label]
+            current_segment_method[0] = new_method
+
+            print(f"\nChanging segmentation method to '{new_method}'...")
+
+            try:
+                from donkeycar.parts.course_analysis import CourseSegmentation
+                segmentation = CourseSegmentation(
+                    mean_course=mean_course_data['mean_course_obj'],
+                    params={'boundary_method': new_method})
+                segmentation.compute()
+                print(f"  Segmented into {segmentation.total_segments} "
+                      f"segments using '{new_method}' method")
+
+                # Refresh visualizations
+                refresh_mean_course()
+                refresh_segment_markers()
+
+                # Update legend
+                boundary_handle = None
+                if segmentation.total_segments > 0:
+                    boundary_handle = Line2D(
+                        [0], [0],
+                        color='#C04A00',
+                        linewidth=2.5,
+                        label=f'Segment boundaries ({segmentation.total_segments})')
+
+                legend_handles = [full_path_legend, current_pos, current_path]
+                if mean_course_line is not None:
+                    legend_handles.append(mean_course_line)
+                if boundary_handle is not None:
+                    legend_handles.append(boundary_handle)
+
+                legend.remove()
+                legend = ax.legend(
+                    handles=legend_handles,
+                    bbox_to_anchor=(0.02, 0.54),
+                    loc='upper left',
+                    framealpha=0.9,
+                    ncol=1,
+                    fontsize=10,
+                    bbox_transform=fig.transFigure)
+
+                fig.canvas.draw_idle()
+
+            except Exception as exc:
+                print(f"  Could not update segmentation: {exc}")
+                import traceback
+                traceback.print_exc()
+
+        segment_radio.on_clicked(on_segment_method_change)
 
     # Performance optimization: throttle updates
     last_update_time = [0]
@@ -1359,7 +1435,7 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
     if segmentation is not None and segmentation.total_segments > 0:
         boundary_handle = Line2D(
             [0], [0],
-            color='#F2C14E',
+            color='#C04A00',
             linewidth=2.5,
             label=f'Segment boundaries ({segmentation.total_segments})')
 
@@ -1370,7 +1446,7 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
         legend_handles.append(boundary_handle)
 
     legend = ax.legend(handles=legend_handles,
-                      bbox_to_anchor=(0.02, 0.48), loc='upper left',
+                      bbox_to_anchor=(0.02, 0.54), loc='upper left',
                       framealpha=0.9, ncol=1, fontsize=10,
                       bbox_transform=fig.transFigure)
 
