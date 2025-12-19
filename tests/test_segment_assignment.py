@@ -570,3 +570,116 @@ class TestSegmentAssignment:
         # Should detect multiple segment transitions
         num_transitions = np.sum(np.diff(segment_ids) != 0)
         assert num_transitions > 0, "Should detect segment transitions"
+
+    def test_non_adjacent_boundary_ignored(self):
+        """Boundary proximity check should only use adjacent boundaries.
+
+        Regression test for a bug where the nearest boundary was used even
+        if it was not adjacent to the segment containing the start point,
+        causing incorrect segment assignments.
+        """
+        # Create a figure-8 course that passes through origin
+        t = np.linspace(0, 2*np.pi, 400, endpoint=False)
+        radius = 5.0
+        x = radius * np.sin(t)
+        y = radius * np.sin(t) * np.cos(t)
+        heading = np.arctan2(np.gradient(y), np.gradient(x))
+        dx_diff = np.diff(x)
+        dy_diff = np.diff(y)
+        ds = np.sqrt(dx_diff**2 + dy_diff**2)
+        distance = np.concatenate([[0], np.cumsum(ds)])
+
+        mean_course = create_mean_course_from_arrays(x, y, heading, distance)
+
+        segmentation = CourseSegmentation(
+            mean_course, params={'boundary_method': 'threshold'}
+        )
+        segmentation.compute()
+
+        if segmentation.total_segments < 3:
+            pytest.skip("Need multiple segments for this test")
+
+        # Find segment containing origin
+        origin_segment = segmentation.find_segment_for_point(0.0, 0.0)
+        assert origin_segment is not None, "Origin should be in a segment"
+
+        # Assign segments to path starting at origin
+        segment_ids = segmentation.assign_segments_to_path(x, y)
+
+        # Key assertion: first path point should be in the same segment
+        # as found by find_segment_for_point
+        assert segment_ids[0] == origin_segment, \
+            f"First point should be in segment {origin_segment}, " \
+            f"got {segment_ids[0]}"
+
+        # Also check that the nearest boundary (if any) did not incorrectly
+        # override the segment assignment
+        nearest = segmentation.nearest_boundary(0.0, 0.0)
+        if nearest is not None:
+            boundary, dist = nearest
+            is_adjacent = (boundary['segment_from'] == origin_segment or
+                          boundary['segment_to'] == origin_segment)
+            if not is_adjacent:
+                # Non-adjacent boundary should not affect assignment
+                assert segment_ids[0] == origin_segment, \
+                    "Non-adjacent boundary should not affect segment assignment"
+
+    def test_point_before_boundary_uses_tangent_distance(self):
+        """Test that segment assignment uses tangent distance, not normal.
+
+        Regression test for a bug where signed distance to boundary line
+        (perpendicular distance) was used instead of distance along the
+        course direction (tangent projection). This caused points to be
+        assigned to wrong segments when they were laterally offset from
+        the boundary but still "before" it along the course.
+        """
+        # Create a simple course that crosses through origin
+        num_points = 100
+        t = np.linspace(0, 2*np.pi, num_points, endpoint=False)
+        radius = 5.0
+        x = radius * np.sin(t)
+        y = radius * np.cos(t)
+        heading = np.arctan2(np.gradient(y), np.gradient(x))
+        dx_diff = np.diff(x)
+        dy_diff = np.diff(y)
+        ds = np.sqrt(dx_diff**2 + dy_diff**2)
+        distance = np.concatenate([[0], np.cumsum(ds)])
+
+        mean_course = create_mean_course_from_arrays(x, y, heading, distance)
+
+        segmentation = CourseSegmentation(mean_course)
+        segmentation.compute()
+
+        if not segmentation.segment_boundaries:
+            pytest.skip("No boundaries to test")
+
+        # Find a boundary and test points along the course direction
+        boundary = segmentation.segment_boundaries[0]
+        bp = boundary['point']
+        tangent = boundary['tangent']
+        normal = boundary['normal']
+
+        # Point slightly before the boundary (negative tangent distance)
+        point_before = bp - tangent * 0.1
+        seg_before = segmentation.find_segment_for_point(
+            point_before[0], point_before[1])
+
+        # Point slightly after the boundary (positive tangent distance)
+        point_after = bp + tangent * 0.1
+        seg_after = segmentation.find_segment_for_point(
+            point_after[0], point_after[1])
+
+        # They should be in different segments
+        assert seg_before == boundary['segment_from'], \
+            f"Point before boundary should be in segment {boundary['segment_from']}"
+        assert seg_after == boundary['segment_to'], \
+            f"Point after boundary should be in segment {boundary['segment_to']}"
+
+        # Now test a point that's laterally offset but still "before" boundary
+        # This was the bug: lateral offset changed the perpendicular distance
+        # sign even though the point was still before the boundary
+        point_lateral_before = bp - tangent * 0.1 + normal * 0.2
+        seg_lateral = segmentation.find_segment_for_point(
+            point_lateral_before[0], point_lateral_before[1])
+        assert seg_lateral == boundary['segment_from'], \
+            "Lateral offset should not change before/after determination"

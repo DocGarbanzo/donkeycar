@@ -644,6 +644,93 @@ class TestSegmentEstimator(unittest.TestCase):
         self.assertIn(estimate.segment_id, [0, 1])
 
 
+class TestAssignSegmentsToPath(unittest.TestCase):
+    """Test the assign_segments_to_path method"""
+
+    def _create_oval_course_and_segmentation(self):
+        """Create an oval course with segmentation"""
+        theta = np.linspace(0, 2 * np.pi, 200)
+        x = 10 * np.cos(theta)
+        y = 5 * np.sin(theta)
+        dx = np.diff(x)
+        dy = np.diff(y)
+        heading = np.arctan2(dy, dx)
+        heading = np.append(heading, heading[-1])
+        ds = np.sqrt(dx**2 + dy**2)
+        distance = np.concatenate([[0], np.cumsum(ds)])
+
+        mean_course = MeanCourse()
+        mean_course.x = x
+        mean_course.y = y
+        mean_course.heading = heading
+        mean_course.distance = distance
+        mean_course.total_length = distance[-1]
+        mean_course.num_points = len(x)
+        mean_course.is_closed_loop = True
+
+        segmentation = CourseSegmentation(mean_course)
+        segmentation.compute()
+        return mean_course, segmentation
+
+    def test_assign_exact_path(self):
+        """Test assigning segments when driven path is on mean course"""
+        mean_course, segmentation = self._create_oval_course_and_segmentation()
+        if segmentation.total_segments < 2:
+            self.skipTest("Need at least 2 segments")
+        x_path = np.array(mean_course.x)
+        y_path = np.array(mean_course.y)
+        segment_ids = segmentation.assign_segments_to_path(x_path, y_path)
+        self.assertEqual(len(segment_ids), len(x_path))
+        unique_segments = set(segment_ids)
+        self.assertEqual(len(unique_segments), segmentation.total_segments)
+
+    def test_assign_offset_path(self):
+        """Test assigning segments when driven path deviates from mean course"""
+        mean_course, segmentation = self._create_oval_course_and_segmentation()
+        if segmentation.total_segments < 2:
+            self.skipTest("Need at least 2 segments")
+        offset = 0.5
+        x_path = np.array(mean_course.x) + offset
+        y_path = np.array(mean_course.y) + offset
+        segment_ids = segmentation.assign_segments_to_path(x_path, y_path)
+        self.assertEqual(len(segment_ids), len(x_path))
+        unique_segments = set(segment_ids)
+        self.assertEqual(len(unique_segments), segmentation.total_segments)
+
+    def test_transitions_are_monotonic(self):
+        """Test that segment transitions only go forward (0->1->2->...)"""
+        mean_course, segmentation = self._create_oval_course_and_segmentation()
+        if segmentation.total_segments < 2:
+            self.skipTest("Need at least 2 segments")
+        x_path = np.array(mean_course.x)
+        y_path = np.array(mean_course.y)
+        segment_ids = segmentation.assign_segments_to_path(x_path, y_path)
+        for i in range(1, len(segment_ids)):
+            prev_seg = segment_ids[i - 1]
+            curr_seg = segment_ids[i]
+            if prev_seg != curr_seg:
+                expected_next = (prev_seg + 1) % segmentation.total_segments
+                self.assertEqual(
+                    curr_seg, expected_next,
+                    f"Invalid transition at {i}: {prev_seg} -> {curr_seg}"
+                )
+
+    def test_empty_path(self):
+        """Test with empty path arrays"""
+        mean_course, segmentation = self._create_oval_course_and_segmentation()
+        result = segmentation.assign_segments_to_path(np.array([]), np.array([]))
+        self.assertEqual(len(result), 0)
+
+    def test_single_point(self):
+        """Test with single point path"""
+        mean_course, segmentation = self._create_oval_course_and_segmentation()
+        x_path = np.array([mean_course.x[50]])
+        y_path = np.array([mean_course.y[50]])
+        segment_ids = segmentation.assign_segments_to_path(x_path, y_path)
+        self.assertEqual(len(segment_ids), 1)
+        self.assertIsNotNone(segment_ids[0])
+
+
 class TestIntegration(unittest.TestCase):
     """Integration tests for complete workflow"""
 

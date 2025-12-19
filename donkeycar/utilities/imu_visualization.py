@@ -783,16 +783,21 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                 start_segment = segmentation.find_segment_for_point(
                     start_x, start_y)
                 relabel_offset = start_segment
+                # Only adjust relabel_offset based on boundary proximity
+                # if the nearest boundary is actually adjacent to start_segment
                 nearest_boundary = segmentation.nearest_boundary(
                     start_x, start_y)
-                if nearest_boundary is not None:
+                if nearest_boundary is not None and start_segment is not None:
                     boundary, dist = nearest_boundary
-                    tol = segmentation.params.get(
-                        'boundary_distance_tolerance', 0.05)
-                    if dist < -tol:
-                        relabel_offset = boundary['segment_from']
-                    elif dist > tol:
-                        relabel_offset = boundary['segment_to']
+                    is_outgoing = boundary['segment_from'] == start_segment
+                    is_incoming = boundary['segment_to'] == start_segment
+                    if is_outgoing or is_incoming:
+                        tol = segmentation.params.get(
+                            'boundary_distance_tolerance', 0.05)
+                        if dist < -tol:
+                            relabel_offset = boundary['segment_from']
+                        elif dist > tol:
+                            relabel_offset = boundary['segment_to']
 
                 if relabel_offset is not None and relabel_offset != 0:
                     logger.debug(

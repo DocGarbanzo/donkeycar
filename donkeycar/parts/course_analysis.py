@@ -1932,7 +1932,9 @@ class CourseSegmentation:
         Find the closest segment boundary to (x, y).
 
         Returns:
-            Tuple of (boundary_dict, signed_distance) or None if unavailable.
+            Tuple of (boundary_dict, signed_distance_along_tangent) or None.
+            The signed distance is negative if the point is before the boundary
+            along the course, positive if after.
         """
         if not hasattr(self, 'segment_boundaries') or not self.segment_boundaries:
             return None
@@ -1942,12 +1944,12 @@ class CourseSegmentation:
         min_dist = float('inf')
 
         for boundary in self.segment_boundaries:
-            dist = self._signed_distance_to_line(
-                point, boundary['point'], boundary['normal'])
-            abs_dist = abs(dist)
+            # Use tangent distance for determining before/after
+            tangent_dist = self._signed_distance_along_tangent(point, boundary)
+            abs_dist = abs(tangent_dist)
             if abs_dist < min_dist:
                 min_dist = abs_dist
-                closest = (boundary, dist)
+                closest = (boundary, tangent_dist)
 
         return closest
 
@@ -1981,7 +1983,8 @@ class CourseSegmentation:
         tol = self.params.get('boundary_distance_tolerance', 0.05)
         point = np.array([x, y])
 
-        # Step backward if the point lies clearly on the previous side
+        # Step backward if the point lies before the incoming boundary
+        # (negative tangent distance means we're before the boundary point)
         visited = set()
         while True:
             if candidate in visited:
@@ -1995,8 +1998,7 @@ class CourseSegmentation:
                 )
             if incoming is None:
                 break
-            dist_in = self._signed_distance_to_line(
-                point, incoming['point'], incoming['normal'])
+            dist_in = self._signed_distance_along_tangent(point, incoming)
             if dist_in < -tol:
                 candidate = incoming['segment_from']
                 continue
@@ -2005,6 +2007,7 @@ class CourseSegmentation:
             break
 
         # Step forward if the point lies beyond the outgoing boundary
+        # (positive tangent distance means we're past the boundary point)
         visited.clear()
         while True:
             if candidate in visited:
@@ -2018,8 +2021,7 @@ class CourseSegmentation:
                 )
             if outgoing is None:
                 break
-            dist_out = self._signed_distance_to_line(
-                point, outgoing['point'], outgoing['normal'])
+            dist_out = self._signed_distance_along_tangent(point, outgoing)
             if dist_out > tol:
                 candidate = outgoing['segment_to']
                 continue
@@ -2193,6 +2195,25 @@ class CourseSegmentation:
         return np.dot(vec, line_normal)
 
     @staticmethod
+    def _signed_distance_along_tangent(point: np.ndarray,
+                                       boundary: dict) -> float:
+        """
+        Compute signed distance from point to boundary along course tangent.
+
+        Measures how far before (negative) or after (positive) the boundary
+        point the given point lies, projected onto the course direction.
+
+        Args:
+            point: Point to test (2D array)
+            boundary: Boundary dict with 'point' and 'tangent'
+
+        Returns:
+            Signed distance along tangent (negative = before, positive = after)
+        """
+        vec = point - boundary['point']
+        return np.dot(vec, boundary['tangent'])
+
+    @staticmethod
     def _crossed_boundary_forward(p1: np.ndarray,
                                   p2: np.ndarray,
                                   boundary: dict) -> bool:
@@ -2217,63 +2238,66 @@ class CourseSegmentation:
         d2 = CourseSegmentation._signed_distance_to_line(
             p2, boundary['point'], boundary['normal']
         )
-
-        if d1 == 0 and d2 == 0:
+        # Use tolerance for near-zero comparisons
+        zero_tol = 1e-9
+        if abs(d1) < zero_tol and abs(d2) < zero_tol:
             return False
-
         # Require a sign change (touching boundary counts as >=0)
-        if d1 > 0 and d2 > 0:
+        if d1 > zero_tol and d2 > zero_tol:
             return False
-        if d1 < 0 and d2 < 0:
+        if d1 < -zero_tol and d2 < -zero_tol:
             return False
-
         tangent = boundary.get('tangent')
         tangent_limit = boundary.get('tangent_limit')
         if tangent is None or tangent_limit is None:
             return True
-
         segment_vec = p2 - p1
         denom = np.dot(boundary['normal'], segment_vec)
-
-        # Parallel to boundary - shouldn't count as crossing
-        if abs(denom) < 1e-6:
-            return False
-
         expected_sign = boundary.get('expected_denom_sign', 1.0)
+        # Handle near-parallel crossings: when the path is nearly parallel to
+        # the boundary but still transitions from one side to the other, we
+        # should detect the crossing if both points are close to the boundary.
+        if abs(denom) < 1e-6:
+            # Path is nearly parallel to boundary. Check if we're close enough
+            # to the boundary point to count as a crossing through it.
+            proximity_tol = tangent_limit * 0.5
+            dist_p1 = np.linalg.norm(p1 - boundary['point'])
+            dist_p2 = np.linalg.norm(p2 - boundary['point'])
+            if dist_p1 < proximity_tol or dist_p2 < proximity_tol:
+                # Close to boundary point with a sign change - count as crossed
+                return True
+            return False
         if denom * expected_sign <= 0:
             return False
-
         t = -d1 / denom
-        if t < 0.0 or t > 1.0:
+        # Use tolerance for t to handle crossings at segment endpoints
+        t_tol = 1e-6
+        if t < -t_tol or t > 1.0 + t_tol:
             return False
-
         intersection = p1 + t * segment_vec
         offset = intersection - boundary['point']
-
         # Project onto tangent (perpendicular to course direction)
         proj_tangent = np.dot(offset, tangent)
         if abs(proj_tangent) > tangent_limit:
             return False
-
         # Also limit distance along normal (course direction) to prevent
         # detecting crossings that are far ahead/behind on the course
         proj_normal = np.dot(offset, boundary['normal'])
         normal_limit = tangent_limit * 1.5  # Allow slightly more along course
         if abs(proj_normal) > normal_limit:
             return False
-
         return True
 
     def assign_segments_to_path(self,
                                 x_path: np.ndarray,
                                 y_path: np.ndarray) -> np.ndarray:
         """
-        Assign segment IDs to driven path using boundary crossing.
+        Assign segment IDs to driven path using projection-based detection.
 
-        Uses a state machine that tracks progression through segments.
-        Segments only increment forward (0→1→2→...→N→0) as the path
-        crosses perpendicular boundary lines. Backward crossings due to
-        erratic driving are ignored.
+        Uses find_segment_for_point() to determine the correct segment for
+        each point based on its projection onto the mean course. Constrains
+        transitions to only allow forward progression through adjacent
+        segments (0->1->2->...->N->0) to filter noise.
 
         The driven path must be in time order (chronological).
 
@@ -2289,18 +2313,15 @@ class CourseSegmentation:
         """
         if len(x_path) == 0 or len(y_path) == 0:
             return np.array([])
-
         if len(x_path) != len(y_path):
             raise ValueError(
                 f"Path arrays must have same length: "
                 f"x={len(x_path)}, y={len(y_path)}"
             )
-
         if not hasattr(self, 'segment_boundaries'):
             raise ValueError(
                 "Segment boundaries not computed. Call compute() first."
             )
-
         if not self.segment_boundaries:
             raise ValueError(
                 "No segment boundaries available. "
@@ -2314,63 +2335,28 @@ class CourseSegmentation:
         if start_segment is None:
             start_segment = 0
 
-        nearest = self.nearest_boundary(x_path[0], y_path[0])
-        if nearest is not None:
-            boundary, dist = nearest
-            tol = self.params.get('boundary_distance_tolerance', 0.05)
-            if dist < -tol:
-                start_segment = boundary['segment_from']
-            elif dist > tol:
-                start_segment = boundary['segment_to']
-
         current_segment = start_segment
-
-        boundary_map = {b['segment_from']: b for b in self.segment_boundaries}
+        segment_ids[0] = current_segment
 
         logger.debug(
             f"Segment assignment: start_segment={start_segment}, "
             f"total_segments={self.total_segments}, "
             f"num_boundaries={len(self.segment_boundaries)}"
         )
-        for seg_id, b in boundary_map.items():
-            logger.debug(
-                f"  Boundary {seg_id} -> {b['segment_to']}: "
-                f"point=({b['point'][0]:.3f}, {b['point'][1]:.3f})"
-            )
 
-        segment_ids[0] = current_segment
-
-        # Iterate through path chronologically
         for i in range(1, num_points):
-            p1 = np.array([x_path[i-1], y_path[i-1]])
-            p2 = np.array([x_path[i], y_path[i]])
+            detected = self.find_segment_for_point(x_path[i], y_path[i])
+            if detected is None:
+                detected = current_segment
 
-            # Get boundary for current segment (if it exists)
-            boundary = boundary_map.get(current_segment)
-
-            if boundary is not None:
-                # Check if we crossed into next segment
-                if self._crossed_boundary_forward(p1, p2, boundary):
-                    # Transition to next segment
-                    current_segment = boundary['segment_to']
-                    logger.debug(
-                        f"Crossed into segment {current_segment} "
-                        f"at index {i}"
-                    )
+            next_segment = (current_segment + 1) % self.total_segments
+            if detected == next_segment:
+                current_segment = next_segment
+                logger.debug(
+                    f"Transition to segment {current_segment} at index {i}"
+                )
 
             segment_ids[i] = current_segment
-
-        # Handle wrap-around when the provided data ends exactly at the loop
-        if num_points > 1:
-            start_point = np.array([x_path[0], y_path[0]])
-            end_point = np.array([x_path[-1], y_path[-1]])
-            closure_tol = max(0.1, self.params.get('boundary_tangent_limit', 0.8))
-            if np.linalg.norm(end_point - start_point) <= closure_tol:
-                boundary = boundary_map.get(current_segment)
-                if boundary is not None:
-                    if self._crossed_boundary_forward(
-                            end_point, start_point, boundary):
-                        segment_ids[-1] = boundary['segment_to']
 
         return segment_ids
 
