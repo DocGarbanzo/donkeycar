@@ -1130,6 +1130,8 @@ class CourseSegmentation:
             'classification_window': 5,  # points for type classification
             'boundary_method': 'hybrid',  # 'threshold', 'extrema', 'gradient', 'hybrid'
             'gradient_prominence': 0.1,  # Minimum prominence for gradient peaks
+            'boundary_tangent_limit': 0.8,  # max meters along tangent to count crossing
+            'boundary_distance_tolerance': 0.05,  # meters for boundary proximity checks
         }
 
         if params is not None:
@@ -1138,6 +1140,9 @@ class CourseSegmentation:
         self.segments: List[Segment] = []
         self.total_segments = 0
         self.segment_counts: Dict[SegmentType, int] = {}
+        self._index_to_segment: Optional[np.ndarray] = None
+        self._boundary_map_from: Dict[int, dict] = {}
+        self._boundary_map_to: Dict[int, dict] = {}
 
     def compute(self, use_adaptive_threshold: bool = True) -> None:
         """
@@ -1174,8 +1179,14 @@ class CourseSegmentation:
         # Step 5: Merge adjacent segments of same type
         self._merge_adjacent_segments()
 
+        # Step 5b: Merge wrap-around segment (first and last if same type)
+        self._merge_wraparound_segment()
+
         # Step 6: Count segment types
         self._count_segments()
+
+        # Step 7: Compute segment boundary lines for path assignment
+        self._compute_segment_boundaries()
 
         logger.info(f"Segmented course into {self.total_segments} segments")
         logger.info(f"Segment counts: {self.segment_counts}")
@@ -1644,6 +1655,7 @@ class CourseSegmentation:
                 self.segments.append(segment)
 
         self.total_segments = len(self.segments)
+        self._invalidate_segment_lookup()
 
     def _classify_segment(self, curvature: np.ndarray) -> SegmentType:
         """
@@ -1733,8 +1745,74 @@ class CourseSegmentation:
         old_count = len(self.segments)
         self.segments = merged_segments
         self.total_segments = len(self.segments)
+        self._invalidate_segment_lookup()
 
         logger.info(f"Merged {old_count} segments into {self.total_segments}")
+
+    def _merge_wraparound_segment(self) -> None:
+        """
+        Merge first and last segments if they wrap around at index 0.
+
+        For closed-loop courses, the last segment may wrap back to index 0,
+        creating an artificial split of what should be a single segment.
+        This method detects and merges such cases.
+
+        For closed loops, we always merge if first and last segments are
+        the same type, since the split at index 0 is arbitrary and doesn't
+        represent a real geometric feature.
+        """
+        if len(self.segments) <= 1:
+            return
+
+        first_seg = self.segments[0]
+        last_seg = self.segments[-1]
+        max_idx = len(self.mean_course.x) - 1
+
+        # Check if last segment wraps to index 0
+        # (end_index is at or near the end of the course)
+        wraps_around = (last_seg.end_index >= max_idx or
+                       last_seg.end_index == 0)
+
+        logger.debug(
+            f"Wrap-around check: last_seg.end_index={last_seg.end_index}, "
+            f"max_idx={max_idx}, wraps_around={wraps_around}"
+        )
+
+        if not wraps_around:
+            logger.debug("Last segment does not wrap around - no merge")
+            return
+
+        # Check if they're the same type - if so, always merge for closed
+        # loops since the split at index 0 is arbitrary
+        if first_seg.segment_type != last_seg.segment_type:
+            logger.info(
+                f"NOT merging wrap-around: first={first_seg.segment_type.value}, "
+                f"last={last_seg.segment_type.value} (different types)"
+            )
+            return
+
+        # For closed loops, always merge same-type segments at the origin
+        # The split at index 0 is arbitrary and doesn't represent a real
+        # geometric boundary
+
+        logger.info(f"Merging wrap-around segments: last ({last_seg.segment_id}) "
+                   f"and first ({first_seg.segment_id})")
+
+        # Merge last into first using existing merge function
+        merged = self._merge_two_segments(last_seg, first_seg)
+        merged.segment_id = 0  # Will be renumbered later
+
+        # Replace first segment with merged, remove last
+        self.segments[0] = merged
+        self.segments = self.segments[:-1]
+
+        # Renumber segments
+        for i, seg in enumerate(self.segments):
+            seg.segment_id = i
+
+        self.total_segments = len(self.segments)
+        self._invalidate_segment_lookup()
+        logger.info(f"After wrap-around merge: {self.total_segments} segments")
 
     def _should_merge_segments(self, seg1: Segment, seg2: Segment) -> bool:
         """
@@ -1822,6 +1900,480 @@ class CourseSegmentation:
             return self.segments[segment_id]
         return None
 
+    def _invalidate_segment_lookup(self) -> None:
+        """Clear cached index→segment mapping."""
+        self._index_to_segment = None
+        self._boundary_map_from = {}
+        self._boundary_map_to = {}
+
+    def _ensure_index_to_segment_map(self) -> None:
+        """Build mapping from mean-course indices to segment IDs."""
+        if self.mean_course is None:
+            return
+        if self._index_to_segment is not None:
+            if len(self._index_to_segment) == len(self.mean_course.x):
+                return
+        num_points = len(self.mean_course.x)
+        if num_points == 0:
+            self._index_to_segment = None
+            return
+        index_map = np.zeros(num_points, dtype=int)
+        for seg in self.segments:
+            if seg.start_index <= seg.end_index:
+                index_map[seg.start_index:seg.end_index + 1] = seg.segment_id
+            else:
+                # Segment wraps around end of array
+                index_map[seg.start_index:] = seg.segment_id
+                index_map[:seg.end_index + 1] = seg.segment_id
+        self._index_to_segment = index_map
+
+    def nearest_boundary(self, x: float, y: float) -> Optional[Tuple[dict, float]]:
+        """
+        Find the closest segment boundary to (x, y).
+
+        Returns:
+            Tuple of (boundary_dict, signed_distance) or None if unavailable.
+        """
+        if not hasattr(self, 'segment_boundaries') or not self.segment_boundaries:
+            return None
+
+        point = np.array([x, y])
+        closest = None
+        min_dist = float('inf')
+
+        for boundary in self.segment_boundaries:
+            dist = self._signed_distance_to_line(
+                point, boundary['point'], boundary['normal'])
+            abs_dist = abs(dist)
+            if abs_dist < min_dist:
+                min_dist = abs_dist
+                closest = (boundary, dist)
+
+        return closest
+
+    def find_segment_for_point(self, x: float, y: float) -> Optional[int]:
+        """
+        Locate which segment contains the provided (x, y) coordinate.
+
+        Uses the nearest mean-course point but adjusts using boundary
+        proximity so points near transitions snap to the correct segment.
+        """
+        if self.mean_course is None or not self.segments:
+            return None
+        x_course = np.asarray(self.mean_course.x)
+        y_course = np.asarray(self.mean_course.y)
+        if len(x_course) == 0:
+            return None
+
+        self._ensure_index_to_segment_map()
+        if self._index_to_segment is None:
+            return None
+
+        dx = x_course - x
+        dy = y_course - y
+        best_idx = int(np.argmin(dx * dx + dy * dy))
+        candidate = int(self._index_to_segment[best_idx])
+
+        boundaries = getattr(self, 'segment_boundaries', None)
+        if not boundaries:
+            return candidate
+
+        tol = self.params.get('boundary_distance_tolerance', 0.05)
+        point = np.array([x, y])
+
+        # Step backward if the point lies clearly on the previous side
+        visited = set()
+        while True:
+            if candidate in visited:
+                break
+            visited.add(candidate)
+            incoming = self._boundary_map_to.get(candidate)
+            if incoming is None:
+                incoming = next(
+                    (b for b in boundaries if b['segment_to'] == candidate),
+                    None
+                )
+            if incoming is None:
+                break
+            dist_in = self._signed_distance_to_line(
+                point, incoming['point'], incoming['normal'])
+            if dist_in < -tol:
+                candidate = incoming['segment_from']
+                continue
+            if abs(dist_in) <= tol and dist_in < 0:
+                candidate = incoming['segment_from']
+            break
+
+        # Step forward if the point lies beyond the outgoing boundary
+        visited.clear()
+        while True:
+            if candidate in visited:
+                break
+            visited.add(candidate)
+            outgoing = self._boundary_map_from.get(candidate)
+            if outgoing is None:
+                outgoing = next(
+                    (b for b in boundaries if b['segment_from'] == candidate),
+                    None
+                )
+            if outgoing is None:
+                break
+            dist_out = self._signed_distance_to_line(
+                point, outgoing['point'], outgoing['normal'])
+            if dist_out > tol:
+                candidate = outgoing['segment_to']
+                continue
+            if abs(dist_out) <= tol and dist_out > 0:
+                candidate = outgoing['segment_to']
+            break
+
+        return candidate
+
+    def relabel_segments(self, offset: int) -> None:
+        """
+        Rotate segment numbering so the segment at index `offset` becomes 0.
+        """
+        if not self.segments or self.total_segments == 0:
+            return
+        offset %= self.total_segments
+        if offset == 0:
+            return
+
+        self._invalidate_segment_lookup()
+        self.segments = self.segments[offset:] + self.segments[:offset]
+        for idx, seg in enumerate(self.segments):
+            seg.segment_id = idx
+
+        self._count_segments()
+        self._compute_segment_boundaries()
+
+    def _compute_segment_boundaries(self) -> None:
+        """
+        Compute perpendicular boundary lines at each segment transition.
+
+        Creates boundary line representations for detecting when a driven
+        path crosses from one segment to the next. Each boundary is
+        perpendicular to the mean course at the transition point.
+
+        For closed loops:
+        - Skips boundary at index 0 (arbitrary start point)
+        - Creates boundary at last index for the final segment to complete
+          the loop
+
+        Stores results in self.segment_boundaries as a list of dicts with:
+        - 'point': (x, y) position on mean course at boundary
+        - 'normal': (nx, ny) unit normal vector pointing forward
+        - 'segment_from': segment ID before boundary
+        - 'segment_to': segment ID after boundary
+        """
+        if not self.segments:
+            self.segment_boundaries = []
+            return
+
+        self.segment_boundaries = []
+        max_idx = len(self.mean_course.x) - 1
+        last_segment_idx = len(self.segments) - 1
+        base_tangent_limit = max(
+            0.3, self.params.get('boundary_tangent_limit', 2.0))
+
+        num_points = len(self.mean_course.x)
+
+        for i, segment in enumerate(self.segments):
+            # Boundary at end of this segment (start of next)
+            boundary_idx = segment.end_index
+
+            # Skip boundary at index 0 (arbitrary loop start)
+            if boundary_idx == 0:
+                continue
+
+            # Position on mean course
+            x_bound = self.mean_course.x[boundary_idx]
+            y_bound = self.mean_course.y[boundary_idx]
+
+            # Heading at boundary (tangent to course) - already in radians
+            heading_rad = self.mean_course.heading[boundary_idx]
+
+            # Normal vector perpendicular to heading (rotate 90 degrees)
+            # Tangent direction: (cos(h), sin(h))
+            # Normal (left of course): (-sin(h), cos(h))
+            normal_x = -np.sin(heading_rad)
+            normal_y = np.cos(heading_rad)
+            tangent_x = np.cos(heading_rad)
+            tangent_y = np.sin(heading_rad)
+
+            next_segment = (i + 1) % len(self.segments)
+            next_seg = self.segments[next_segment]
+
+            # Keep crossings local to the boundary position. Scale limit by
+            # neighboring segment lengths and clamp to a reasonable range so
+            # long straights don't create giant crossing zones.
+            avg_length = 0.25 * (segment.length + next_seg.length)
+            adaptive_limit = avg_length if avg_length > 0 else base_tangent_limit
+            tangent_limit = max(
+                0.3, min(base_tangent_limit, adaptive_limit))
+
+            slope = None
+            intercept = None
+            x_offset = None
+            if abs(tangent_x) > 1e-6:
+                slope = tangent_y / tangent_x
+                intercept = y_bound - slope * x_bound
+            else:
+                x_offset = x_bound
+
+            prev_idx = (boundary_idx - 1) % num_points
+            next_idx = (boundary_idx + 1) % num_points
+            prev_point = np.array([
+                self.mean_course.x[prev_idx],
+                self.mean_course.y[prev_idx]
+            ])
+            next_point = np.array([
+                self.mean_course.x[next_idx],
+                self.mean_course.y[next_idx]
+            ])
+
+            mean_vec = next_point - prev_point
+            denom_sign = np.dot(
+                np.array([normal_x, normal_y]), mean_vec)
+            expected_sign = 1.0 if denom_sign >= 0 else -1.0
+
+            self.segment_boundaries.append({
+                'point': np.array([x_bound, y_bound]),
+                'normal': np.array([normal_x, normal_y]),
+                'tangent': np.array([tangent_x, tangent_y]),
+                'tangent_limit': tangent_limit,
+                'expected_denom_sign': expected_sign,
+                'slope': slope,
+                'intercept': intercept,
+                'x_offset': x_offset,
+                'segment_from': i,
+                'segment_to': next_segment
+            })
+
+            if logger.isEnabledFor(logging.DEBUG):
+                if slope is not None and intercept is not None:
+                    line_desc = (f"y = {slope:.6f} * x + {intercept:.6f}")
+                else:
+                    line_desc = f"x = {x_offset:.6f}"
+                logger.debug(
+                    "Segment boundary %d -> %d: %s | point=(%.3f, %.3f) | "
+                    "normal=(%.3f, %.3f) | tangent_limit=%.3f",
+                    i, next_segment, line_desc, x_bound, y_bound,
+                    normal_x, normal_y, tangent_limit)
+
+        logger.debug(f"Computed {len(self.segment_boundaries)} "
+                    "segment boundaries")
+        self._boundary_map_from = {
+            b['segment_from']: b for b in self.segment_boundaries
+        }
+        self._boundary_map_to = {
+            b['segment_to']: b for b in self.segment_boundaries
+        }
+
+    @staticmethod
+    def _signed_distance_to_line(point: np.ndarray,
+                                 line_point: np.ndarray,
+                                 line_normal: np.ndarray) -> float:
+        """
+        Compute signed distance from point to line.
+
+        The line is defined by a point on the line and a normal vector.
+        The sign indicates which side of the line the point is on:
+        positive means on the normal side, negative means opposite.
+
+        Args:
+            point: Point to test (2D array)
+            line_point: A point on the line (2D array)
+            line_normal: Normal vector to the line (2D array)
+
+        Returns:
+            Signed distance (positive = normal side, negative = opposite)
+        """
+        vec = point - line_point
+        return np.dot(vec, line_normal)
+
+    @staticmethod
+    def _crossed_boundary_forward(p1: np.ndarray,
+                                  p2: np.ndarray,
+                                  boundary: dict) -> bool:
+        """
+        Check if path segment crosses boundary in forward direction.
+
+        Detects if the line segment from p1 to p2 crosses the boundary
+        line in the forward direction (from negative to positive side).
+        This ensures we only count forward progressions through segments.
+
+        Args:
+            p1: Start point of path segment (2D array)
+            p2: End point of path segment (2D array)
+            boundary: Boundary definition dict with 'point' and 'normal'
+
+        Returns:
+            True if crossed from negative to positive side (forward)
+        """
+        d1 = CourseSegmentation._signed_distance_to_line(
+            p1, boundary['point'], boundary['normal']
+        )
+        d2 = CourseSegmentation._signed_distance_to_line(
+            p2, boundary['point'], boundary['normal']
+        )
+
+        if d1 == 0 and d2 == 0:
+            return False
+
+        # Require a sign change (touching boundary counts as >=0)
+        if d1 > 0 and d2 > 0:
+            return False
+        if d1 < 0 and d2 < 0:
+            return False
+
+        tangent = boundary.get('tangent')
+        tangent_limit = boundary.get('tangent_limit')
+        if tangent is None or tangent_limit is None:
+            return True
+
+        segment_vec = p2 - p1
+        denom = np.dot(boundary['normal'], segment_vec)
+
+        # Parallel to boundary - shouldn't count as crossing
+        if abs(denom) < 1e-6:
+            return False
+
+        expected_sign = boundary.get('expected_denom_sign', 1.0)
+        if denom * expected_sign <= 0:
+            return False
+
+        t = -d1 / denom
+        if t < 0.0 or t > 1.0:
+            return False
+
+        intersection = p1 + t * segment_vec
+        offset = intersection - boundary['point']
+
+        # Project onto tangent (perpendicular to course direction)
+        proj_tangent = np.dot(offset, tangent)
+        if abs(proj_tangent) > tangent_limit:
+            return False
+
+        # Also limit distance along normal (course direction) to prevent
+        # detecting crossings that are far ahead/behind on the course
+        proj_normal = np.dot(offset, boundary['normal'])
+        normal_limit = tangent_limit * 1.5  # Allow slightly more along course
+        if abs(proj_normal) > normal_limit:
+            return False
+
+        return True
+
+    def assign_segments_to_path(self,
+                                x_path: np.ndarray,
+                                y_path: np.ndarray) -> np.ndarray:
+        """
+        Assign segment IDs to driven path using boundary crossing.
+
+        Uses a state machine that tracks progression through segments.
+        Segments only increment forward (0→1→2→...→N→0) as the path
+        crosses perpendicular boundary lines. Backward crossings due to
+        erratic driving are ignored.
+
+        The driven path must be in time order (chronological).
+
+        Args:
+            x_path: X coordinates of driven path (time-ordered)
+            y_path: Y coordinates of driven path (time-ordered)
+
+        Returns:
+            Array of segment IDs for each path point
+
+        Raises:
+            ValueError: If segmentation not computed or path arrays empty
+        """
+        if len(x_path) == 0 or len(y_path) == 0:
+            return np.array([])
+
+        if len(x_path) != len(y_path):
+            raise ValueError(
+                f"Path arrays must have same length: "
+                f"x={len(x_path)}, y={len(y_path)}"
+            )
+
+        if not hasattr(self, 'segment_boundaries'):
+            raise ValueError(
+                "Segment boundaries not computed. Call compute() first."
+            )
+
+        if not self.segment_boundaries:
+            raise ValueError(
+                "No segment boundaries available. "
+                "Ensure segmentation completed successfully."
+            )
+
+        num_points = len(x_path)
+        segment_ids = np.zeros(num_points, dtype=int)
+
+        start_segment = self.find_segment_for_point(x_path[0], y_path[0])
+        if start_segment is None:
+            start_segment = 0
+
+        nearest = self.nearest_boundary(x_path[0], y_path[0])
+        if nearest is not None:
+            boundary, dist = nearest
+            tol = self.params.get('boundary_distance_tolerance', 0.05)
+            if dist < -tol:
+                start_segment = boundary['segment_from']
+            elif dist > tol:
+                start_segment = boundary['segment_to']
+
+        current_segment = start_segment
+
+        boundary_map = {b['segment_from']: b for b in self.segment_boundaries}
+
+        logger.debug(
+            f"Segment assignment: start_segment={start_segment}, "
+            f"total_segments={self.total_segments}, "
+            f"num_boundaries={len(self.segment_boundaries)}"
+        )
+        for seg_id, b in boundary_map.items():
+            logger.debug(
+                f"  Boundary {seg_id} -> {b['segment_to']}: "
+                f"point=({b['point'][0]:.3f}, {b['point'][1]:.3f})"
+            )
+
+        segment_ids[0] = current_segment
+
+        # Iterate through path chronologically
+        for i in range(1, num_points):
+            p1 = np.array([x_path[i-1], y_path[i-1]])
+            p2 = np.array([x_path[i], y_path[i]])
+
+            # Get boundary for current segment (if it exists)
+            boundary = boundary_map.get(current_segment)
+
+            if boundary is not None:
+                # Check if we crossed into next segment
+                if self._crossed_boundary_forward(p1, p2, boundary):
+                    # Transition to next segment
+                    current_segment = boundary['segment_to']
+                    logger.debug(
+                        f"Crossed into segment {current_segment} "
+                        f"at index {i}"
+                    )
+
+            segment_ids[i] = current_segment
+
+        # Handle wrap-around when the provided data ends exactly at the loop
+        if num_points > 1:
+            start_point = np.array([x_path[0], y_path[0]])
+            end_point = np.array([x_path[-1], y_path[-1]])
+            closure_tol = max(0.1, self.params.get('boundary_tangent_limit', 0.8))
+            if np.linalg.norm(end_point - start_point) <= closure_tol:
+                boundary = boundary_map.get(current_segment)
+                if boundary is not None:
+                    if self._crossed_boundary_forward(
+                            end_point, start_point, boundary):
+                        segment_ids[-1] = boundary['segment_to']
+
+        return segment_ids
+
     def save(self, filepath: str) -> None:
         """
         Save segmentation to JSON file
@@ -1892,6 +2444,7 @@ class CourseSegmentation:
 
             self.segments.append(segment)
 
+        self._invalidate_segment_lookup()
         logger.info(f"Loaded segmentation from {filepath}")
 
 

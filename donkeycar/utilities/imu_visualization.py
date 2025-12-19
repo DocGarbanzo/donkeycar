@@ -23,6 +23,12 @@ import numpy as np
 import pandas as pd
 import os
 from datetime import datetime
+import logging
+
+from donkeycar.parts.course_analysis import CourseSegmentation
+
+logging.getLogger('matplotlib').setLevel(logging.WARNING)
+logger = logging.getLogger(__name__)
 
 
 def plot(mlist, limit=5, update_freq=0, running=Value('i', 1)):
@@ -647,7 +653,8 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                 multilap_data.num_laps = num_laps_to_use
 
             if multilap_data.num_laps > 0:
-                print(f"  Using {multilap_data.num_laps} lap(s) for mean course")
+                print(
+                    f"  Using {multilap_data.num_laps} lap(s) for mean course")
                 mean_course = MeanCourse(multilap_data)
                 mean_course.compute()
                 result = {
@@ -723,6 +730,40 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
 
     # Segment the mean course (if available)
     segmentation = None
+    path_segment_ids = None
+    segment_boundary_lookup = {}
+
+    def rebuild_boundary_lookup():
+        """Refresh boundary lookup and log line equations."""
+        nonlocal segment_boundary_lookup
+        segment_boundary_lookup = {}
+        if segmentation is None:
+            return
+        boundaries = getattr(segmentation, 'segment_boundaries', []) or []
+        segment_boundary_lookup = {
+            b['segment_from']: b for b in boundaries
+        }
+
+    def log_boundary_equations():
+        if segmentation is None or not logger.isEnabledFor(logging.DEBUG):
+            return
+        boundaries = getattr(segmentation, 'segment_boundaries', []) or []
+        for boundary in boundaries:
+            slope = boundary.get('slope')
+            intercept = boundary.get('intercept')
+            x_offset = boundary.get('x_offset')
+            if slope is not None and intercept is not None:
+                line_desc = f"y = {slope:.6f} * x + {intercept:.6f}"
+            else:
+                x_val = x_offset if x_offset is not None else boundary['point'][0]
+                line_desc = f"x = {x_val:.6f}"
+            logger.debug(
+                "Boundary %d -> %d equation: %s (point=(%.3f, %.3f), normal=(%.3f, %.3f))",
+                boundary['segment_from'], boundary['segment_to'],
+                line_desc,
+                boundary['point'][0], boundary['point'][1],
+                boundary['normal'][0], boundary['normal'][1]
+            )
     if mean_course_data is not None:
         try:
             from donkeycar.parts.course_analysis import CourseSegmentation
@@ -733,9 +774,45 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
             print(f"Segmented mean course into "
                   f"{segmentation.total_segments} segments "
                   f"using '{segment_method}' method")
+
+            # Rotate numbering so the recording's start point becomes segment 0
+            start_segment = None
+            if not df.empty:
+                start_x = float(df.iloc[0]['x'])
+                start_y = float(df.iloc[0]['y'])
+                start_segment = segmentation.find_segment_for_point(
+                    start_x, start_y)
+                relabel_offset = start_segment
+                nearest_boundary = segmentation.nearest_boundary(
+                    start_x, start_y)
+                if nearest_boundary is not None:
+                    boundary, dist = nearest_boundary
+                    tol = segmentation.params.get(
+                        'boundary_distance_tolerance', 0.05)
+                    if dist < -tol:
+                        relabel_offset = boundary['segment_from']
+                    elif dist > tol:
+                        relabel_offset = boundary['segment_to']
+
+                if relabel_offset is not None and relabel_offset != 0:
+                    logger.debug(
+                        "Relabeling segments so start point begins at segment 0 "
+                        "(offset %d)", relabel_offset)
+                    segmentation.relabel_segments(relabel_offset)
+
+            # Assign segments to driven path
+            path_segment_ids = segmentation.assign_segments_to_path(
+                df['x'].values, df['y'].values
+            )
+            print(f"Assigned segments to {len(path_segment_ids)} "
+                  "path points")
+            rebuild_boundary_lookup()
+            log_boundary_equations()
         except Exception as exc:
             print(f"Could not compute segmentation: {exc}")
             segmentation = None
+            path_segment_ids = None
+            rebuild_boundary_lookup()
 
     # Apply drift correction if requested (AFTER computing mean course)
     loop_drift_amounts = []
@@ -819,7 +896,8 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
     # Create a dummy artist for legend with median color
     from matplotlib.lines import Line2D
     full_path_legend = Line2D([0], [0], marker='o', color='w',
-                              markerfacecolor=plt.cm.viridis(median_speed / speeds_display.max() if speeds_display.max() > 0 else 0.5),
+                              markerfacecolor=plt.cm.viridis(
+                                  median_speed / speeds_display.max() if speeds_display.max() > 0 else 0.5),
                               markersize=8, label='Full path', alpha=0.6)
 
     # Current position marker
@@ -919,38 +997,28 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
         if segmentation.total_segments == 0:
             return
 
-        headings = mean_course_data['heading']
         marker_len = max(0.3, 0.02 * mean_course_data['length'])
-        max_idx = len(mean_course_data['x']) - 1
+        boundaries = getattr(segmentation, 'segment_boundaries', None)
+        if not boundaries:
+            return
 
-        # Collect unique boundary indices
-        # For closed loops:
-        # - Skip index 0 (arbitrary start point)
-        # - Skip last index (same physical location as index 0)
-        # Only show actual transition points between segments
-        boundaries = []
-        for seg in segmentation.segments:
-            # Skip start_index if it's 0 (arbitrary loop start)
-            if seg.start_index != 0:
-                boundaries.append((seg.start_index, seg.segment_id))
-            # Skip end_index if it's the last point (loop closure)
-            if seg.end_index < max_idx:
-                boundaries.append((seg.end_index, seg.segment_id))
-
-        seen = set()
-        for idx, seg_id in boundaries:
-            if idx in seen:
+        for boundary in boundaries:
+            point = boundary.get('point')
+            normal = boundary.get('normal')
+            if point is None or normal is None:
                 continue
-            seen.add(idx)
 
-            x_val = mean_course_data['x'][idx]
-            y_val = mean_course_data['y'][idx]
-            heading = headings[idx]
-            dx = np.cos(heading + np.pi/2.0) * marker_len * 0.5
-            dy = np.sin(heading + np.pi/2.0) * marker_len * 0.5
+            # Ensure normal is unit length before scaling marker
+            norm = np.linalg.norm(normal)
+            if norm == 0:
+                continue
+            normal_vec = normal / norm
 
-            line, = ax.plot([x_val - dx, x_val + dx],
-                            [y_val - dy, y_val + dy],
+            dx = normal_vec[0] * marker_len * 0.5
+            dy = normal_vec[1] * marker_len * 0.5
+
+            line, = ax.plot([point[0] - dx, point[0] + dx],
+                            [point[1] - dy, point[1] + dy],
                             color='#C04A00',
                             linewidth=2.5,
                             alpha=1.0,
@@ -959,8 +1027,46 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
 
     refresh_segment_markers()
 
+    # Segment labels (numbered labels at segment midpoints)
+    segment_labels = []
+
+    def refresh_segment_labels():
+        """Draw segment number labels at midpoint of each segment."""
+        nonlocal segment_labels
+        for label in segment_labels:
+            label.remove()
+        segment_labels = []
+        if segmentation is None or mean_course_data is None:
+            return
+        if segmentation.total_segments == 0:
+            return
+
+        # Draw label at midpoint of each segment
+        for seg in segmentation.segments:
+            # Use segment's own arrays for correct wrap-around handling
+            seg_mid = len(seg.x) // 2
+            mid_x = seg.x[seg_mid]
+            mid_y = seg.y[seg_mid]
+
+            label = ax.text(
+                mid_x, mid_y, str(seg.segment_id),
+                fontsize=10,
+                color='darkred',
+                weight='bold',
+                ha='center', va='center',
+                bbox=dict(boxstyle='circle',
+                          facecolor='white',
+                          edgecolor='darkred',
+                          alpha=0.7,
+                          linewidth=1.5),
+                visible=True
+            )
+            segment_labels.append(label)
+
+    refresh_segment_labels()
 
     # Helper function to create status text elements
+
     def _create_status_text(fig, y_pos, text='', color='white'):
         """Create a standardized text element for status display."""
         return fig.text(0.02, y_pos, text, fontsize=9,
@@ -994,11 +1100,14 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
     total_dist_text = _create_status_text(fig, 0.775, 'Total dist: --')
     lap_dist_text = _create_status_text(fig, 0.74, 'Lap dist: --')
 
-    # Debug text - below loop text
-    debug_text = _create_status_text(fig, 0.705)
+    # Segment text - below lap dist text
+    segment_text = _create_status_text(fig, 0.705, 'Segment: --')
+
+    # Debug text - below segment text
+    debug_text = _create_status_text(fig, 0.67)
 
     # Drift correction text - below debug text
-    drift_text = _create_status_text(fig, 0.67)
+    drift_text = _create_status_text(fig, 0.635)
 
     # Controls text - below drift text with more spacing
     _create_status_text(fig, 0.62,
@@ -1051,6 +1160,9 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
         for line in segment_markers:
             line.set_visible(visible)
 
+        for label in segment_labels:
+            label.set_visible(visible)
+
     check_widget.on_clicked(toggle_display)
 
     # Set axis limits with some padding
@@ -1079,7 +1191,8 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
     current_segment_method = [segment_method]
 
     def apply_lap_selection(num_laps):
-        nonlocal mean_course_data, segmentation, legend, current_segment_method
+        nonlocal mean_course_data, segmentation, legend
+        nonlocal current_segment_method, path_segment_ids
         num_laps = max(1, min(num_laps, max_laps_detected))
         print(f"\nUpdating to show {num_laps} lap(s)...")
 
@@ -1095,13 +1208,25 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                 print("  Updated segmentation for new mean course "
                       f"({segmentation.total_segments} segments) "
                       f"using '{current_segment_method[0]}' method")
+
+                # Recompute segment assignments for driven path
+                path_segment_ids = segmentation.assign_segments_to_path(
+                    df['x'].values, df['y'].values
+                )
+                print(f"  Reassigned segments to {len(path_segment_ids)} "
+                      "path points")
+                rebuild_boundary_lookup()
+                log_boundary_equations()
             except Exception as exc:
                 print(f"  Could not update segmentation: {exc}")
                 segmentation = None
+                path_segment_ids = None
+                rebuild_boundary_lookup()
 
             # Refresh both mean course segments and boundary markers
             refresh_mean_course()
             refresh_segment_markers()
+            refresh_segment_labels()
 
             # Recreate legend with updated mean course line
             if mean_course_line is not None:
@@ -1212,7 +1337,7 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                     'hybrid': 3}.get(segment_method, 2))
 
         def on_segment_method_change(label):
-            nonlocal segmentation, mean_course_data, legend
+            nonlocal segmentation, mean_course_data, legend, path_segment_ids
             method_map = {
                 'Threshold': 'threshold',
                 'Extrema': 'extrema',
@@ -1233,9 +1358,19 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                 print(f"  Segmented into {segmentation.total_segments} "
                       f"segments using '{new_method}' method")
 
+                # Recompute segment assignments for driven path
+                path_segment_ids = segmentation.assign_segments_to_path(
+                    df['x'].values, df['y'].values
+                )
+                print(f"  Reassigned segments to {len(path_segment_ids)} "
+                      "path points")
+                rebuild_boundary_lookup()
+                log_boundary_equations()
+
                 # Refresh visualizations
                 refresh_mean_course()
                 refresh_segment_markers()
+                refresh_segment_labels()
 
                 # Update legend
                 boundary_handle = None
@@ -1268,6 +1403,7 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                 print(f"  Could not update segmentation: {exc}")
                 import traceback
                 traceback.print_exc()
+                rebuild_boundary_lookup()
 
         segment_radio.on_clicked(on_segment_method_change)
 
@@ -1353,6 +1489,44 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
             lap_distance_display = f'{max(lap_distance, 0.0):.2f}m'
 
         lap_dist_text.set_text(f'Lap dist: {lap_distance_display}')
+
+        # Display current segment if segmentation is available
+        if path_segment_ids is not None and segmentation is not None:
+            current_segment_id = path_segment_ids[current_idx]
+            segment = segmentation.get_segment(current_segment_id)
+            if segment is not None:
+                segment_type_name = segment.segment_type.name.replace('_', ' ')
+                segment_text.set_text(
+                    f'Segment: {current_segment_id} ({segment_type_name})'
+                )
+            else:
+                segment_text.set_text(f'Segment: {current_segment_id}')
+
+            boundary = segment_boundary_lookup.get(current_segment_id)
+            if boundary is not None and logger.isEnabledFor(logging.DEBUG):
+                pos = np.array([last_point['x'], last_point['y']])
+                dist_to_boundary = CourseSegmentation._signed_distance_to_line(
+                    pos, boundary['point'], boundary['normal']
+                )
+                heading_val = last_point['h'] if 'h' in last_point else float(
+                    'nan')
+                slope = boundary.get('slope')
+                intercept = boundary.get('intercept')
+                x_offset = boundary.get('x_offset', boundary['point'][0])
+                if slope is not None and intercept is not None:
+                    line_desc = f"y = {slope:.6f} * x + {intercept:.6f}"
+                else:
+                    line_desc = f"x = {x_offset:.6f}"
+                logger.debug(
+                    "Segment %d -> %d | idx=%d | pos=(%.3f, %.3f) | heading=%.3f deg | "
+                    "dist_to_boundary=%.6f | %s",
+                    current_segment_id, boundary['segment_to'], current_idx,
+                    last_point['x'], last_point['y'], heading_val,
+                    dist_to_boundary, line_desc
+                )
+        else:
+            segment_text.set_text('Segment: --')
+
         drift_text.set_text(get_drift_display_text(current_loop))
 
     def update_displays_empty(current_time_val):
@@ -1369,6 +1543,7 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
         lap_text.set_text('Lap: --')
         total_dist_text.set_text('Total dist: --')
         lap_dist_text.set_text('Lap dist: --')
+        segment_text.set_text('Segment: --')
         drift_text.set_text('Drift: --')
 
     def update_plot(_val):
@@ -1447,8 +1622,8 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
         legend_handles.append(boundary_handle)
 
     legend = ax.legend(handles=legend_handles,
-                      bbox_to_anchor=(0.02, 0.60), loc='upper left',
-                      framealpha=0.9, ncol=1, fontsize=10,
-                      bbox_transform=fig.transFigure)
+                       bbox_to_anchor=(0.02, 0.60), loc='upper left',
+                       framealpha=0.9, ncol=1, fontsize=10,
+                       bbox_transform=fig.transFigure)
 
     plt.show()

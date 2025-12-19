@@ -220,6 +220,168 @@ def run(self, image, steering, throttle):
 - CI/CD via GitHub Actions with matrix testing (macOS, Ubuntu)
 - Tests located in `tests/` directory with 40+ test files
 
+## IMU Path Visualization and Analysis
+
+The IMU path system is a sophisticated tool for visualizing and analyzing
+recorded vehicle trajectories, particularly useful for understanding lap-based
+driving patterns and course geometry.
+
+### Overview
+
+**Command:** `donkey imupath --path <path_to_data>`
+
+**Purpose:** Visualize recorded vehicle position data, analyze multi-lap
+consistency, compute mean reference courses, and segment courses into geometric
+features (straights, turns, S-curves, chicanes).
+
+### Key Files
+
+- **`donkeycar/utilities/imu_visualization.py`** (1455 lines)
+  - Main visualization implementation
+  - Interactive UI with matplotlib
+  - Real-time navigation through recorded data
+
+- **`donkeycar/parts/course_analysis.py`** (2078 lines)
+  - Multi-lap detection and alignment
+  - Mean course reconstruction
+  - Course segmentation algorithms
+  - Segment estimation for real-time driving
+
+### Data Format
+
+**CSV Format:** `t, x, y, h, v`
+- `t`: timestamp (seconds)
+- `x`: X position (meters, right direction)
+- `y`: Y position (meters, forward direction)
+- `h`: heading (degrees)
+- `v`: velocity (meters/second)
+
+**Tub Support:** Automatically extracts position data from Tub directories
+- Uses `_timestamp_ms`, `car/pos`, `car/euler`, `car/speed` records
+
+### Core Algorithms
+
+#### 1. Lap Detection (MultiLapData class)
+
+Three methods for detecting lap boundaries:
+
+- **y_crossing** (default): Detects when y-coordinate crosses from negative to
+  positive - works well for closed loops starting/ending near y=0
+- **drift**: Uses weighted average reversal point detection - handles courses
+  with drift
+- **distance**: Simple distance threshold method (legacy)
+
+#### 2. Mean Course Reconstruction (MeanCourse class)
+
+Process for computing reference course from multiple laps:
+1. Resample all laps onto common normalized arc-length axis (0 to 1)
+2. Compute weighted mean with equal lap contribution
+3. Apply smoothing (Savitzky-Golay filter for position, moving average for
+   heading)
+4. Apply loop closure correction (ensures start/end continuity at y=0)
+5. Compute cumulative distance along course
+
+#### 3. Course Segmentation (CourseSegmentation class)
+
+Four segmentation methods (configurable via `boundary_method`):
+
+- **gradient** (default): Detects where curvature changes most rapidly
+  (entry/exit points)
+- **threshold**: Detects transitions between straight/left/right based on
+  curvature threshold
+- **extrema**: Detects local peaks/valleys in curvature (apex points)
+- **hybrid**: Combines threshold + extrema methods
+
+**Segment Types:**
+- STRAIGHT: Low curvature sections
+- LEFT_TURN: Positive curvature
+- RIGHT_TURN: Negative curvature
+- S_CURVE_LR: Left-to-right inflection
+- S_CURVE_RL: Right-to-left inflection
+- CHICANE: Multiple rapid inflections
+
+**Algorithm:**
+1. Calculate curvature: κ = dθ/ds (radians/meter)
+2. Optionally compute adaptive threshold from curvature distribution
+3. Detect segment boundaries using selected method
+4. Classify segments based on curvature characteristics
+5. Merge adjacent segments of same type (conservative: only straights)
+
+#### 4. Real-Time Segment Estimation (SegmentEstimator class)
+
+For live driving, estimates current segment from vehicle position:
+- Uses KD-tree spatial indexing for fast nearest-neighbor search
+- Returns segment ID with confidence score based on position/heading alignment
+- Provides cross-track error and heading deviation metrics
+
+### Interactive UI Features
+
+**Display Elements:**
+- Full path scatter plot (color-coded by speed using viridis colormap)
+- Current position marker (red circle)
+- Current path line (red line from start to current time)
+- Mean course overlay (orange line with segment boundaries)
+- Segment boundary markers (perpendicular ticks at transitions)
+
+**Interactive Controls:**
+- Time slider: Navigate through recorded path
+- Keyboard arrows: Single-frame navigation (left/right)
+- Lap selector: Filter display by lap count, recomputes mean course
+- Segment method selector: RadioButtons to switch between segmentation methods
+- Display toggles: CheckButtons for Driven Path and Mean Course visibility
+
+**Status Panel (top-left):**
+- File source and path
+- Current speed, timestamp, position [x, y]
+- Current lap number
+- Total distance traveled, lap distance
+- Debug info (index, distance to origin)
+- Drift correction amount (if enabled)
+
+**Performance Optimizations:**
+- Throttled updates (100ms minimum between refreshes)
+- Display data downsampling for large datasets
+- Efficient data filtering using pandas masks
+
+### Configuration Parameters
+
+**Segmentation:**
+- `curvature_window`: Points for curvature calculation (default: 5)
+- `straight_curvature_threshold`: Threshold for straight detection
+  (default: 0.08 rad/m, auto-adjusted)
+- `min_segment_length`: Minimum segment length (default: 0.8m)
+- `boundary_method`: 'gradient', 'threshold', 'extrema', or 'hybrid'
+
+**Mean Course:**
+- `resampling_interval`: Distance between resampled points (default: 0.1m)
+- `position_smoothing_window`: Savitzky-Golay window (default: 11)
+- `heading_smoothing_window`: Moving average window (default: 5)
+
+### Usage Examples
+
+```bash
+# Visualize CSV data
+donkey imupath --path path_to_data.csv
+
+# Visualize Tub data
+donkey imupath --path path_to_tub_directory
+
+# Use specific lap detection method
+donkey imupath --path data.csv --lap-method drift
+
+# Save mean course and segmentation
+donkey imupath --path data.csv --save-mean-course mean_course.json
+```
+
+### Recent Development
+
+Recent work has focused on:
+- Multiple segmentation methods with interactive selector
+- Improved UI layout and status display
+- Lap filtering to recompute mean course from subset of laps
+- Better segment boundary visualization
+- Tub format support for direct loading from recorded data
+
 ## Remote Development Workflow
 
 ### Raspberry Pi Development Setup
