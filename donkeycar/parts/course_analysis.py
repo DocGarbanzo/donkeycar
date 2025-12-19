@@ -30,6 +30,32 @@ from scipy.interpolate import interp1d
 logger = logging.getLogger(__name__)
 
 
+def convert_numpy_types(obj):
+    """
+    Recursively convert NumPy types to native Python types for JSON serialization.
+    
+    Args:
+        obj: Object to convert (can be dict, list, NumPy type, etc.)
+    
+    Returns:
+        Converted object with native Python types
+    """
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_numpy_types(item) for item in obj)
+    else:
+        return obj
+
+
 def find_loop_end_index_y_crossing(x: np.ndarray, y: np.ndarray,
                                    start_idx: int = 0,
                                    min_loop_distance: float = 1.0,
@@ -1850,7 +1876,7 @@ class CourseSegmentation:
         }
 
         with open(filepath, 'w') as f:
-            json.dump(data, f, indent=2)
+            json.dump(convert_numpy_types(data), f, indent=2)
 
         logger.info(f"Saved segmentation to {filepath}")
 

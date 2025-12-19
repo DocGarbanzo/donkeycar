@@ -204,7 +204,12 @@ def train(cfg: Config, tub_paths: str, model: str = None,
             logger.info(f"Converting from .h5 to .savedmodel first")
             model_tmp = load_model(model_path, compile=False)
             # save in tensorflow savedmodel format (i.e. directory)
-            model_tmp.save(f'{base_path}.savedmodel')
+            # Use export() for SavedModel format in Keras 3.x
+            if hasattr(model_tmp, 'export'):
+                model_tmp.export(f'{base_path}.savedmodel')
+            else:
+                # Fallback for Keras 2.x
+                model_tmp.save(f'{base_path}.savedmodel')
         # pass savedmodel to the rt converter
         saved_model_to_tensor_rt(f'{base_path}.savedmodel', f'{base_path}.trt')
 

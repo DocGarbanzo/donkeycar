@@ -142,8 +142,19 @@ class KerasInterpreter(Interpreter):
         if type(output_shape) is not list:
             output_shape = [output_shape]
 
-        self.input_keys = self.model.input_names
-        self.output_keys = self.model.output_names
+        # Keras 3.x removed input_names attribute, extract from inputs/outputs
+        if hasattr(self.model, 'input_names'):
+            # Keras 2.x compatibility
+            self.input_keys = self.model.input_names
+        else:
+            # Keras 3.x - extract names from inputs
+            self.input_keys = [inp.name for inp in self.model.inputs]
+        
+        if hasattr(self.model, 'output_names'):
+            self.output_keys = self.model.output_names
+        else:
+            # Keras 3.x - extract names from outputs
+            self.output_keys = [out.name for out in self.model.outputs]
         self.shapes = (dict(zip(self.input_keys, input_shape)),
                        dict(zip(self.output_keys, output_shape)))
 

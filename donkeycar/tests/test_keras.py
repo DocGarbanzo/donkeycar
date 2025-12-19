@@ -29,13 +29,29 @@ def create_models(keras_pilot, dir):
     interpreter = KerasInterpreter()
     km = keras_pilot(interpreter=interpreter)
     # build tflite model from TfLite interpreter
-    tflite_model_path = os.path.join(dir, 'model.tflite')
-    keras_to_tflite(interpreter.model, tflite_model_path)
-    kl = keras_pilot(interpreter=TfLite())
-    kl.load(tflite_model_path)
+    # Note: LSTM and 3D_CNN models don't support standard TFLite
+    # (they require Flex delegate which is not available)
+    kl = None
+    if keras_pilot not in [KerasLSTM, Keras3D_CNN]:
+        tflite_model_path = os.path.join(dir, 'model.tflite')
+        keras_to_tflite(interpreter.model, tflite_model_path)
+        kl = keras_pilot(interpreter=TfLite())
+        try:
+            kl.load(tflite_model_path)
+        except RuntimeError as e:
+            # Handle TFLite incompatibility gracefully
+            if "Select TensorFlow op(s)" in str(e):
+                kl = None
+            else:
+                raise
     # save model in savedmodel format
     savedmodel_path = os.path.join(dir, 'model.savedmodel')
-    interpreter.model.save(savedmodel_path)
+    # Use export() for SavedModel format in Keras 3.x
+    if hasattr(interpreter.model, 'export'):
+        interpreter.model.export(savedmodel_path)
+    else:
+        # Fallback for Keras 2.x
+        interpreter.model.save(savedmodel_path)
     krt = None
     # load tensorrt only if supported
     if has_trt_support():
