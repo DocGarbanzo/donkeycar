@@ -1075,8 +1075,11 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
     # Hide the slider's value text since we show time in top-left corner
     time_slider.valtext.set_visible(False)
 
+    # Track current segment method selection
+    current_segment_method = [segment_method]
+
     def apply_lap_selection(num_laps):
-        nonlocal mean_course_data, segmentation, legend
+        nonlocal mean_course_data, segmentation, legend, current_segment_method
         num_laps = max(1, min(num_laps, max_laps_detected))
         print(f"\nUpdating to show {num_laps} lap(s)...")
 
@@ -1087,11 +1090,11 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
             try:
                 segmentation = CourseSegmentation(
                     mean_course=new_mean_course['mean_course_obj'],
-                    params={'boundary_method': segment_method})
+                    params={'boundary_method': current_segment_method[0]})
                 segmentation.compute()
                 print("  Updated segmentation for new mean course "
                       f"({segmentation.total_segments} segments) "
-                      f"using '{segment_method}' method")
+                      f"using '{current_segment_method[0]}' method")
             except Exception as exc:
                 print(f"  Could not update segmentation: {exc}")
                 segmentation = None
@@ -1196,8 +1199,6 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
 
     # Segment method selector (if segmentation exists) - between legend and checkboxes
     if mean_course_data is not None:
-        current_segment_method = [segment_method]
-
         fig.text(0.02, 0.45, 'Segment Method', color='white', fontsize=8,
                  bbox=dict(boxstyle='round', facecolor='black', alpha=0.8))
 
