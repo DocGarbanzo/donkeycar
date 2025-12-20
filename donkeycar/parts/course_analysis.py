@@ -2292,12 +2292,17 @@ class CourseSegmentation:
                                 x_path: np.ndarray,
                                 y_path: np.ndarray) -> np.ndarray:
         """
-        Assign segment IDs to driven path using projection-based detection.
+        Assign segment IDs to driven path using hybrid detection.
 
-        Uses find_segment_for_point() to determine the correct segment for
-        each point based on its projection onto the mean course. Constrains
-        transitions to only allow forward progression through adjacent
-        segments (0->1->2->...->N->0) to filter noise.
+        Uses a two-stage approach for robust segment transitions:
+        1. Primary: Boundary crossing detection - checks if path crosses
+           boundary in forward direction (negative to positive side)
+        2. Fallback: Projection-based detection - if path is clearly past
+           the boundary (tangent distance > limit) and reasonably close
+           (total distance to boundary point < 3x limit), transition anyway
+
+        This hybrid approach prevents false positives from cross-track
+        errors while handling sparse sampling and near-parallel paths.
 
         The driven path must be in time order (chronological).
 
@@ -2331,9 +2336,15 @@ class CourseSegmentation:
         num_points = len(x_path)
         segment_ids = np.zeros(num_points, dtype=int)
 
-        start_segment = self.find_segment_for_point(x_path[0], y_path[0])
-        if start_segment is None:
-            start_segment = 0
+        # Find initial segment using simple nearest-point lookup
+        # (avoid complex boundary adjustments for starting position)
+        self._ensure_index_to_segment_map()
+        x_course = np.asarray(self.mean_course.x)
+        y_course = np.asarray(self.mean_course.y)
+        dx = x_course - x_path[0]
+        dy = y_course - y_path[0]
+        nearest_idx = int(np.argmin(dx * dx + dy * dy))
+        start_segment = int(self._index_to_segment[nearest_idx])
 
         current_segment = start_segment
         segment_ids[0] = current_segment
@@ -2345,16 +2356,51 @@ class CourseSegmentation:
         )
 
         for i in range(1, num_points):
-            detected = self.find_segment_for_point(x_path[i], y_path[i])
-            if detected is None:
-                detected = current_segment
+            p1 = np.array([x_path[i-1], y_path[i-1]])
+            p2 = np.array([x_path[i], y_path[i]])
 
             next_segment = (current_segment + 1) % self.total_segments
-            if detected == next_segment:
+            boundary = self._boundary_map_from.get(current_segment)
+            should_transition = False
+
+            if boundary is not None:
+                # Primary: Check for forward boundary crossing
+                crossed = self._crossed_boundary_forward(p1, p2, boundary)
+                if crossed:
+                    should_transition = True
+                    logger.debug(
+                        f"i={i}: Crossed boundary {boundary['segment_from']}->"
+                        f"{boundary['segment_to']} via crossing, "
+                        f"p2=[{p2[0]:.3f},{p2[1]:.3f}]"
+                    )
+                else:
+                    # Fallback: Check if we're clearly past the boundary
+                    dist_along = self._signed_distance_along_tangent(
+                        p2, boundary)
+                    tol = boundary.get('tangent_limit', 1.0)
+                    dist_to_boundary = np.linalg.norm(
+                        p2 - boundary['point'])
+
+                    if logger.isEnabledFor(logging.DEBUG) and i < 100:
+                        logger.debug(
+                            f"i={i}: No crossing, current={current_segment}, "
+                            f"dist_along={dist_along:.3f} (tol={tol:.3f}), "
+                            f"dist_to_bnd={dist_to_boundary:.3f} "
+                            f"(max={tol*3.0:.3f}), p2=[{p2[0]:.3f},{p2[1]:.3f}]"
+                        )
+
+                    if dist_along > tol:
+                        max_dist = tol * 3.0
+                        if dist_to_boundary < max_dist:
+                            should_transition = True
+                            logger.debug(
+                                f"i={i}: Passed boundary {boundary['segment_from']}"
+                                f"->{boundary['segment_to']} via fallback, "
+                                f"p2=[{p2[0]:.3f},{p2[1]:.3f}]"
+                            )
+
+            if should_transition:
                 current_segment = next_segment
-                logger.debug(
-                    f"Transition to segment {current_segment} at index {i}"
-                )
 
             segment_ids[i] = current_segment
 
