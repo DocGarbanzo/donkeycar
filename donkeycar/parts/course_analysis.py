@@ -264,6 +264,7 @@ class MultiLapData:
     def __init__(self):
         self.raw_data = None
         self.laps = []
+        self.lap_boundary_indices = []
         self.num_laps = 0
 
     def load_data(self, source: str,
@@ -565,6 +566,7 @@ class MultiLapData:
             min_length: Minimum points per lap (0 to skip check)
         """
         self.laps = []
+        self.lap_boundary_indices = []
 
         for i in range(len(lap_indices) - 1):
             start_idx = lap_indices[i]
@@ -573,6 +575,7 @@ class MultiLapData:
             if min_length == 0 or (end_idx - start_idx >= min_length):
                 lap_data = self.raw_data[start_idx:end_idx]
                 self.laps.append(lap_data)
+                self.lap_boundary_indices.append((start_idx, end_idx))
                 logger.debug(f"Lap {i+1}: indices {start_idx} to {end_idx} ({end_idx - start_idx} points)")
             else:
                 logger.debug(f"Lap {i+1}: SKIPPED (too short: {end_idx - start_idx} < {min_length})")
@@ -1090,7 +1093,17 @@ class Segment:
         self.curvature = curvature
 
         # Compute metrics
+        # Handle wrap-around segments where distance goes from high to low
         self.length = distance[-1] - distance[0]
+        if self.length < 0:
+            # Segment wraps around course boundary - compute arc length directly
+            if len(x) > 1:
+                dx = np.diff(x)
+                dy = np.diff(y)
+                self.length = np.sum(np.sqrt(dx**2 + dy**2))
+            else:
+                self.length = 0.0
+
         self.mean_curvature = np.mean(curvature)
         self.max_curvature = np.max(np.abs(curvature))
         self.total_heading_change = np.abs(heading[-1] - heading[0])
@@ -2336,21 +2349,25 @@ class CourseSegmentation:
         num_points = len(x_path)
         segment_ids = np.zeros(num_points, dtype=int)
 
-        # Find initial segment using simple nearest-point lookup
-        # (avoid complex boundary adjustments for starting position)
-        self._ensure_index_to_segment_map()
-        x_course = np.asarray(self.mean_course.x)
-        y_course = np.asarray(self.mean_course.y)
-        dx = x_course - x_path[0]
-        dy = y_course - y_path[0]
-        nearest_idx = int(np.argmin(dx * dx + dy * dy))
-        start_segment = int(self._index_to_segment[nearest_idx])
+        # Determine initial segment by boundary position only:
+        # if point is past a boundary (positive along tangent),
+        # advance to next segment.
+        point0 = np.array([x_path[0], y_path[0]])
+        current_segment = 0
+        for seg_id in range(self.total_segments):
+            boundary = self._boundary_map_from.get(seg_id)
+            if boundary is None:
+                break
+            dist_along = self._signed_distance_along_tangent(point0, boundary)
+            if dist_along > 0:
+                current_segment = boundary['segment_to']
+                continue
+            break
 
-        current_segment = start_segment
         segment_ids[0] = current_segment
 
         logger.debug(
-            f"Segment assignment: start_segment={start_segment}, "
+            f"Segment assignment: start_segment={current_segment}, "
             f"total_segments={self.total_segments}, "
             f"num_boundaries={len(self.segment_boundaries)}"
         )
@@ -2389,7 +2406,8 @@ class CourseSegmentation:
                             f"(max={tol*3.0:.3f}), p2=[{p2[0]:.3f},{p2[1]:.3f}]"
                         )
 
-                    if dist_along > tol:
+                    fallback_threshold = max(0.1, tol * 0.15)
+                    if dist_along > fallback_threshold:
                         max_dist = tol * 3.0
                         if dist_to_boundary < max_dist:
                             should_transition = True
@@ -2414,20 +2432,20 @@ class CourseSegmentation:
             filepath: Output file path
         """
         data = {
-            'total_segments': self.total_segments,
-            'segment_counts': {k.value: v for k, v in self.segment_counts.items()},
+            'total_segments': int(self.total_segments),
+            'segment_counts': {k.value: int(v) for k, v in self.segment_counts.items()},
             'segments': [
                 {
-                    'segment_id': seg.segment_id,
+                    'segment_id': int(seg.segment_id),
                     'segment_type': seg.segment_type.value,
-                    'start_index': seg.start_index,
-                    'end_index': seg.end_index,
-                    'length': seg.length,
-                    'mean_curvature': seg.mean_curvature,
-                    'max_curvature': seg.max_curvature,
-                    'total_heading_change': seg.total_heading_change,
-                    'entry_heading': seg.entry_heading,
-                    'exit_heading': seg.exit_heading,
+                    'start_index': int(seg.start_index),
+                    'end_index': int(seg.end_index),
+                    'length': float(seg.length),
+                    'mean_curvature': float(seg.mean_curvature),
+                    'max_curvature': float(seg.max_curvature),
+                    'total_heading_change': float(seg.total_heading_change),
+                    'entry_heading': float(seg.entry_heading),
+                    'exit_heading': float(seg.exit_heading),
                 }
                 for seg in self.segments
             ]
@@ -2462,21 +2480,58 @@ class CourseSegmentation:
             start_idx = seg_data['start_index']
             end_idx = seg_data['end_index']
 
+            if end_idx < start_idx:
+                # Wrap-around segment: join end-of-course with start.
+                x_tail = mean_course.x[start_idx:]
+                y_tail = mean_course.y[start_idx:]
+                heading_tail = mean_course.heading[start_idx:]
+                distance_tail = mean_course.distance[start_idx:]
+                curvature_tail = curvature[start_idx:]
+
+                x_head = mean_course.x[:end_idx + 1]
+                y_head = mean_course.y[:end_idx + 1]
+                heading_head = mean_course.heading[:end_idx + 1]
+                distance_head = mean_course.distance[:end_idx + 1]
+                curvature_head = curvature[:end_idx + 1]
+
+                # Drop the overlapping boundary point at index 0 to mirror
+                # wrap-around merge behavior.
+                if len(x_head) > 0:
+                    x_head = x_head[1:]
+                    y_head = y_head[1:]
+                    heading_head = heading_head[1:]
+                    distance_head = distance_head[1:]
+                    curvature_head = curvature_head[1:]
+
+                x = np.concatenate([x_tail, x_head])
+                y = np.concatenate([y_tail, y_head])
+                heading = np.concatenate([heading_tail, heading_head])
+                distance = np.concatenate([distance_tail, distance_head])
+                seg_curvature = np.concatenate([curvature_tail,
+                                                curvature_head])
+            else:
+                x = mean_course.x[start_idx:end_idx + 1]
+                y = mean_course.y[start_idx:end_idx + 1]
+                heading = mean_course.heading[start_idx:end_idx + 1]
+                distance = mean_course.distance[start_idx:end_idx + 1]
+                seg_curvature = curvature[start_idx:end_idx + 1]
+
             segment = Segment(
                 segment_id=seg_data['segment_id'],
                 segment_type=SegmentType(seg_data['segment_type']),
                 start_index=start_idx,
                 end_index=end_idx,
-                x=mean_course.x[start_idx:end_idx + 1],
-                y=mean_course.y[start_idx:end_idx + 1],
-                heading=mean_course.heading[start_idx:end_idx + 1],
-                distance=mean_course.distance[start_idx:end_idx + 1],
-                curvature=curvature[start_idx:end_idx + 1]
+                x=x,
+                y=y,
+                heading=heading,
+                distance=distance,
+                curvature=seg_curvature
             )
 
             self.segments.append(segment)
 
         self._invalidate_segment_lookup()
+        self._compute_segment_boundaries()
         logger.info(f"Loaded segmentation from {filepath}")
 
 

@@ -32,7 +32,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from donkeycar.parts.course_analysis import (
-    MultiLapData, MeanCourse, CourseSegmentation, SegmentEstimator, SegmentType
+    MultiLapData, MeanCourse, CourseSegmentation, SegmentType
 )
 
 
@@ -234,31 +234,6 @@ Examples:
         segmentation.save(seg_json)
         print()
         print(f"  Saved: {seg_json}")
-        print()
-
-        # Step 4: Create segment estimator
-        print("Step 4: Creating segment estimator...")
-        print("-" * 70)
-
-        estimator = SegmentEstimator(segmentation)
-        print("  Estimator ready for real-time segment detection")
-
-        # Test estimator at a few points
-        print()
-        print("  Testing estimator at sample points:")
-        test_indices = [0, len(mean_course.x) // 4, len(mean_course.x) // 2]
-
-        for idx in test_indices:
-            x = mean_course.x[idx]
-            y = mean_course.y[idx]
-            heading = mean_course.heading[idx]
-
-            estimate = estimator.estimate(x, y, heading)
-
-            print(f"    Point {idx}: segment={estimate.segment_id}, "
-                  f"confidence={estimate.confidence:.2f}, "
-                  f"distance={estimate.distance_to_course:.3f}m")
-
         print()
 
     # Summary

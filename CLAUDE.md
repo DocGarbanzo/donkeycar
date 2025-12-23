@@ -20,6 +20,135 @@ Activate with: `conda activate donkey`
 - `pytest tests/test_specific.py` - Run a single test file
 - `pytest -k "test_name"` - Run specific test by name
 
+## Testing Guidelines
+
+**CRITICAL**: When testing UI features or user workflows, you MUST test the complete end-to-end scenario, not isolated components.
+
+### Integration Testing Requirements
+
+When testing features that involve user interactions or multi-step workflows:
+
+1. **Simulate the actual user workflow**
+   - Don't test components in isolation
+   - Test the complete sequence of actions users perform
+   - Use the same data transformations the real code uses
+
+2. **Use actual detected boundaries, not guessed values**
+   - Get lap boundaries from lap detection, don't hardcode indices
+   - Use real algorithms to find transitions, don't assume positions
+   - Example: `lap1_end = len(multilap_data.laps[0]) - 1`, NOT `lap1_end = 200`
+
+3. **Test correctness, not just validity**
+   - Bad: `assert segment >= 0` (checks if valid)
+   - Good: `assert segment == expected_segment` (checks if correct)
+   - Bad: `assert len(segments) > 0` (meaningless)
+   - Good: `assert len(unique_segments_in_lap1) > 1` (proves transitions occur)
+
+4. **Reproduce the exact user scenario**
+   - If user selects "2 laps" in UI → compute mean course from 2 laps
+   - If UI filters by time → test with time filtering
+   - If UI uses specific algorithms → use those same algorithms in tests
+
+### Test Anti-Patterns to Avoid
+
+❌ **The "Valid But Wrong" Test**
+```python
+# BAD: Just checks if value is in valid range
+assert 0 <= segment < total_segments
+
+# GOOD: Checks actual expected value at specific position
+assert segment_at_position == expected_segment_id
+```
+
+❌ **The "Magic Number" Test**
+```python
+# BAD: Arbitrary index with no justification
+lap1_end = 200  # Where did this come from?
+
+# GOOD: Actual detected boundary
+lap1_end = len(multilap_data.laps[0]) - 1
+```
+
+❌ **The "Isolated Component" Test**
+```python
+# BAD: Tests component with artificial data
+mean_course = MeanCourse()
+mean_course.x = [1, 2, 3]  # Synthetic, doesn't match real workflow
+
+# GOOD: Tests full workflow with real data processing
+mean_course = compute_mean_course_from_n_laps(data, num_laps=2)
+```
+
+❌ **The "Shallow Assertion" Test**
+```python
+# BAD: Only checks existence
+assert len(segments) > 0
+
+# GOOD: Checks actual behavior
+assert segments[after_boundary] != segments[before_boundary]
+```
+
+### Required Test Workflow for Bug Fixes
+
+When fixing a bug:
+
+1. **First, write a test that reproduces the bug** (test must FAIL)
+2. Understand WHY previous tests didn't catch the bug
+3. Fix the code
+4. Verify the test now PASSES
+5. Add similar tests for related scenarios
+6. Document what you learned in commit message
+
+**NEVER** fix code without first having a failing test!
+
+### Example: Testing IMU Path Visualization
+
+**Bad Test (Component Isolation)**:
+```python
+def test_segment_assignment():
+    # Create mean course from 1 lap only
+    mean_course = create_mean_course(lap1_data)
+
+    # Assign to 2-lap path
+    segments = assign_segments(two_lap_data)
+
+    # Check validity (meaningless!)
+    assert all(s >= 0 for s in segments)
+```
+
+**Good Test (Integration)**:
+```python
+def test_segment_assignment_with_2_lap_mean_course():
+    # Load 3-lap data
+    data = load_multilap_csv(num_laps=3)
+
+    # Simulate user selecting 2 laps in UI
+    mean_course = compute_mean_course_from_n_laps(data, num_laps=2)
+
+    # Create segmentation
+    segmentation = CourseSegmentation(mean_course)
+    segmentation.compute()
+
+    # Assign to full path
+    segments = segmentation.assign_segments_to_path(data.x, data.y)
+
+    # Get ACTUAL lap 1 end from detection
+    lap1_end = len(multilap_data.laps[0]) - 1
+
+    # Check lap 1 has multiple segments (proves transitions work)
+    lap1_segments = set(segments[:lap1_end + 1])
+    assert len(lap1_segments) > 1, \
+        f"Bug: lap 1 stuck at {lap1_segments}"
+```
+
+### Key Lessons
+
+1. **Passing tests don't guarantee correct behavior** - they only test what you told them to test
+2. **Simulate the real environment** - UI workflows, user actions, actual data transformations
+3. **Don't guess boundaries** - use the actual detection algorithms
+4. **Test what matters** - not "is this valid?" but "is this correct?"
+5. **Integration tests catch more bugs** - unit tests are necessary but not sufficient
+
 ## Branch and Remote Management Policy
 
 **CRITICAL Repository Remote Management:**

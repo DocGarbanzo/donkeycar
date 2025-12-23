@@ -188,7 +188,7 @@ Extracts from Tub records:
 
 ```python
 from donkeycar.parts.course_analysis import (
-    MultiLapData, MeanCourse, CourseSegmentation, SegmentEstimator
+    MultiLapData, MeanCourse, CourseSegmentation
 )
 
 # Load from CSV or Tub
@@ -203,13 +203,7 @@ mean_course.compute()
 segmentation = CourseSegmentation(mean_course)
 segmentation.compute()
 
-# Create estimator for real-time use
-estimator = SegmentEstimator(segmentation)
-
-# Estimate segment (heading in radians)
-estimate = estimator.estimate(x=10.0, y=5.0, heading=0.785)
-print(f"Segment: {estimate.segment_id}, "
-      f"Confidence: {estimate.confidence}")
+# Use segmentation results for analysis or downstream metrics.
 ```
 
 ### Example Output

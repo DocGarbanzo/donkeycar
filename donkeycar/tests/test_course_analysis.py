@@ -5,7 +5,6 @@ Tests all components:
 - MultiLapData: CSV loading and lap detection
 - MeanCourse: Mean course reconstruction
 - CourseSegmentation: Segment detection and classification
-- SegmentEstimator: Real-time segment estimation
 """
 
 import os
@@ -15,9 +14,8 @@ import numpy as np
 import json
 
 from donkeycar.parts.course_analysis import (
-    MultiLapData, MeanCourse, CourseSegmentation, Segment, SegmentEstimator,
-    SegmentType, SegmentEstimate, normalize_angle, angle_difference,
-    circular_mean, circular_std
+    MultiLapData, MeanCourse, CourseSegmentation, Segment, SegmentType,
+    normalize_angle, angle_difference, circular_mean, circular_std
 )
 
 
@@ -493,157 +491,6 @@ class TestCourseSegmentation(unittest.TestCase):
             self.assertAlmostEqual(seg1.length, seg2.length, places=5)
 
 
-class TestSegmentEstimator(unittest.TestCase):
-    """Test real-time segment estimation"""
-
-    def _create_test_course_and_segmentation(self):
-        """Create test course and segmentation"""
-        # Create oval course
-        theta = np.linspace(0, 2 * np.pi, 200)
-        x = 10 * np.cos(theta)
-        y = 5 * np.sin(theta)
-
-        # Calculate heading
-        dx = np.diff(x)
-        dy = np.diff(y)
-        heading = np.arctan2(dy, dx)
-        heading = np.append(heading, heading[-1])
-
-        # Calculate distance
-        ds = np.sqrt(dx**2 + dy**2)
-        distance = np.concatenate([[0], np.cumsum(ds)])
-
-        # Create MeanCourse
-        mean_course = MeanCourse()
-        mean_course.x = x
-        mean_course.y = y
-        mean_course.heading = heading
-        mean_course.distance = distance
-        mean_course.num_laps = 1
-
-        # Create segmentation
-        segmentation = CourseSegmentation(mean_course)
-        segmentation.compute()
-
-        return mean_course, segmentation
-
-    def test_estimate_on_course(self):
-        """Test estimation for position on course"""
-        mean_course, segmentation = self._create_test_course_and_segmentation()
-
-        estimator = SegmentEstimator(segmentation)
-
-        # Test at first point
-        x, y, heading = mean_course.x[0], mean_course.y[0], mean_course.heading[0]
-        estimate = estimator.estimate(x, y, heading)
-
-        self.assertIsInstance(estimate, SegmentEstimate)
-        self.assertIsNotNone(estimate.segment_id)
-        self.assertGreater(estimate.confidence, 0.5)
-        self.assertLess(estimate.distance_to_course, 0.5)
-
-    def test_estimate_near_course(self):
-        """Test estimation for position near course"""
-        mean_course, segmentation = self._create_test_course_and_segmentation()
-
-        estimator = SegmentEstimator(segmentation)
-
-        # Test at point slightly off course
-        x = mean_course.x[50] + 0.5
-        y = mean_course.y[50] + 0.5
-        heading = mean_course.heading[50]
-
-        estimate = estimator.estimate(x, y, heading)
-
-        self.assertIsNotNone(estimate.segment_id)
-        self.assertGreater(estimate.confidence, 0.3)
-        self.assertLess(estimate.distance_to_course, 2.0)
-
-    def test_estimate_off_course(self):
-        """Test estimation for position far off course"""
-        mean_course, segmentation = self._create_test_course_and_segmentation()
-
-        estimator = SegmentEstimator(segmentation)
-
-        # Test at point far from course
-        x = mean_course.x[0] + 100
-        y = mean_course.y[0] + 100
-        heading = 0
-
-        estimate = estimator.estimate(x, y, heading)
-
-        # Should return None segment with low confidence
-        self.assertIsNone(estimate.segment_id)
-        self.assertLess(estimate.confidence, 0.5)
-        self.assertGreater(estimate.distance_to_course, 10.0)
-
-    def test_estimate_with_heading(self):
-        """Test that heading helps disambiguation"""
-        mean_course, segmentation = self._create_test_course_and_segmentation()
-
-        estimator = SegmentEstimator(segmentation)
-
-        # Find a point on the course
-        x, y = mean_course.x[100], mean_course.y[100]
-        correct_heading = mean_course.heading[100]
-        wrong_heading = normalize_angle(correct_heading + np.pi)
-
-        # Estimate with correct heading
-        estimate1 = estimator.estimate(x, y, correct_heading)
-
-        # Estimate with wrong heading
-        estimate2 = estimator.estimate(x, y, wrong_heading)
-
-        # Correct heading should give higher confidence
-        self.assertGreater(estimate1.confidence, estimate2.confidence)
-
-    def test_estimate_batch(self):
-        """Test batch estimation"""
-        mean_course, segmentation = self._create_test_course_and_segmentation()
-
-        estimator = SegmentEstimator(segmentation)
-
-        # Create batch of positions
-        indices = [0, 50, 100, 150]
-        positions = np.array([
-            [mean_course.x[i], mean_course.y[i], mean_course.heading[i]]
-            for i in indices
-        ])
-
-        estimates = estimator.estimate_batch(positions)
-
-        # Check results
-        self.assertEqual(len(estimates), len(positions))
-
-        for estimate in estimates:
-            self.assertIsInstance(estimate, SegmentEstimate)
-            self.assertIsNotNone(estimate.segment_id)
-            self.assertGreater(estimate.confidence, 0.5)
-
-    def test_estimate_segment_boundary(self):
-        """Test estimation near segment boundary"""
-        mean_course, segmentation = self._create_test_course_and_segmentation()
-
-        if len(segmentation.segments) < 2:
-            self.skipTest("Need at least 2 segments for boundary test")
-
-        estimator = SegmentEstimator(segmentation)
-
-        # Get position at segment boundary
-        seg1 = segmentation.segments[0]
-        boundary_idx = seg1.end_index
-
-        x = mean_course.x[boundary_idx]
-        y = mean_course.y[boundary_idx]
-        heading = mean_course.heading[boundary_idx]
-
-        estimate = estimator.estimate(x, y, heading)
-
-        # Should return valid segment (either seg 0 or 1)
-        self.assertIsNotNone(estimate.segment_id)
-        self.assertIn(estimate.segment_id, [0, 1])
-
-
 class TestAssignSegmentsToPath(unittest.TestCase):
     """Test the assign_segments_to_path method"""
 
@@ -778,21 +625,12 @@ class TestIntegration(unittest.TestCase):
             segmentation.compute()
             self.assertGreater(segmentation.total_segments, 0)
 
-            # Step 5: Create estimator
-            estimator = SegmentEstimator(segmentation)
+            # Step 5: Assign segments to mean course path
+            segment_ids = segmentation.assign_segments_to_path(
+                mean_course.x, mean_course.y)
+            self.assertEqual(len(segment_ids), len(mean_course.x))
 
-            # Step 6: Test estimation at multiple points
-            test_indices = [0, 50, 100]
-            for idx in test_indices:
-                x = mean_course.x[idx]
-                y = mean_course.y[idx]
-                heading = mean_course.heading[idx]
-
-                estimate = estimator.estimate(x, y, heading)
-                self.assertIsNotNone(estimate.segment_id)
-                self.assertGreater(estimate.confidence, 0.5)
-
-            # Step 7: Save and load all components
+            # Step 6: Save and load all components
             mean_course_file = os.path.join(td, "mean_course.json")
             segmentation_file = os.path.join(td, "segmentation.json")
 
@@ -806,16 +644,10 @@ class TestIntegration(unittest.TestCase):
             loaded_seg = CourseSegmentation()
             loaded_seg.load(segmentation_file, loaded_course)
 
-            # Create new estimator with loaded data
-            new_estimator = SegmentEstimator(loaded_seg)
-
-            # Test estimation with new estimator
-            x = loaded_course.x[25]
-            y = loaded_course.y[25]
-            heading = loaded_course.heading[25]
-
-            estimate = new_estimator.estimate(x, y, heading)
-            self.assertIsNotNone(estimate.segment_id)
+            # Step 7: Assign segments with loaded data
+            loaded_segment_ids = loaded_seg.assign_segments_to_path(
+                loaded_course.x, loaded_course.y)
+            self.assertEqual(len(loaded_segment_ids), len(loaded_course.x))
 
 
 if __name__ == '__main__':

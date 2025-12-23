@@ -1551,6 +1551,20 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
         segment_text.set_text('Segment: --')
         drift_text.set_text('Drift: --')
 
+    def _get_current_index(data):
+        """
+        Get the actual DataFrame index of the last row
+
+        Args:
+            data: Filtered DataFrame
+
+        Returns:
+            int: Actual DataFrame index of last row, or -1 if empty
+        """
+        if len(data) == 0:
+            return -1
+        return data.index[-1]
+
     def update_plot(_val):
         import time as time_module
         current_time_val = time_slider.val
@@ -1572,7 +1586,8 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
         display_data = get_display_data(current_data)
         current_path.set_data(display_data['x'], display_data['y'])
 
-        current_idx = len(current_data) - 1
+        # Get actual DataFrame index for correct segment lookup
+        current_idx = _get_current_index(current_data)
         update_displays_with_data(last_point, current_time_val,
                                   current_idx, loop_end_indices)
 
@@ -1585,9 +1600,11 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
         """Handle keyboard navigation - advance exactly one index at a time"""
         current_val = time_slider.val
 
-        # Find current index
-        mask = df['t'] <= current_val
-        current_idx = len(df[mask]) - 1
+        # Get actual DataFrame index for current position
+        filtered = df[df['t'] <= current_val]
+        current_idx = _get_current_index(filtered)
+        if current_idx < 0:
+            return  # No data to navigate
 
         if event.key == 'left':
             # Go to previous index
