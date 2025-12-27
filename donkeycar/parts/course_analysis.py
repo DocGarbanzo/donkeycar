@@ -2149,7 +2149,7 @@ class CourseSegmentation:
 
             mean_vec = next_point - prev_point
             denom_sign = np.dot(
-                np.array([normal_x, normal_y]), mean_vec)
+                np.array([tangent_x, tangent_y]), mean_vec)
             expected_sign = 1.0 if denom_sign >= 0 else -1.0
 
             self.segment_boundaries.append({
@@ -2246,10 +2246,10 @@ class CourseSegmentation:
             True if crossed from negative to positive side (forward)
         """
         d1 = CourseSegmentation._signed_distance_to_line(
-            p1, boundary['point'], boundary['normal']
+            p1, boundary['point'], boundary['tangent']
         )
         d2 = CourseSegmentation._signed_distance_to_line(
-            p2, boundary['point'], boundary['normal']
+            p2, boundary['point'], boundary['tangent']
         )
         # Use tolerance for near-zero comparisons
         zero_tol = 1e-9
@@ -2265,7 +2265,7 @@ class CourseSegmentation:
         if tangent is None or tangent_limit is None:
             return True
         segment_vec = p2 - p1
-        denom = np.dot(boundary['normal'], segment_vec)
+        denom = np.dot(boundary['tangent'], segment_vec)
         expected_sign = boundary.get('expected_denom_sign', 1.0)
         # Handle near-parallel crossings: when the path is nearly parallel to
         # the boundary but still transitions from one side to the other, we
@@ -2289,14 +2289,13 @@ class CourseSegmentation:
             return False
         intersection = p1 + t * segment_vec
         offset = intersection - boundary['point']
-        # Project onto tangent (perpendicular to course direction)
+        # Project onto course direction (tangent)
         proj_tangent = np.dot(offset, tangent)
         if abs(proj_tangent) > tangent_limit:
             return False
-        # Also limit distance along normal (course direction) to prevent
-        # detecting crossings that are far ahead/behind on the course
+        # Also limit cross-track distance to prevent far lateral crossings
         proj_normal = np.dot(offset, boundary['normal'])
-        normal_limit = tangent_limit * 1.5  # Allow slightly more along course
+        normal_limit = tangent_limit * 1.5
         if abs(proj_normal) > normal_limit:
             return False
         return True
@@ -2307,15 +2306,8 @@ class CourseSegmentation:
         """
         Assign segment IDs to driven path using hybrid detection.
 
-        Uses a two-stage approach for robust segment transitions:
-        1. Primary: Boundary crossing detection - checks if path crosses
-           boundary in forward direction (negative to positive side)
-        2. Fallback: Projection-based detection - if path is clearly past
-           the boundary (tangent distance > limit) and reasonably close
-           (total distance to boundary point < 3x limit), transition anyway
-
-        This hybrid approach prevents false positives from cross-track
-        errors while handling sparse sampling and near-parallel paths.
+        Uses boundary crossing detection: a transition occurs only when the
+        path crosses a boundary line from negative to positive side.
 
         The driven path must be in time order (chronological).
 
@@ -2381,6 +2373,20 @@ class CourseSegmentation:
             should_transition = False
 
             if boundary is not None:
+                if logger.isEnabledFor(logging.DEBUG):
+                    d1 = CourseSegmentation._signed_distance_to_line(
+                        p1, boundary['point'], boundary['tangent'])
+                    d2 = CourseSegmentation._signed_distance_to_line(
+                        p2, boundary['point'], boundary['tangent'])
+                    logger.debug(
+                        "seg_assign i=%d seg=%d->%d d1=%.6f d2=%.6f "
+                        "p1=[%.6f,%.6f] p2=[%.6f,%.6f] "
+                        "bpt=[%.6f,%.6f] bnorm=[%.6f,%.6f]",
+                        i, current_segment, next_segment, d1, d2,
+                        p1[0], p1[1], p2[0], p2[1],
+                        boundary['point'][0], boundary['point'][1],
+                        boundary['normal'][0], boundary['normal'][1]
+                    )
                 # Primary: Check for forward boundary crossing
                 crossed = self._crossed_boundary_forward(p1, p2, boundary)
                 if crossed:
@@ -2390,33 +2396,6 @@ class CourseSegmentation:
                         f"{boundary['segment_to']} via crossing, "
                         f"p2=[{p2[0]:.3f},{p2[1]:.3f}]"
                     )
-                else:
-                    # Fallback: Check if we're clearly past the boundary
-                    dist_along = self._signed_distance_along_tangent(
-                        p2, boundary)
-                    tol = boundary.get('tangent_limit', 1.0)
-                    dist_to_boundary = np.linalg.norm(
-                        p2 - boundary['point'])
-
-                    if logger.isEnabledFor(logging.DEBUG) and i < 100:
-                        logger.debug(
-                            f"i={i}: No crossing, current={current_segment}, "
-                            f"dist_along={dist_along:.3f} (tol={tol:.3f}), "
-                            f"dist_to_bnd={dist_to_boundary:.3f} "
-                            f"(max={tol*3.0:.3f}), p2=[{p2[0]:.3f},{p2[1]:.3f}]"
-                        )
-
-                    fallback_threshold = max(0.1, tol * 0.15)
-                    if dist_along > fallback_threshold:
-                        max_dist = tol * 3.0
-                        if dist_to_boundary < max_dist:
-                            should_transition = True
-                            logger.debug(
-                                f"i={i}: Passed boundary {boundary['segment_from']}"
-                                f"->{boundary['segment_to']} via fallback, "
-                                f"p2=[{p2[0]:.3f},{p2[1]:.3f}]"
-                            )
-
             if should_transition:
                 current_segment = next_segment
 
