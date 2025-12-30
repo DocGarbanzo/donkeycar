@@ -13,6 +13,7 @@ from progress.bar import IncrementalBar
 import donkeycar as dk
 from donkeycar.management.joystick_creator import CreateJoystick
 from donkeycar.management.tub import TubManager
+from donkeycar.management.imupath2 import ImuPath2Command
 from donkeycar.utils import normalize_image, load_image, math
 
 PACKAGE_PATH = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -740,7 +741,8 @@ def execute_from_command_line():
         'models': ModelDatabase,
         'ui': Gui,
         'monitor': Monitor,
-        'imupath': ImuPathVisualizer
+        'imupath': ImuPathVisualizer,
+        'imupath2': ImuPath2Command
     }
 
     args = sys.argv[:]

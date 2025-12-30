@@ -25,7 +25,29 @@ import os
 from datetime import datetime
 import logging
 
-from donkeycar.parts.course_analysis import CourseSegmentation
+# NOTE: This file still uses the OLD course_analysis API (pre-refactoring)
+# because the visualization code hasn't been refactored yet (Phase 7b).
+# The old module is imported here explicitly to avoid conflicts with the
+# new course_analysis package.
+#
+# TODO Phase 7b: Refactor visualization to use new API from:
+#   donkeycar.parts.course_analysis (the new package)
+#
+# For now, we need to import the old module by its file path since Python
+# prefers the course_analysis/ package over course_analysis.py
+import sys
+import os
+# Import old course_analysis module
+old_ca_path = os.path.join(
+    os.path.dirname(__file__), '..', 'parts', 'course_analysis.py')
+import importlib.util
+spec = importlib.util.spec_from_file_location(
+    "course_analysis_old", old_ca_path)
+course_analysis_old = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(course_analysis_old)
+
+# Make old API available
+CourseSegmentation = course_analysis_old.CourseSegmentation
 
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
@@ -616,7 +638,6 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
     def compute_mean_course_with_laps(num_laps_to_use):
         """Compute mean course using only first N laps"""
         try:
-            from donkeycar.parts.course_analysis import MultiLapData, MeanCourse
             import tempfile
             import math
 
@@ -635,7 +656,10 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                 temp_csv.write(f'{t},{x},{y},{heading_rad}\n')
             temp_csv.close()
 
-            # Run course analysis on original data
+            # Run course analysis on original data (OLD API)
+            MultiLapData = course_analysis_old.MultiLapData
+            MeanCourse = course_analysis_old.MeanCourse
+
             multilap_data = MultiLapData()
             multilap_data.load_data(
                 temp_csv.name,
@@ -685,11 +709,10 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
     # Also get lap boundary indices for filtering display
     lap_end_indices = []
     try:
-        from donkeycar.parts.course_analysis import MultiLapData
         import tempfile
         import math
 
-        # Detect laps to get boundary indices
+        # Detect laps to get boundary indices (OLD API)
         temp_csv = tempfile.NamedTemporaryFile(
             mode='w', suffix='.csv', delete=False)
         temp_csv.write('timestamp,x,y,heading\n')
@@ -702,6 +725,7 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
             temp_csv.write(f'{t},{x},{y},{heading_rad}\n')
         temp_csv.close()
 
+        MultiLapData = course_analysis_old.MultiLapData
         multilap_data = MultiLapData()
         multilap_data.load_data(
             temp_csv.name,
@@ -766,7 +790,7 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
             )
     if mean_course_data is not None:
         try:
-            from donkeycar.parts.course_analysis import CourseSegmentation
+            # Use OLD API for segmentation
             segmentation = CourseSegmentation(
                 mean_course=mean_course_data['mean_course_obj'],
                 params={'boundary_method': segment_method})
@@ -1355,7 +1379,7 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
             print(f"\nChanging segmentation method to '{new_method}'...")
 
             try:
-                from donkeycar.parts.course_analysis import CourseSegmentation
+                # Use OLD API for segmentation
                 segmentation = CourseSegmentation(
                     mean_course=mean_course_data['mean_course_obj'],
                     params={'boundary_method': new_method})

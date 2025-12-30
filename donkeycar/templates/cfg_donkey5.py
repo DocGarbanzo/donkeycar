@@ -75,6 +75,254 @@ IMU_ACCEL_NORM = 20
 IMU_GYRO_NORM = 250
 GYRO_Z_INDEX = 2
 
+# =====================================================================
+# COURSE ANALYSIS AND SEGMENTATION (Refactored Architecture)
+# =====================================================================
+
+"""
+Lap Detection Parameters
+
+Controls how individual laps are detected from multi-lap recordings.
+Two detection methods are available:
+
+Y-Crossing Method (default):
+    Detects lap boundaries when the y-coordinate crosses from negative
+    to positive. Works well for closed loops starting/ending near y=0.
+
+Drift Method:
+    Uses weighted average reversal point detection. More sophisticated,
+    handles courses with drift. Finds the point where the car stops
+    approaching the start position and begins moving away.
+
+Parameters:
+    y_threshold: Threshold around zero for y-crossing detection (meters)
+    min_loop_distance: Minimum distance to travel before considering
+        loop closure (meters). Prevents false detections near start.
+    max_closure_distance: Maximum distance from start for loop closure
+        detection (meters). Only used with drift method.
+    weighted_avg_weights: Weights for distance averaging [prev, current, next].
+        Used to smooth distance calculations in drift detection.
+    reversal_tolerance: Multiplier for detecting when distance starts
+        increasing. Values > 1.0 create hysteresis to avoid noise.
+    vicinity_window: Maximum number of points to search for reversal
+        after entering start vicinity. Limits search to reasonable range.
+    time_factor_weight: Weight for time component in reversal scoring.
+        Higher values prefer earlier reversals.
+    distance_factor_weight: Weight for distance component in reversal
+        scoring. Higher values prefer closer reversals.
+    min_lap_length: Minimum number of data points per lap. Filters out
+        incomplete or erroneous lap detections.
+"""
+LAP_DETECTION_PARAMS = {
+    # Y-Crossing method
+    'y_threshold': 0.1,
+    'min_loop_distance': 1.0,
+
+    # Drift detection method
+    'max_closure_distance': 1.0,
+    'weighted_avg_weights': [0.25, 0.5, 0.25],
+    'reversal_tolerance': 1.001,
+    'vicinity_window': 2000,
+    'time_factor_weight': 0.7,
+    'distance_factor_weight': 0.3,
+
+    # Common
+    'min_lap_length': 50,
+}
+
+"""
+Mean Course Reconstruction Parameters
+
+Controls how a reference course is computed from multiple laps.
+The algorithm resamples all laps onto a common arc-length axis,
+computes a weighted average, applies smoothing, and ensures
+loop closure continuity.
+
+Algorithm Steps:
+1. Resample each lap onto normalized arc-length axis (0 to 1)
+2. Compute weighted mean with equal lap contribution
+3. Apply Savitzky-Golay smoothing to position
+4. Apply moving average smoothing to heading
+5. Apply loop closure correction (ensure start/end continuity)
+6. Compute cumulative distance along course
+
+Parameters:
+    resampling_interval: Distance between resampled points (meters).
+        Smaller values = more detail but more computation.
+    min_resampling_interval: Minimum allowed interval (meters).
+        Safety limit to prevent excessive memory usage.
+    position_smoothing_window: Window size for Savitzky-Golay filter
+        on position. Must be odd. Larger = smoother but less detail.
+    position_polynomial_order: Polynomial order for Savitzky-Golay
+        filter. Typically 2 or 3. Higher = follows data more closely.
+    heading_smoothing_window: Window size for moving average on heading.
+        Circular smoothing accounts for angle wraparound.
+    loop_closure_pct: Percentage of course length over which to apply
+        closure correction (0-1). Ensures smooth start/end transition.
+    outlier_std_threshold: Number of standard deviations for outlier
+        detection. Points beyond this are candidates for removal.
+    outlier_iterations: Number of outlier removal passes. Multiple
+        passes improve robustness to bad data.
+"""
+MEAN_COURSE_PARAMS = {
+    'resampling_interval': 0.1,
+    'min_resampling_interval': 0.001,
+    'position_smoothing_window': 11,
+    'position_polynomial_order': 3,
+    'heading_smoothing_window': 5,
+    'loop_closure_pct': 0.025,
+    'outlier_std_threshold': 2.5,
+    'outlier_iterations': 2,
+}
+
+"""
+Course Segmentation Parameters
+
+Controls how the mean course is divided into geometric segments
+(straights, turns, S-curves, chicanes). Multiple segmentation
+strategies are available:
+
+Segmentation Strategies:
+    Threshold: Detects transitions between straight/turn based on
+        curvature threshold. Simple and reliable.
+    Extrema: Detects segment boundaries at curvature peaks and valleys
+        (apex points). Good for finding turn centers.
+    Gradient: Detects boundaries where curvature changes most rapidly
+        (entry/exit points). Recommended for most courses.
+    Hybrid: Combines threshold + extrema methods for comprehensive
+        boundary detection.
+
+Segment Types:
+    STRAIGHT: Low curvature sections
+    LEFT_TURN: Positive curvature (turning left)
+    RIGHT_TURN: Negative curvature (turning right)
+    S_CURVE_LR: Left-to-right inflection pattern
+    S_CURVE_RL: Right-to-left inflection pattern
+    CHICANE: Multiple rapid inflection points
+
+Parameters:
+    curvature_window: Number of points for curvature calculation.
+        Larger = smoother curvature but less responsive to detail.
+    curvature_smoothing_window: Additional smoothing window size.
+        Applied after initial curvature calculation.
+    straight_curvature_threshold: Threshold for straight vs turn
+        classification (radians/meter). Lower = more sensitive.
+    min_segment_length: Minimum segment length (meters). Prevents
+        tiny segments from noise.
+    gradient_prominence: Minimum prominence for gradient-based boundary
+        detection. Higher = fewer, more significant boundaries.
+    extrema_prominence: Minimum prominence for extrema detection.
+        Controls sensitivity to curvature peaks.
+    inflection_threshold: Curvature threshold for inflection detection
+        (radians/meter). Used in S-curve/chicane classification.
+    inflection_chicane_threshold: Number of inflections to classify as
+        chicane vs S-curve. Chicanes have more rapid direction changes.
+    inflection_scurve_min: Minimum inflections for S-curve detection.
+    inflection_scurve_long: Inflection count for longer S-curves.
+    scurve_length_threshold: Length threshold (meters) for distinguishing
+        short vs long S-curves.
+    classification_window: Window size for segment classification
+        calculations.
+    use_adaptive_threshold: If True, automatically adjust straight
+        threshold based on course curvature distribution.
+    adaptive_percentile: Percentile of curvature distribution to use
+        for adaptive threshold. Lower = straighter classification.
+    adaptive_min_threshold: Minimum allowed adaptive threshold (rad/m).
+    adaptive_max_threshold: Maximum allowed adaptive threshold (rad/m).
+"""
+SEGMENTATION_PARAMS = {
+    # Curvature calculation
+    'curvature_window': 5,
+    'curvature_smoothing_window': 21,
+
+    # Boundary detection
+    'straight_curvature_threshold': 0.08,  # rad/m
+    'min_segment_length': 0.8,             # meters
+    'gradient_prominence': 0.1,
+    'extrema_prominence': 0.02,
+
+    # Segment classification
+    'inflection_threshold': 0.05,          # rad/m
+    'inflection_chicane_threshold': 3,
+    'inflection_scurve_min': 1,
+    'inflection_scurve_long': 2,
+    'scurve_length_threshold': 10,         # meters
+    'classification_window': 5,
+
+    # Adaptive threshold
+    'use_adaptive_threshold': True,
+    'adaptive_percentile': 20,
+    'adaptive_min_threshold': 0.05,
+    'adaptive_max_threshold': 2.0,
+}
+
+"""
+Segment Assignment Parameters
+
+Controls how segment IDs are assigned to positions on a driven path.
+Uses boundary crossing detection to determine when the vehicle
+transitions from one segment to the next.
+
+Algorithm:
+    For each point on the driven path, check if the vehicle crossed
+    a segment boundary line since the previous point. Boundaries are
+    perpendicular lines at segment endpoints. Crossing detection uses
+    line intersection with configurable tolerances.
+
+Parameters:
+    boundary_distance_tolerance: Maximum distance from boundary line
+        to still consider a crossing (meters). Accounts for GPS noise.
+    boundary_tangent_limit: Maximum tangent component allowed for
+        boundary crossing. Prevents detecting crossings when traveling
+        parallel to boundary.
+    crossing_zero_tolerance: Numerical tolerance for zero in calculations
+        (meters). Prevents division by near-zero values.
+    crossing_t_tolerance: Tolerance for parametric line intersection
+        parameter. Allows slight overshoot in crossing detection.
+    normal_limit_factor: Maximum distance along boundary normal to
+        consider valid crossing. Multiplied by expected boundary spacing.
+    parallel_tolerance: Tolerance for detecting parallel paths. If path
+        is nearly parallel to boundary, skip crossing check.
+    proximity_factor: Proximity weighting factor for boundary detection.
+        Higher = stricter proximity requirements.
+"""
+SEGMENT_ASSIGNMENT_PARAMS = {
+    'boundary_distance_tolerance': 0.05,
+    'boundary_tangent_limit': 0.8,
+    'crossing_zero_tolerance': 1e-9,
+    'crossing_t_tolerance': 1e-6,
+    'normal_limit_factor': 1.5,
+    'parallel_tolerance': 1e-6,
+    'proximity_factor': 0.5,
+}
+
+"""
+IMU Path Visualization Parameters
+
+Controls the interactive visualization of recorded IMU paths, mean
+courses, and course segmentation. Used by the 'donkey imupath' command.
+
+Visualization Features:
+    - Full path scatter plot color-coded by speed
+    - Current position marker with navigation
+    - Mean course overlay with segment boundaries
+    - Segment boundary markers (perpendicular ticks)
+    - Interactive controls (time slider, lap selector, etc.)
+    - Real-time statistics display
+
+Parameters:
+    max_display_points: Maximum number of points to display at once.
+        Large datasets are downsampled for performance. Higher values
+        = more detail but slower rendering.
+    update_throttle_ms: Minimum milliseconds between display updates.
+        Prevents excessive redraws during rapid slider movement.
+        Lower = more responsive but higher CPU usage.
+"""
+IMU_VISUALIZATION_PARAMS = {
+    'max_display_points': 1000,
+    'update_throttle_ms': 100,
+}
+
 
 # TRAINING
 DEFAULT_AI_FRAMEWORK = 'tensorflow'
