@@ -5,7 +5,7 @@ Tests for segment estimator (real-time point-based estimation)
 import unittest
 import numpy as np
 
-from donkeycar.parts.course_analysis import (
+from donkeycar.course_analysis import (
     MeanCourse, CourseSegmentation, SegmentEstimator, SegmentEstimate,
     normalize_angle
 )

@@ -27,19 +27,18 @@ import logging
 
 # NOTE: This file still uses the OLD course_analysis API (pre-refactoring)
 # because the visualization code hasn't been refactored yet (Phase 7b).
-# The old module is imported here explicitly to avoid conflicts with the
-# new course_analysis package.
+# The old module is imported here explicitly.
 #
 # TODO Phase 7b: Refactor visualization to use new API from:
-#   donkeycar.parts.course_analysis (the new package)
+#   donkeycar.course_analysis (the new package)
 #
-# For now, we need to import the old module by its file path since Python
-# prefers the course_analysis/ package over course_analysis.py
+# For now, we import the old module by its file path.
 import sys
 import os
 # Import old course_analysis module
 old_ca_path = os.path.join(
-    os.path.dirname(__file__), '..', 'parts', 'course_analysis.py')
+    os.path.dirname(__file__), '..', 'course_analysis', 'old',
+    'course_analysis.py')
 import importlib.util
 spec = importlib.util.spec_from_file_location(
     "course_analysis_old", old_ca_path)

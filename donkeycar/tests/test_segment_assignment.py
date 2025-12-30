@@ -6,7 +6,7 @@ for assigning segments to driven path coordinates.
 """
 import numpy as np
 import pytest
-from donkeycar.parts.course_analysis import (
+from donkeycar.course_analysis import (
     MeanCourse, CourseSegmentation, SegmentType
 )
 

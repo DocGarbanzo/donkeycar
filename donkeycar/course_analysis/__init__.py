@@ -66,6 +66,14 @@ from .segment_assignment import (
     SegmentEstimator,
 )
 
+# Utility functions
+from .utils import (
+    normalize_angle,
+    angle_difference,
+    circular_mean,
+    circular_std,
+)
+
 __all__ = [
     # Data loading
     'PathData',
@@ -95,4 +103,9 @@ __all__ = [
     'SegmentEstimate',
     'SegmentAssigner',
     'SegmentEstimator',
+    # Utility functions
+    'normalize_angle',
+    'angle_difference',
+    'circular_mean',
+    'circular_std',
 ]

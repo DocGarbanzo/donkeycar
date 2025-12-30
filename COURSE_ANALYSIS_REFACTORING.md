@@ -24,7 +24,7 @@ Successfully refactored 2,696 lines of monolithic course_analysis.py into clean,
 ### Phase 1: Data Loading Infrastructure ✅ COMPLETE
 
 **Files Created:**
-- `donkeycar/parts/course_analysis/data_loader.py` (262 lines)
+- `donkeycar/course_analysis/data_loader.py` (262 lines)
 - `donkeycar/tests/test_data_loader.py` (127 lines)
 
 **Classes:**
@@ -45,7 +45,7 @@ Successfully refactored 2,696 lines of monolithic course_analysis.py into clean,
 ### Phase 2: Lap Detection Algorithms ✅ COMPLETE
 
 **Files Created:**
-- `donkeycar/parts/course_analysis/lap_detection.py` (458 lines)
+- `donkeycar/course_analysis/lap_detection.py` (458 lines)
 - `donkeycar/tests/test_lap_detection.py` (209 lines)
 
 **Classes:**
@@ -89,7 +89,7 @@ DEFAULT_PARAMS = {
 ### Phase 3: Mean Course Reconstruction ✅ COMPLETE
 
 **Files Created:**
-- `donkeycar/parts/course_analysis/mean_course.py` (316 lines)
+- `donkeycar/course_analysis/mean_course.py` (316 lines)
 - `donkeycar/tests/test_mean_course.py` (60 lines)
 
 **Classes:**
@@ -129,7 +129,7 @@ def build(self, multilap_data):  # Pure function!
 ### Phase 4: Segmentation Strategies ✅ COMPLETE
 
 **Files Created:**
-- `donkeycar/parts/course_analysis/segmentation.py` (436 lines)
+- `donkeycar/course_analysis/segmentation.py` (436 lines)
 
 **Classes:**
 - `SegmentType`: Enum (STRAIGHT, LEFT_TURN, RIGHT_TURN, S_CURVE_*, CHICANE)
@@ -188,7 +188,7 @@ for strategy in strategies:
 ### Phase 5: Segment Assignment ✅ COMPLETE
 
 **Files Created:**
-- `donkeycar/parts/course_analysis/segment_assignment.py` (265 lines)
+- `donkeycar/course_analysis/segment_assignment.py` (265 lines)
 
 **Classes:**
 - `SegmentEstimate`: Dataclass for estimation results
@@ -322,7 +322,7 @@ imu_visualization.py (1,651 lines)
 ### After Refactoring
 
 ```
-donkeycar/parts/course_analysis/
+donkeycar/course_analysis/
 ├── __init__.py - Public API exports
 ├── data_loader.py (262 lines)
 │   ├── PathData - Immutable, testable with synthetic arrays
@@ -603,7 +603,7 @@ ui_components.py:
 
 ```python
 # OLD API (still works):
-from donkeycar.parts.course_analysis import MultiLapData, MeanCourse
+from donkeycar.course_analysis import MultiLapData, MeanCourse
 
 multilap = MultiLapData()
 multilap.load_data('path.csv')
@@ -611,7 +611,7 @@ mean = MeanCourse(multilap)
 mean.compute()
 
 # NEW API (recommended):
-from donkeycar.parts.course_analysis import (
+from donkeycar.course_analysis import (
     CSVPathDataSource,
     YCrossingLapDetector,
     MultiLapData,
@@ -657,6 +657,247 @@ pytest donkeycar/tests/test_integration_course_analysis.py::TestFullWorkflow2Lap
 # This test verifies all magic numbers extracted
 pytest donkeycar/tests/test_integration_course_analysis.py::TestNoMagicNumbers -v
 ```
+
+---
+
+## Fixing Refactored Implementation Tests
+
+### Current Test Status (as of 2025-12-30)
+
+**Old Implementation (Benchmark):**
+- ✅ **22/22 tests passing** in `test_course_analysis.py`
+- Implementation: `donkeycar/course_analysis/old/course_analysis.py`
+- Status: **Stable, frozen as benchmark**
+
+**New Refactored Implementation:**
+- ❌ **11/57 tests passing** (46 failures, 4 skipped)
+- Implementation: `donkeycar/course_analysis/`
+- Status: **Has bugs that need fixing**
+
+### Test Breakdown
+
+| Test File | Status | Notes |
+|-----------|--------|-------|
+| `test_data_loader.py` | ✅ 6/6 passed | Working correctly |
+| `test_lap_detection.py` | ❌ 1/8 passed | Lap detection issues |
+| `test_mean_course.py` | ⏭️ 0/3 skipped | Not implemented yet |
+| `test_segment_assignment.py` | ❌ 0/16 failed | All failing |
+| `test_segment_estimator.py` | ❌ 0/6 failed | All failing |
+| `test_segment_identification_multilap.py` | ❌ 0/12 failed | All failing |
+| `test_integration_course_analysis.py` | ❌ 4/8 passed | Mixed results |
+
+### Example Failures
+
+**1. Lap Detection Bug (test_lap_detection.py):**
+```python
+def test_detect_laps_synthetic_oval(self):
+    path_data = create_synthetic_oval(num_laps=3, points_per_lap=100)
+    detector = YCrossingLapDetector()
+    boundaries = detector.detect_laps(path_data)
+
+    # FAIL: Expected 3 laps, got 2
+    self.assertEqual(len(boundaries), 3)  # AssertionError: 2 != 3
+```
+
+**Root cause:** YCrossingLapDetector in refactored code has different boundary detection logic than old implementation.
+
+**2. Segment Assignment Failures:**
+All 16 tests in `test_segment_assignment.py` are failing, suggesting the segment assignment algorithm has bugs or different behavior.
+
+**3. Integration Test Failures:**
+Tests that simulate full user workflows are failing, indicating issues in how components work together.
+
+### Fixing Strategy
+
+#### Option 1: Debug and Fix Refactored Implementation (Recommended)
+
+**Step 1: Compare Old vs New Implementations**
+
+For each failing test:
+1. Run the same scenario with old implementation
+2. Run with new implementation
+3. Compare outputs (lap boundaries, segment IDs, etc.)
+4. Identify where behavior diverges
+
+```bash
+# Example: Debug lap detection
+pytest donkeycar/tests/test_lap_detection.py::TestYCrossingLapDetector::test_detect_laps_synthetic_oval -v -s
+
+# Add print statements to both implementations to see what's different
+```
+
+**Step 2: Fix Lap Detection First (Foundation)**
+
+Since lap detection is used by all other components, fix it first:
+
+```python
+# In course_analysis_refactored/lap_detection.py
+# Compare YCrossingLapDetector.detect_laps() with old implementation
+# Look for off-by-one errors, different boundary conditions, etc.
+```
+
+**Step 3: Fix Segment Assignment**
+
+Once lap detection works, move to segment assignment:
+
+```python
+# In course_analysis_refactored/segment_assignment.py
+# Compare SegmentAssigner.assign() with old implementation
+# Check boundary crossing detection, state machine logic
+```
+
+**Step 4: Validate Integration Tests**
+
+After components work individually, verify full workflows:
+
+```bash
+pytest donkeycar/tests/test_integration_course_analysis.py -v
+```
+
+#### Option 2: Port Tests to Match New Behavior (Not Recommended)
+
+If the new implementation has intentional behavior changes (improved algorithms), update test expectations:
+
+```python
+# Only do this if new behavior is CORRECT and BETTER
+# Document why the expectation changed
+
+def test_detect_laps_synthetic_oval(self):
+    # NEW: Refactored implementation uses stricter boundary detection
+    # and correctly identifies 2 complete laps instead of 3 partial laps
+    self.assertEqual(len(boundaries), 2)  # Updated expectation
+```
+
+**Warning:** Only change test expectations if you're certain the new behavior is correct!
+
+### Debugging Workflow
+
+**1. Pick One Failing Test**
+
+Start with the simplest failing test:
+
+```bash
+pytest donkeycar/tests/test_lap_detection.py::TestYCrossingLapDetector::test_detect_laps_synthetic_oval -v -s
+```
+
+**2. Add Debug Logging**
+
+In `course_analysis_refactored/lap_detection.py`:
+
+```python
+def detect_laps(self, path_data: PathData) -> List[LapBoundary]:
+    """Detect lap boundaries using y-axis crossing"""
+    print(f"DEBUG: Input data length: {len(path_data)}")
+    print(f"DEBUG: Y range: [{np.min(path_data.y)}, {np.max(path_data.y)}]")
+
+    boundaries = []
+    # ... detection logic
+
+    print(f"DEBUG: Found {len(boundaries)} boundaries")
+    for i, b in enumerate(boundaries):
+        print(f"DEBUG: Lap {i}: indices {b.start_index}-{b.end_index}")
+
+    return boundaries
+```
+
+**3. Compare with Old Implementation**
+
+Run the same test data through old implementation:
+
+```python
+# In test file, temporarily add:
+def test_compare_old_vs_new(self):
+    path_data = create_synthetic_oval(num_laps=3)
+
+    # Old implementation
+    from donkeycar.parts import course_analysis as old
+    old_data = old.MultiLapData()
+    # ... run old detection
+
+    # New implementation
+    from donkeycar.course_analysis import YCrossingLapDetector
+    new_detector = YCrossingLapDetector()
+    new_boundaries = new_detector.detect_laps(path_data)
+
+    # Compare results
+    print(f"Old: {old_data.num_laps} laps")
+    print(f"New: {len(new_boundaries)} laps")
+```
+
+**4. Fix the Bug**
+
+Once you identify the difference, fix the refactored code to match correct behavior.
+
+**5. Verify Fix**
+
+```bash
+# Re-run the test
+pytest donkeycar/tests/test_lap_detection.py::TestYCrossingLapDetector::test_detect_laps_synthetic_oval -v
+
+# Run all lap detection tests
+pytest donkeycar/tests/test_lap_detection.py -v
+```
+
+**6. Repeat for Next Failing Test**
+
+Move to segment assignment tests, then integration tests.
+
+### Running Tests During Development
+
+```bash
+# Activate environment
+conda activate donkey
+
+# Run specific test file
+pytest donkeycar/tests/test_lap_detection.py -v
+
+# Run specific test
+pytest donkeycar/tests/test_lap_detection.py::TestYCrossingLapDetector::test_detect_laps_synthetic_oval -v
+
+# Run with print statements visible
+pytest donkeycar/tests/test_lap_detection.py -v -s
+
+# Stop at first failure
+pytest donkeycar/tests/test_lap_detection.py -x
+
+# Run all refactored tests
+pytest donkeycar/tests/test_data_loader.py donkeycar/tests/test_lap_detection.py donkeycar/tests/test_segment_assignment.py donkeycar/tests/test_segment_estimator.py donkeycar/tests/test_segment_identification_multilap.py donkeycar/tests/test_integration_course_analysis.py -v
+```
+
+### Success Criteria
+
+Before switching from old to new implementation, ensure:
+
+- ✅ All refactored tests pass (0 failures)
+- ✅ Integration tests pass (simulating real user workflows)
+- ✅ New implementation produces same or better results than old
+- ✅ No regressions in functionality
+
+### Migration Timeline
+
+**Current State:**
+- Old implementation + old tests = benchmark (both exist, both passing)
+- New implementation + new tests = refactored (both exist, tests failing)
+
+**After Fixes:**
+- Old implementation + old tests = benchmark (both exist, both passing)
+- New implementation + new tests = refactored (both exist, **tests passing**)
+
+**After Migration:**
+- Delete old implementation (`course_analysis.py`)
+- Delete old tests (`test_course_analysis.py`)
+- Rename `course_analysis_refactored/` → `course_analysis/`
+- Keep only new tests
+
+### Estimated Effort
+
+Based on test failure patterns:
+- Fix lap detection: 2-3 hours
+- Fix segment assignment: 3-4 hours
+- Fix integration tests: 1-2 hours
+- Validation and cleanup: 1-2 hours
+
+**Total: 7-11 hours** to get all refactored tests passing.
 
 ---
 

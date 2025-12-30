@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Import NEW course_analysis API
-from donkeycar.parts.course_analysis import (
+from donkeycar.course_analysis import (
     CSVPathDataSource,
     TubPathDataSource,
     YCrossingLapDetector,

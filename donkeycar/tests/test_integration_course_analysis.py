@@ -15,7 +15,7 @@ import tempfile
 import os
 import pandas as pd
 
-from donkeycar.parts.course_analysis import (
+from donkeycar.course_analysis import (
     PathData, CSVPathDataSource,
     YCrossingLapDetector, DriftLapDetector, MultiLapData,
     MeanCourseBuilder, MeanCourse,
@@ -206,7 +206,7 @@ class TestSegmentationCorrectness(unittest.TestCase):
         path_data = PathData(t, x, y, h, v)
 
         # Create fake multilap (just one "lap")
-        from donkeycar.parts.course_analysis.lap_detection import LapBoundary
+        from donkeycar.course_analysis import LapBoundary
         boundary = LapBoundary(0, len(t)-1, t[0], t[-1])
         multilap = MultiLapData(path_data, [boundary])
 
@@ -280,7 +280,7 @@ class TestNoMagicNumbers(unittest.TestCase):
         """SegmentAssigner should have all tolerances as params"""
         # Create minimal segmentation for testing
         path_data = create_synthetic_3lap_oval(points_per_lap=50)
-        from donkeycar.parts.course_analysis.lap_detection import LapBoundary
+        from donkeycar.course_analysis import LapBoundary
         boundary = LapBoundary(0, len(path_data)-1,
                               path_data.timestamp[0],
                               path_data.timestamp[-1])

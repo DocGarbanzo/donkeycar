@@ -9,19 +9,19 @@ Tests:
 
 import unittest
 import numpy as np
-from donkeycar.parts.course_analysis import (
+from donkeycar.course_analysis import (
     PathData, YCrossingLapDetector, MultiLapData
 )
 
 # Will import once implemented
-# from donkeycar.parts.course_analysis import (
+# from donkeycar.course_analysis import (
 #     MeanCourseBuilder, MeanCourse
 # )
 
 
 def create_test_multilap_data(num_laps=3, points_per_lap=100):
     """Create synthetic multi-lap data for testing"""
-    from donkeycar.parts.course_analysis.lap_detection import LapBoundary
+    from donkeycar.course_analysis import LapBoundary
 
     # Create oval path
     t = np.linspace(0, num_laps * 2 * np.pi, num_laps * points_per_lap)

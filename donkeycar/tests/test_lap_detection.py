@@ -15,7 +15,7 @@ import numpy as np
 import tempfile
 import os
 
-from donkeycar.parts.course_analysis import (
+from donkeycar.course_analysis import (
     PathData, CSVPathDataSource,
     LapBoundary, LapDetector,
     YCrossingLapDetector, DriftLapDetector, MultiLapData

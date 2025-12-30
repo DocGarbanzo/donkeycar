@@ -19,7 +19,7 @@ import pandas as pd
 import pytest
 import tempfile
 import os
-from donkeycar.parts.course_analysis import (
+from donkeycar.course_analysis import (
     MultiLapData, MeanCourse, CourseSegmentation
 )
 

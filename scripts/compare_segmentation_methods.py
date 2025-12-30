@@ -10,7 +10,7 @@ import sys
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from donkeycar.parts.course_analysis import (
+from donkeycar.course_analysis.old.course_analysis import (
     MultiLapData, MeanCourse, CourseSegmentation)
 
 

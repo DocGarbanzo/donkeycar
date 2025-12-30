@@ -369,12 +369,18 @@ features (straights, turns, S-curves, chicanes).
   - Main visualization implementation
   - Interactive UI with matplotlib
   - Real-time navigation through recorded data
+  - Currently uses old course_analysis API (Phase 7b pending)
 
-- **`donkeycar/parts/course_analysis.py`** (2078 lines)
-  - Multi-lap detection and alignment
-  - Mean course reconstruction
-  - Course segmentation algorithms
-  - Segment estimation for real-time driving
+- **`donkeycar/course_analysis/`** - Refactored modular implementation
+  - `data_loader.py` - Immutable PathData container, CSV/Tub data sources
+  - `lap_detection.py` - YCrossingLapDetector, DriftLapDetector
+  - `mean_course.py` - MeanCourseBuilder (pure functions)
+  - `segmentation.py` - 4 segmentation strategies (threshold, extrema,
+    gradient, hybrid)
+  - `segment_assignment.py` - SegmentAssigner, SegmentEstimator
+  - `old/course_analysis.py` - Legacy monolithic implementation (2078 lines)
+    - Used by `donkey imupath` command
+    - Will be deprecated after Phase 7b refactoring
 
 ### Data Format
 

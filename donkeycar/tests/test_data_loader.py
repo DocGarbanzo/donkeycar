@@ -15,7 +15,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from donkeycar.parts.course_analysis import (
+from donkeycar.course_analysis import (
     PathData, PathDataSource, CSVPathDataSource, TubPathDataSource
 )
 

@@ -31,7 +31,7 @@ from pathlib import Path
 # Add parent directory to path to import donkeycar modules
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from donkeycar.parts.course_analysis import (
+from donkeycar.course_analysis.old.course_analysis import (
     MultiLapData, MeanCourse, CourseSegmentation, SegmentType
 )
 
