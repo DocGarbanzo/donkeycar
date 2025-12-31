@@ -9,14 +9,16 @@ Classes:
     InteractiveIMUVisualizer: Main class for interactive visualization
 """
 
+import itertools
+import os
 import time
+from datetime import datetime
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.widgets import (
     Slider, CheckButtons, RadioButtons, Button, TextBox
 )
-from matplotlib.lines import Line2D
 import logging
 
 # Import new refactored course_analysis API
@@ -106,7 +108,7 @@ class InteractiveIMUVisualizer:
         self.segment_markers = []
         self.segment_labels = []
         self.colorbar = None
-        self.legend = None
+        self.legend_texts = {}
 
         # Widgets (will be created in setup_ui)
         self.time_slider = None
@@ -238,6 +240,16 @@ class InteractiveIMUVisualizer:
         # Create legend
         self._create_legend()
 
+    def _create_styled_text(self, y_pos, text='', color='white'):
+        """Create styled text element for UI (status panel and legend)"""
+        return self.fig.text(
+            0.02, y_pos, text,
+            transform=self.fig.transFigure,
+            fontsize=9,
+            color=color,
+            bbox=dict(boxstyle='round', facecolor='black', alpha=0.8)
+        )
+
     def _create_plot_artists(self):
         """Create all plot artists (scatter, markers, lines, etc.)"""
         # Full path scatter plot (velocity-colored, faded)
@@ -246,8 +258,7 @@ class InteractiveIMUVisualizer:
             c=self.df['v'],
             cmap='viridis',
             s=8,
-            alpha=0.3,
-            label='Full path'
+            alpha=0.8
         )
 
         # Colorbar for velocity
@@ -277,28 +288,28 @@ class InteractiveIMUVisualizer:
 
     def _create_status_panel(self):
         """Create status panel with 11 text fields"""
-        # Helper to create styled text
-        def create_text(y_pos, initial_text='', color='white'):
-            return self.fig.text(
-                0.02, y_pos, initial_text,
-                transform=self.fig.transFigure,
-                fontsize=9,
-                color=color,
-                bbox=dict(boxstyle='round', facecolor='black', alpha=0.8)
-            )
+        # Format file path for display
+        expanded_path = os.path.abspath(os.path.expanduser(self.file_path))
+        home_dir = os.path.expanduser('~')
+        if expanded_path.startswith(home_dir):
+            display_path = expanded_path.replace(home_dir, '~', 1)
+        else:
+            display_path = expanded_path
 
         # Create all status text elements
         self.status_texts = {
-            'file': create_text(0.95, f'File: {self.file_path}'),
-            'speed': create_text(0.915, 'Speed: 0.00 m/s'),
-            'time': create_text(0.88, 'Time: --'),
-            'position': create_text(0.845, 'Position: [0.00, 0.00]'),
-            'lap': create_text(0.81, 'Lap: 1'),
-            'total_dist': create_text(0.775, 'Total distance: 0.00m'),
-            'lap_dist': create_text(0.74, 'Lap distance: 0.00m'),
-            'segment': create_text(0.705, 'Segment: --'),
-            'debug': create_text(0.67, 'Debug: idx=0, dist=0.00m'),
-            'controls': create_text(
+            'file': self._create_styled_text(0.95, f'File: {display_path}'),
+            'speed': self._create_styled_text(0.915, 'Speed: 0.00 m/s'),
+            'time': self._create_styled_text(0.88, 'Time: --'),
+            'position': self._create_styled_text(
+                0.845, 'Position: [0.00, 0.00]'),
+            'lap': self._create_styled_text(0.81, 'Lap: 1'),
+            'total_dist': self._create_styled_text(
+                0.775, 'Total distance: 0.00m'),
+            'lap_dist': self._create_styled_text(0.74, 'Lap distance: 0.00m'),
+            'segment': self._create_styled_text(0.705, 'Segment: --'),
+            'debug': self._create_styled_text(0.67, 'Debug: idx=0, dist=0.00m'),
+            'controls': self._create_styled_text(
                 0.635, 'Controls: ← → arrows to navigate', color='yellow')
         }
 
@@ -312,12 +323,20 @@ class InteractiveIMUVisualizer:
         )
         self.time_slider.on_changed(self._on_time_slider_changed)
 
-        # Display toggles
-        ax_toggle = plt.axes([0.02, 0.27, 0.12, 0.045])
+        # Display toggles - wider box to fit text
+        ax_toggle = plt.axes([0.02, 0.25, 0.16, 0.06])
         toggle_labels = ['Driven Path', 'Mean Course']
         toggle_actives = [True, True]
         self.display_toggles = CheckButtons(
             ax_toggle, toggle_labels, toggle_actives)
+        # Make checkbox borders white and check marks cyan
+        for rect in self.display_toggles.rectangles:
+            rect.set_edgecolor('white')
+            rect.set_linewidth(1.5)
+        all_lines = itertools.chain.from_iterable(self.display_toggles.lines)
+        for line in all_lines:
+            line.set_color('cyan')
+            line.set_linewidth(2.5)
         self.display_toggles.on_clicked(self._on_display_toggle)
 
         # Lap selector (only if multiple laps detected)
@@ -329,7 +348,10 @@ class InteractiveIMUVisualizer:
             # TextBox
             ax_textbox = plt.axes([0.02, 0.155, 0.065, 0.035])
             self.lap_textbox = TextBox(
-                ax_textbox, '', initial=str(self.num_laps_for_mean))
+                ax_textbox, '', initial=str(self.num_laps_for_mean),
+                color='white', hovercolor='lightgray')
+            self.lap_textbox.label.set_color('black')
+            self.lap_textbox.text_disp.set_color('black')
             self.lap_textbox.on_submit(self._on_lap_text_submit)
 
             # Minus button
@@ -344,8 +366,8 @@ class InteractiveIMUVisualizer:
                 ax_plus, '+', color='#1a1a1a', hovercolor='#333333')
             self.lap_plus_button.on_clicked(self._on_lap_plus)
 
-        # Segment method selector
-        ax_radio = plt.axes([0.02, 0.33, 0.18, 0.11], facecolor='#1a1a1a')
+        # Segment method selector - wider box to fit text
+        ax_radio = plt.axes([0.02, 0.32, 0.16, 0.12], facecolor='#1a1a1a')
         self.fig.text(0.02, 0.45, 'Segment Method',
                      transform=self.fig.transFigure, fontsize=10)
         radio_labels = ['Threshold', 'Extrema', 'Gradient', 'Hybrid']
@@ -353,6 +375,10 @@ class InteractiveIMUVisualizer:
                      'gradient': 2, 'hybrid': 3}[self.segment_method]
         self.segment_radio = RadioButtons(
             ax_radio, radio_labels, active=active_idx)
+        # Make radio button circles white
+        for circle in self.segment_radio.circles:
+            circle.set_edgecolor('white')
+            circle.set_linewidth(1.5)
         self.segment_radio.on_clicked(self._on_segment_method_changed)
 
         # Keyboard navigation
@@ -360,43 +386,39 @@ class InteractiveIMUVisualizer:
                                     self._on_keyboard_press)
 
     def _create_legend(self):
-        """Create legend with custom handles"""
-        # Create custom legend handles
-        full_path_legend = Line2D([0], [0], marker='o', color='w',
-                                  markerfacecolor='gray', markersize=8,
-                                  linestyle='', alpha=0.5,
-                                  label='Full path')
-        current_pos = Line2D([0], [0], marker='o', color='w',
-                            markerfacecolor='#FF6B6B', markersize=10,
-                            linestyle='', label='Current position')
-        current_path = Line2D([0], [0], color='#FF6B6B', linewidth=2,
-                             label='Current path')
+        """Create legend as text elements (aligned with UI frame)"""
+        # Create legend text elements (no header, moved up for spacing)
+        self.legend_texts = {
+            'current_pos': self._create_styled_text(
+                0.59, '  \u2022 Current position', color='#FF6B6B'),
+            'current_path': self._create_styled_text(
+                0.56, '  \u2022 Current path', color='#FF6B6B'),
+            'mean_course': self._create_styled_text(0.53, ''),
+            'boundaries': self._create_styled_text(0.50, '')
+        }
 
-        legend_handles = [full_path_legend, current_pos, current_path]
+        # Update dynamic legend entries
+        self._update_legend_texts()
 
-        # Add mean course to legend if available
-        if self.mean_course_line is not None:
-            legend_handles.append(self.mean_course_line)
+    def _update_legend_texts(self):
+        """Update dynamic legend text elements"""
+        # Update mean course text
+        if self.mean_course is not None and self.mean_course.length > 0:
+            self.legend_texts['mean_course'].set_text(
+                f'  \u2022 Mean course ({self.mean_course.length:.1f}m)')
+            self.legend_texts['mean_course'].set_color(MEAN_COURSE_COLOR)
+        else:
+            self.legend_texts['mean_course'].set_text('')
 
-        # Add segment boundaries if available
+        # Update segment boundaries text
         if (self.segmentation is not None and
                 self.segmentation.num_segments > 0):
-            boundary_handle = Line2D(
-                [0], [0],
-                color=MEAN_COURSE_COLOR,
-                linewidth=2.5,
-                label=f'Segment boundaries '
-                      f'({self.segmentation.num_segments})'
-            )
-            legend_handles.append(boundary_handle)
-
-        # Create legend
-        self.legend = self.ax.legend(
-            handles=legend_handles,
-            loc='upper left',
-            bbox_to_anchor=(0.02, 0.60),
-            framealpha=0.9
-        )
+            self.legend_texts['boundaries'].set_text(
+                f'  \u2022 Segment boundaries '
+                f'({self.segmentation.num_segments})')
+            self.legend_texts['boundaries'].set_color(MEAN_COURSE_COLOR)
+        else:
+            self.legend_texts['boundaries'].set_text('')
 
     def _update_plot(self, timestamp):
         """Update plot to show data up to given timestamp"""
@@ -582,7 +604,7 @@ class InteractiveIMUVisualizer:
         label = self.ax.text(
             mid_x, mid_y, str(seg.segment_id),
             fontsize=10,
-            color='white',
+            color='black',
             ha='center', va='center',
             bbox=dict(
                 boxstyle='circle',
@@ -605,8 +627,8 @@ class InteractiveIMUVisualizer:
         self.status_texts['speed'].set_text(f'Speed: {row["v"]:.2f} m/s')
 
         # Update time
-        from datetime import datetime, timedelta
-        time_str = str(timedelta(seconds=int(row['t'])))
+        current_datetime = datetime.fromtimestamp(row['t'])
+        time_str = current_datetime.strftime('%Y-%m-%d, %H:%M:%S')
         self.status_texts['time'].set_text(f'Time: {time_str}')
 
         # Update position
@@ -724,7 +746,7 @@ class InteractiveIMUVisualizer:
     def _refresh_visualizations(self):
         """Refresh mean course visualization and legend"""
         self._refresh_mean_course()
-        self._create_legend()
+        self._update_legend_texts()
         self.fig.canvas.draw_idle()
 
     def _set_lap_value(self, num_laps):
