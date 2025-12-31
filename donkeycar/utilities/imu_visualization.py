@@ -51,6 +51,9 @@ CourseSegmentation = course_analysis_old.CourseSegmentation
 logging.getLogger('matplotlib').setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
+# Color constants for visualization
+MEAN_COURSE_COLOR = '#808080'  # Medium grey for mean course and segments
+
 
 def plot(mlist, limit=5, update_freq=0, running=Value('i', 1)):
     """
@@ -969,13 +972,13 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
         _draw_segmented_mean_course()
 
     def _draw_unsegmented_mean_course():
-        """Draw mean course as single orange line."""
+        """Draw mean course as single grey line."""
         nonlocal mean_course_line
         course_len = mean_course_data["length"]
         mean_course_line, = ax.plot(
             mean_course_data['x'],
             mean_course_data['y'],
-            color='#C04A00',
+            color=MEAN_COURSE_COLOR,
             linewidth=1.8,
             alpha=0.95,
             label=f'Mean course ({course_len:.1f}m)',
@@ -983,14 +986,14 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
         )
 
     def _draw_segmented_mean_course():
-        """Draw mean course with all segments in orange."""
+        """Draw mean course with all segments in grey."""
         nonlocal mean_course_line, mean_course_segments
 
-        # Draw all segments in the same orange color
+        # Draw all segments in the same grey color
         for seg in segmentation.segments:
             line, = ax.plot(
                 seg.x, seg.y,
-                color='#C04A00',
+                color=MEAN_COURSE_COLOR,
                 linewidth=2.5,
                 alpha=0.95,
                 visible=True)
@@ -1002,7 +1005,7 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
         course_len = mean_course_data["length"]
         mean_course_line, = ax.plot(
             [], [],
-            color='#C04A00',
+            color=MEAN_COURSE_COLOR,
             linewidth=2.5,
             alpha=0.95,
             label=f'Mean course ({course_len:.1f}m)',
@@ -1047,7 +1050,7 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
 
             line, = ax.plot([point[0] - dx, point[0] + dx],
                             [point[1] - dy, point[1] + dy],
-                            color='#C04A00',
+                            color=MEAN_COURSE_COLOR,
                             linewidth=2.5,
                             alpha=1.0,
                             visible=True)
@@ -1405,7 +1408,7 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                 if segmentation.total_segments > 0:
                     boundary_handle = Line2D(
                         [0], [0],
-                        color='#C04A00',
+                        color=MEAN_COURSE_COLOR,
                         linewidth=2.5,
                         label=f'Segment boundaries ({segmentation.total_segments})')
 
@@ -1656,7 +1659,7 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
     if segmentation is not None and segmentation.total_segments > 0:
         boundary_handle = Line2D(
             [0], [0],
-            color='#C04A00',
+            color=MEAN_COURSE_COLOR,
             linewidth=2.5,
             label=f'Segment boundaries ({segmentation.total_segments})')
 

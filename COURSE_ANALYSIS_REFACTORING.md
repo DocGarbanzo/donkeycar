@@ -378,24 +378,32 @@ donkeycar/tests/
 
 ### Current State Summary
 
-| Feature | `donkey imupath` (old) | `donkey imupath2` (new) | Phase 7b (future) |
-|---------|------------------------|-------------------------|-------------------|
-| **API** | Old course_analysis.py | NEW course_analysis/ | NEW course_analysis/ |
-| **Visualization** | Interactive UI | Static plots | Interactive UI |
-| **Time slider** | ✅ Yes | ❌ No | ✅ Planned |
-| **Lap selector** | ✅ Yes | ❌ No | ✅ Planned |
-| **Method selector** | ✅ Yes | ⚠️ CLI only | ✅ Planned |
-| **Real-time nav** | ✅ Yes | ❌ No | ✅ Planned |
-| **Status panel** | ✅ Yes | ⚠️ Text only | ✅ Planned |
-| **CSV support** | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Tub support** | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Testability** | ❌ Poor | ✅ Excellent | ✅ Excellent |
-| **Code quality** | ❌ 1125-line fn | ✅ Modular | ✅ Modular |
+| Feature | `donkey imupath` (old) | `donkey imupath2` (new) | Status |
+|---------|------------------------|-------------------------|--------|
+| **API** | Old course_analysis.py | NEW course_analysis/ | ✅ NEW |
+| **Visualization** | Interactive UI | Interactive UI | ⚠️ **WIP** |
+| **Time slider** | ✅ Yes | ⚠️ Implemented but buggy | ⚠️ **WIP** |
+| **Lap selector** | ✅ Yes | ⚠️ Implemented but buggy | ⚠️ **WIP** |
+| **Method selector** | ✅ Yes | ⚠️ Implemented but buggy | ⚠️ **WIP** |
+| **Real-time nav** | ✅ Yes | ⚠️ Implemented but buggy | ⚠️ **WIP** |
+| **Status panel** | ✅ Yes | ⚠️ Implemented but buggy | ⚠️ **WIP** |
+| **Segment boundaries** | ✅ Displayed | ❌ **Not displaying** | ❌ **BROKEN** |
+| **Segment recognition** | ✅ Working | ❌ **Not working correctly** | ❌ **BROKEN** |
+| **CSV support** | ✅ Yes | ✅ Yes | ✅ Working |
+| **Tub support** | ✅ Yes | ✅ Yes | ✅ Working |
+| **Testability** | ❌ Poor | ✅ Excellent | ✅ Good |
+| **Code quality** | ❌ 1125-line fn | ✅ Modular | ✅ Good |
 
 **Summary:**
 - **Phase 1-6**: Core API refactored ✅
 - **Phase 7a**: Both APIs coexist, imupath2 validates new API ✅
-- **Phase 7b**: Need to add interactive UI to new API ⏳
+- **Phase 7b**: Interactive UI implemented but has critical bugs ⚠️ **WIP**
+
+**Critical Issues to Fix:**
+1. Segment boundaries not showing on visualization
+2. Segments not correctly recognized by segmentation algorithm
+3. Mean course visualization may have issues
+4. Need thorough testing and debugging against old imupath behavior
 
 ---
 
@@ -497,29 +505,74 @@ min TubPathDataSource implementation + debugging)
 
 ### Phase 7b: Full Interactive UI Refactoring
 
-**Status**: Not started - planned for future
+**Status**: ⚠️ **WORK IN PROGRESS** - Interactive UI implemented but has issues
 
 **Goal**: Replace old `donkey imupath` with new API while preserving full
 interactive UI features.
 
-**Current State:**
-- ✅ `donkey imupath2` provides **static visualization** with new API
-- ⚠️ `donkey imupath` still uses **old API** but has **full interactive UI**:
+**Implementation Status (2025-12-31):**
+
+**Completed:**
+- ✅ Created `InteractiveIMUVisualizer` class (~800 lines)
+- ✅ Replaced static visualization in imupath2 with interactive UI
+- ✅ All 5 interactive widgets implemented:
   - Time slider for navigating through recorded path
-  - Lap selector to change number of laps used for mean course
-  - Segment method selector (RadioButtons)
-  - Real-time updates as you scrub through time
+  - Lap selector (TextBox + +/- buttons)
+  - Segment method selector (RadioButtons for 4 strategies)
   - Display toggles (CheckButtons)
-  - Status panel with live position/speed info
-- `imu_visualization.py` still has 1,125-line `visualize_imu_path()` function
-- 25 nested functions with `nonlocal` state management
-- UI code mixed with business logic
+  - Keyboard navigation (← → arrows)
+- ✅ 11-field status panel with real-time updates
+- ✅ Performance optimizations (throttling, downsampling)
+- ✅ Uses new refactored course_analysis API throughout
+- ✅ Code quality approved by code-architect (zero nesting, no duplication)
 
-**Gap to Close:**
-- imupath2 shows what the new API can do (static plots)
-- Phase 7b will add the interactive features back
+**Known Issues (Blocking):**
+- ❌ **Segment boundaries not displaying** - boundary markers not showing on mean course
+- ❌ **Segments not correctly recognized** - segmentation algorithm issues
+- ❌ **UI not working as expected** - visualization issues need debugging
+- ❌ **Needs testing and validation** against old imupath behavior
 
-**Planned Refactoring:**
+**Files Created/Modified:**
+- `donkeycar/utilities/interactive_imu_viz.py` (~791 lines) - NEW
+- `donkeycar/management/imupath2.py` (~147 lines, reduced from 378) - MODIFIED
+
+**Current State:**
+- `donkey imupath2` now launches interactive UI (no longer static)
+- Successfully loads data, detects laps, builds mean course
+- Interactive widgets are functional (sliders, buttons, toggles work)
+- **But**: Segment visualization is broken and needs fixes
+- Old `donkey imupath` still works and uses old API
+
+**Next Steps to Complete Phase 7b:**
+
+1. **Debug segment boundary display issue**
+   - Verify `segment_boundaries` attribute exists on CourseSegmentation
+   - Check if boundary data structure matches expected format
+   - Add logging to _refresh_segment_markers() to debug
+
+2. **Debug segment recognition issues**
+   - Compare segmentation output between old and new API
+   - Verify CourseSegmenter is using correct parameters
+   - Test with different segmentation strategies (threshold, extrema, gradient, hybrid)
+   - Check if segment assignment to path is working correctly
+
+3. **Test and validate against old imupath**
+   - Side-by-side comparison of old vs new visualization
+   - Verify same data produces same results
+   - Test all interactive features work as expected
+
+4. **Fix any remaining UI issues**
+   - Ensure all widgets update visualization correctly
+   - Verify legend updates properly
+   - Check status panel displays correct information
+   - Test keyboard navigation
+
+5. **Performance testing**
+   - Test with large datasets (>10k points)
+   - Verify throttling and downsampling work correctly
+   - Ensure smooth slider interaction
+
+**Original Planned Refactoring (reference):**
 
 ```python
 # NEW: donkeycar/utilities/imu_visualization/
@@ -935,5 +988,7 @@ The new architecture is:
 - ✅ **Maintainable** - Clear separation of concerns
 
 **Next steps:**
-- Phase 7b: UI visualization refactoring (6-8 hours estimated)
+- Phase 7b: **IN PROGRESS** - Debug and fix interactive UI issues (segment boundaries, segment recognition)
+  - Estimated 4-6 hours remaining to fix critical bugs and validate
+  - Original estimate: 6-8 hours, ~4 hours spent on initial implementation
 - Phase 8: Documentation updates and deprecation warnings (2-3 hours estimated)
