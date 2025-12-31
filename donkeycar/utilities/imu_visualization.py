@@ -921,15 +921,10 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
         c=speeds_display,
         cmap='viridis',
         alpha=0.3,
-        s=8,
-        label='Full path')
+        s=8)
 
-    # Create a dummy artist for legend with median color
+    # Import Line2D for later use if needed
     from matplotlib.lines import Line2D
-    full_path_legend = Line2D([0], [0], marker='o', color='w',
-                              markerfacecolor=plt.cm.viridis(
-                                  median_speed / speeds_display.max() if speeds_display.max() > 0 else 0.5),
-                              markersize=8, label='Full path', alpha=0.6)
 
     # Current position marker
     current_pos = ax.scatter(
@@ -937,12 +932,11 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
         [],
         c='red',
         s=100,
-        marker='o',
-        label='Current position')
+        marker='o')
 
     # Path up to current time
     current_path, = ax.plot([], [], color='#FF6B6B', linewidth=1,
-                            alpha=0.8, label='Path to current time')
+                            alpha=0.8)
 
     # Mean course overlay (if available)
     mean_course_line = None
@@ -981,7 +975,6 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
             color=MEAN_COURSE_COLOR,
             linewidth=1.8,
             alpha=0.95,
-            label=f'Mean course ({course_len:.1f}m)',
             visible=True
         )
 
@@ -1008,7 +1001,6 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
             color=MEAN_COURSE_COLOR,
             linewidth=2.5,
             alpha=0.95,
-            label=f'Mean course ({course_len:.1f}m)',
             visible=True
         )
 
@@ -1145,6 +1137,16 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                         'Controls: \u2190/\u2192 arrows = navigate',
                         color='cyan')
 
+    # Legend as text elements - below controls
+    _create_status_text(fig, 0.59, 'Legend:', color='yellow')
+    legend_full_path_text = _create_status_text(fig, 0.56, '  • Full path')
+    legend_current_pos_text = _create_status_text(
+        fig, 0.53, '  • Current position', color='#ff6b6b')
+    legend_current_path_text = _create_status_text(
+        fig, 0.50, '  • Current path', color='red')
+    legend_mean_course_text = _create_status_text(fig, 0.47, '')
+    legend_boundaries_text = _create_status_text(fig, 0.44, '')
+
     # Toggle buttons for driven path and mean course
     check_widget = None
     # Create checkbox for toggling driven path and mean course (below segment method)
@@ -1222,7 +1224,7 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
     current_segment_method = [segment_method]
 
     def apply_lap_selection(num_laps):
-        nonlocal mean_course_data, segmentation, legend
+        nonlocal mean_course_data, segmentation
         nonlocal current_segment_method, path_segment_ids
         num_laps = max(1, min(num_laps, max_laps_detected))
         print(f"\nUpdating to show {num_laps} lap(s)...")
@@ -1259,26 +1261,11 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
             refresh_segment_markers()
             refresh_segment_labels()
 
-            # Recreate legend with updated mean course line
-            if mean_course_line is not None:
-                mean_course_line.set_label(
-                    f'Mean course ({new_mean_course["length"]:.1f}m)')
-
-                # Rebuild legend handles
-                legend_handles = [full_path_legend, current_pos, current_path]
-                if mean_course_line is not None:
-                    legend_handles.append(mean_course_line)
-
-                # Remove old legend and create new one
-                legend.remove()
-                legend = ax.legend(
-                    handles=legend_handles,
-                    bbox_to_anchor=(0.02, 0.60),
-                    loc='upper left',
-                    framealpha=0.9,
-                    ncol=1,
-                    fontsize=10,
-                    bbox_transform=fig.transFigure)
+            # Update legend text elements
+            if new_mean_course["length"] > 0:
+                legend_mean_course_text.set_text(
+                    f'  • Mean course ({new_mean_course["length"]:.1f}m)')
+                legend_mean_course_text.set_color(MEAN_COURSE_COLOR)
 
         if num_laps <= len(lap_end_indices):
             end_idx = lap_end_indices[num_laps - 1]
@@ -1368,7 +1355,7 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                     'hybrid': 3}.get(segment_method, 2))
 
         def on_segment_method_change(label):
-            nonlocal segmentation, mean_course_data, legend, path_segment_ids
+            nonlocal segmentation, mean_course_data, path_segment_ids
             method_map = {
                 'Threshold': 'threshold',
                 'Extrema': 'extrema',
@@ -1404,29 +1391,13 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
                 refresh_segment_labels()
 
                 # Update legend
-                boundary_handle = None
-                if segmentation.total_segments > 0:
-                    boundary_handle = Line2D(
-                        [0], [0],
-                        color=MEAN_COURSE_COLOR,
-                        linewidth=2.5,
-                        label=f'Segment boundaries ({segmentation.total_segments})')
-
-                legend_handles = [full_path_legend, current_pos, current_path]
-                if mean_course_line is not None:
-                    legend_handles.append(mean_course_line)
-                if boundary_handle is not None:
-                    legend_handles.append(boundary_handle)
-
-                legend.remove()
-                legend = ax.legend(
-                    handles=legend_handles,
-                    bbox_to_anchor=(0.02, 0.60),
-                    loc='upper left',
-                    framealpha=0.9,
-                    ncol=1,
-                    fontsize=10,
-                    bbox_transform=fig.transFigure)
+                # Update legend text for boundaries
+                if segmentation and segmentation.total_segments > 0:
+                    legend_boundaries_text.set_text(
+                        f'  • Segment boundaries ({segmentation.total_segments})')
+                    legend_boundaries_text.set_color(MEAN_COURSE_COLOR)
+                else:
+                    legend_boundaries_text.set_text('')
 
                 fig.canvas.draw_idle()
 
@@ -1653,25 +1624,15 @@ def visualize_imu_path(data_source='imu.csv', correct_drift=False,
     # Initial update
     update_plot(df['t'].min())
 
-    # Add legend in top area underneath controls - vertical arrangement
-    # Use custom handles to control legend appearance
-    boundary_handle = None
+    # Initialize legend text elements with current values
+    if mean_course_data and mean_course_data["length"] > 0:
+        legend_mean_course_text.set_text(
+            f'  • Mean course ({mean_course_data["length"]:.1f}m)')
+        legend_mean_course_text.set_color(MEAN_COURSE_COLOR)
+
     if segmentation is not None and segmentation.total_segments > 0:
-        boundary_handle = Line2D(
-            [0], [0],
-            color=MEAN_COURSE_COLOR,
-            linewidth=2.5,
-            label=f'Segment boundaries ({segmentation.total_segments})')
-
-    legend_handles = [full_path_legend, current_pos, current_path]
-    if mean_course_line is not None:
-        legend_handles.append(mean_course_line)
-    if boundary_handle is not None:
-        legend_handles.append(boundary_handle)
-
-    legend = ax.legend(handles=legend_handles,
-                       bbox_to_anchor=(0.02, 0.60), loc='upper left',
-                       framealpha=0.9, ncol=1, fontsize=10,
-                       bbox_transform=fig.transFigure)
+        legend_boundaries_text.set_text(
+            f'  • Segment boundaries ({segmentation.total_segments})')
+        legend_boundaries_text.set_color(MEAN_COURSE_COLOR)
 
     plt.show()

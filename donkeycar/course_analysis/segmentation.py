@@ -223,7 +223,11 @@ class CourseSegmenter:
         # Merge adjacent same-type segments
         segments = self._merge_adjacent_segments(segments)
 
-        return CourseSegmentation(segments, mean_course, self.params.copy())
+        # Compute segment boundaries
+        boundaries = self._compute_segment_boundaries(segments, mean_course)
+
+        return CourseSegmentation(segments, mean_course, self.params.copy(),
+                                 boundaries)
 
     def _calculate_curvature(self, mean_course: MeanCourse) -> np.ndarray:
         """Calculate curvature from course"""
@@ -380,6 +384,114 @@ class CourseSegmenter:
 
         return merged
 
+    def _compute_segment_boundaries(self, segments: List[Segment],
+                                    mean_course: MeanCourse) \
+            -> List[Dict[str, Any]]:
+        """
+        Compute perpendicular boundary lines at each segment transition.
+
+        Creates boundary line representations for detecting when a driven
+        path crosses from one segment to the next. Each boundary is
+        perpendicular to the mean course at the transition point.
+
+        For closed loops:
+        - Skips boundary at index 0 (arbitrary start point)
+        - Creates boundary at last index for final segment to complete loop
+
+        Args:
+            segments: List of segments
+            mean_course: Mean course that was segmented
+
+        Returns:
+            List of boundary dicts with point, normal, tangent, segment IDs
+        """
+        if not segments:
+            return []
+
+        boundaries = []
+        num_points = len(mean_course.x)
+        base_tangent_limit = max(
+            0.3, self.params.get('boundary_tangent_limit', 2.0))
+
+        for i, segment in enumerate(segments):
+            # Boundary at end of this segment (start of next)
+            boundary_idx = segment.end_index
+
+            # Skip boundary at index 0 (arbitrary loop start)
+            if boundary_idx == 0:
+                continue
+
+            # Position on mean course
+            x_bound = mean_course.x[boundary_idx]
+            y_bound = mean_course.y[boundary_idx]
+
+            # Heading at boundary (tangent to course) - already in radians
+            heading_rad = mean_course.heading[boundary_idx]
+
+            # Normal vector perpendicular to heading (rotate 90 degrees)
+            # Tangent direction: (cos(h), sin(h))
+            # Normal (left of course): (-sin(h), cos(h))
+            normal_x = -np.sin(heading_rad)
+            normal_y = np.cos(heading_rad)
+            tangent_x = np.cos(heading_rad)
+            tangent_y = np.sin(heading_rad)
+
+            next_segment = (i + 1) % len(segments)
+            next_seg = segments[next_segment]
+
+            # Calculate segment lengths
+            seg_length = segment.end_distance - segment.start_distance
+            next_length = next_seg.end_distance - next_seg.start_distance
+
+            # Keep crossings local to the boundary position
+            avg_length = 0.25 * (seg_length + next_length)
+            adaptive_limit = avg_length if avg_length > 0 \
+                else base_tangent_limit
+            tangent_limit = max(
+                0.3, min(base_tangent_limit, adaptive_limit))
+
+            # Line equation parameters
+            slope = None
+            intercept = None
+            x_offset = None
+            if abs(tangent_x) > 1e-6:
+                slope = tangent_y / tangent_x
+                intercept = y_bound - slope * x_bound
+            else:
+                x_offset = x_bound
+
+            # Determine expected sign for crossing detection
+            prev_idx = (boundary_idx - 1) % num_points
+            next_idx = (boundary_idx + 1) % num_points
+            prev_point = np.array([
+                mean_course.x[prev_idx],
+                mean_course.y[prev_idx]
+            ])
+            next_point = np.array([
+                mean_course.x[next_idx],
+                mean_course.y[next_idx]
+            ])
+
+            mean_vec = next_point - prev_point
+            denom_sign = np.dot(
+                np.array([tangent_x, tangent_y]), mean_vec)
+            expected_sign = 1.0 if denom_sign >= 0 else -1.0
+
+            boundaries.append({
+                'point': np.array([x_bound, y_bound]),
+                'normal': np.array([normal_x, normal_y]),
+                'tangent': np.array([tangent_x, tangent_y]),
+                'tangent_limit': tangent_limit,
+                'expected_denom_sign': expected_sign,
+                'slope': slope,
+                'intercept': intercept,
+                'x_offset': x_offset,
+                'segment_from': i,
+                'segment_to': next_segment
+            })
+
+        return boundaries
+
 
 class CourseSegmentation:
     """
@@ -391,7 +503,8 @@ class CourseSegmentation:
 
     def __init__(self, segments: List[Segment],
                  mean_course: MeanCourse,
-                 params: Dict[str, Any]):
+                 params: Dict[str, Any],
+                 segment_boundaries: List[Dict[str, Any]] = None):
         """
         Create course segmentation.
 
@@ -399,10 +512,14 @@ class CourseSegmentation:
             segments: List of detected segments
             mean_course: Mean course that was segmented
             params: Parameters used for segmentation
+            segment_boundaries: List of boundary dicts with point, normal,
+                              tangent, segment_from, segment_to (optional)
         """
         self._segments = list(segments)
         self._mean_course = mean_course
         self._params = dict(params)
+        self._segment_boundaries = list(segment_boundaries) \
+            if segment_boundaries else []
 
     @property
     def segments(self) -> List[Segment]:
@@ -423,6 +540,26 @@ class CourseSegmentation:
     def num_segments(self) -> int:
         """Number of segments"""
         return len(self._segments)
+
+    @property
+    def total_segments(self) -> int:
+        """Total number of segments (alias for num_segments)"""
+        return len(self._segments)
+
+    @property
+    def segment_boundaries(self) -> List[Dict[str, Any]]:
+        """
+        Segment boundary lines (read-only copy).
+
+        Each boundary is a dict with:
+        - 'point': np.array([x, y]) - position on mean course
+        - 'normal': np.array([nx, ny]) - unit normal vector
+        - 'tangent': np.array([tx, ty]) - unit tangent vector
+        - 'segment_from': int - segment ID before boundary
+        - 'segment_to': int - segment ID after boundary
+        - Additional fields for crossing detection
+        """
+        return list(self._segment_boundaries)
 
     def get_segment(self, segment_id: int) -> Segment:
         """Get segment by ID"""
