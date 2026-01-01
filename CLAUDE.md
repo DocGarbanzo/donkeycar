@@ -442,10 +442,62 @@ Four segmentation methods (configurable via `boundary_method`):
 4. Classify segments based on curvature characteristics
 5. Merge adjacent segments of same type (conservative: only straights)
 
-#### 4. Real-Time Segment Estimation (SegmentEstimator class)
+#### 4. Segment Assignment (SegmentAssigner class)
+
+Assigns segment IDs to driven path positions using boundary crossing detection.
+
+**CRITICAL REQUIREMENT - Two-Stage Algorithm:**
+
+Segment assignment uses TWO different methods for different purposes:
+
+1. **Initial Segment Detection** (starting position only):
+   - Uses nearest-neighbor to find closest point on mean course
+   - Looks up which segment that mean course point belongs to
+   - Only used once at path start (index 0)
+   - Purpose: Determine which segment to start tracking from
+
+2. **Incremental Crossing Detection** (while driving and during replaying the 
+  recorded track):
+   - MUST use tangent projection algorithm (non-negotiable)
+   - Detects when driven path crosses segment boundaries
+   - Used for all subsequent path points after initial detection
+
+**Boundary Crossing Detection (Tangent Projection):**
+Tangent projection determines segment crossing when the vehicle coordinates
+cross the normal of the tangent at the segment boundary (from negative to
+positive).
+
+**Mathematical Definition:**
+- At each segment boundary, there is a point P on the mean course
+- The tangent vector T at P defines the boundary direction
+- The normal vector N is perpendicular to T (rotated 90°)
+- For vehicle position V, compute vector: `vec = V - P`
+- Signed distance along normal: `d = dot(vec, N)`
+- **Boundary crossing occurs when d transitions from negative to positive**
+
+**Why tangent projection for crossing detection:**
+- Avoids ambiguity when vehicle is geometrically close to multiple segments
+- Example: Two hairpin 180° turns - vehicle could be close to 3 different
+  segments spatially, but tangent projection correctly identifies which
+  boundary is being crossed
+- Tangent projection tracks course progression, not spatial proximity
+
+**Why nearest-neighbor for initial detection:**
+- Provides reliable starting segment when vehicle could be anywhere on course
+- Spatial proximity determines which segment the starting position belongs to
+- Only used once, then tangent projection handles all subsequent crossings
+
+**Single Source of Truth:**
+- SegmentAssigner uses `self.segmentation.segment_boundaries` directly
+- NO duplicate boundary storage
+
+**Incremental updates:** Uses boundary crossing detection to advance segments
+as the vehicle moves along the course.
+
+#### 5. Real-Time Segment Estimation (SegmentEstimator class)
 
 For live driving, estimates current segment from vehicle position:
-- Uses KD-tree spatial indexing for fast nearest-neighbor search
+- Uses tangent projection (same as SegmentAssigner)
 - Returns segment ID with confidence score based on position/heading alignment
 - Provides cross-track error and heading deviation metrics
 
