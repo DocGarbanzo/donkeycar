@@ -178,6 +178,26 @@ class SegmentAssigner:
         """
         return current < candidate
 
+    def _is_index_in_segment(self, idx: int, seg) -> bool:
+        """
+        Check if index falls within segment boundaries.
+
+        Handles both normal and wrap-around segment ranges.
+
+        Args:
+            idx: Index to check
+            seg: Segment object with start_index and end_index
+
+        Returns:
+            True if index is within segment boundaries
+        """
+        # Normal case: start <= end
+        if seg.start_index <= seg.end_index:
+            return seg.start_index <= idx <= seg.end_index
+
+        # Wrap-around case: start > end (segment wraps across array bounds)
+        return idx >= seg.start_index or idx <= seg.end_index
+
     def _find_initial_segment(self, x: float, y: float) -> int:
         """
         Find initial segment using nearest-neighbor to mean course.
@@ -212,13 +232,8 @@ class SegmentAssigner:
 
         # Find which segment contains this index
         for seg in self.segmentation.segments:
-            if seg.start_index <= nearest_idx <= seg.end_index:
+            if self._is_index_in_segment(nearest_idx, seg):
                 return seg.segment_id
-
-            # Handle wrap-around case
-            if seg.start_index > seg.end_index:
-                if nearest_idx >= seg.start_index or nearest_idx <= seg.end_index:
-                    return seg.segment_id
 
         # Fallback to segment 0
         return 0
