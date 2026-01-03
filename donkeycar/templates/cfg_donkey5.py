@@ -257,46 +257,6 @@ SEGMENTATION_PARAMS = {
 }
 
 """
-Segment Assignment Parameters
-
-Controls how segment IDs are assigned to positions on a driven path.
-Uses boundary crossing detection to determine when the vehicle
-transitions from one segment to the next.
-
-Algorithm:
-    For each point on the driven path, check if the vehicle crossed
-    a segment boundary line since the previous point. Boundaries are
-    perpendicular lines at segment endpoints. Crossing detection uses
-    line intersection with configurable tolerances.
-
-Parameters:
-    boundary_distance_tolerance: Maximum distance from boundary line
-        to still consider a crossing (meters). Accounts for GPS noise.
-    boundary_tangent_limit: Maximum tangent component allowed for
-        boundary crossing. Prevents detecting crossings when traveling
-        parallel to boundary.
-    crossing_zero_tolerance: Numerical tolerance for zero in calculations
-        (meters). Prevents division by near-zero values.
-    crossing_t_tolerance: Tolerance for parametric line intersection
-        parameter. Allows slight overshoot in crossing detection.
-    normal_limit_factor: Maximum distance along boundary normal to
-        consider valid crossing. Multiplied by expected boundary spacing.
-    parallel_tolerance: Tolerance for detecting parallel paths. If path
-        is nearly parallel to boundary, skip crossing check.
-    proximity_factor: Proximity weighting factor for boundary detection.
-        Higher = stricter proximity requirements.
-"""
-SEGMENT_ASSIGNMENT_PARAMS = {
-    'boundary_distance_tolerance': 0.05,
-    'boundary_tangent_limit': 0.8,
-    'crossing_zero_tolerance': 1e-9,
-    'crossing_t_tolerance': 1e-6,
-    'normal_limit_factor': 1.5,
-    'parallel_tolerance': 1e-6,
-    'proximity_factor': 0.5,
-}
-
-"""
 IMU Path Visualization Parameters
 
 Controls the interactive visualization of recorded IMU paths, mean

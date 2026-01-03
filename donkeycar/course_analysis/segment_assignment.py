@@ -2,17 +2,16 @@
 Segment assignment to driven paths.
 
 Assigns segment IDs to vehicle positions based on course segmentation.
-All magic numbers extracted to DEFAULT_PARAMS.
 
 Design principles:
 - Pure functions: assign() returns segment IDs, no state
-- No magic numbers: All tolerances configurable
+- Simple algorithm: tangent projection for boundary crossing
 - Testable: Works with synthetic paths
 
 Phase 5 of IMU path refactoring.
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional
 from dataclasses import dataclass
 import numpy as np
 
@@ -34,57 +33,28 @@ class SegmentAssigner:
 
     Uses boundary crossing detection to determine which segment
     each point belongs to.
+
+    Algorithm:
+    1. Find initial segment using nearest-neighbor to mean course
+    2. For each subsequent point, check if boundary was crossed
+    3. Boundary crossing: dot(pos - boundary, tangent) transitions neg->pos
     """
 
-    DEFAULT_PARAMS = {
-        'boundary_distance_tolerance': 0.05,  # Meters
-        'boundary_tangent_limit': 0.8,
-        'crossing_zero_tolerance': 1e-9,
-        'crossing_t_tolerance': 1e-6,
-        'normal_limit_factor': 1.5,
-        'parallel_tolerance': 1e-6,
-        'proximity_factor': 0.5,
-        'reanchor_interval': 50,  # Re-detect segment every N points if stuck
-    }
-
     def __init__(self, segmentation: CourseSegmentation,
-                 cfg=None, params: Optional[Dict[str, Any]] = None):
+                 cfg=None, params=None):
         """
         Create segment assigner.
 
         Args:
             segmentation: Course segmentation
-            cfg: Config object (optional)
-            params: Explicit parameter overrides (optional)
+            cfg: Config object (unused, kept for API compatibility)
+            params: Parameter overrides (unused, kept for API compatibility)
         """
         self.segmentation = segmentation
-        self.params = self.DEFAULT_PARAMS.copy()
-
-        if cfg is not None:
-            self._load_params_from_config(cfg)
-
-        if params is not None:
-            self.params.update(params)
-
-        # REMOVED: self._compute_segment_boundaries()
-        # Use segmentation.segment_boundaries directly - no duplication!
-
-    def _load_params_from_config(self, cfg):
-        """Load parameters from config object."""
-        assign_params = getattr(cfg, 'SEGMENT_ASSIGNMENT_PARAMS', {})
-        overrides = {k: assign_params[k] for k in self.params.keys()
-                     if k in assign_params}
-        self.params.update(overrides)
 
     def assign(self, x_path: np.ndarray, y_path: np.ndarray) -> np.ndarray:
         """
         Assign segment IDs to path.
-
-        Pure function - returns segment ID array.
-
-        Uses boundary crossing detection with periodic re-anchoring to handle
-        paths that deviate from the mean course. Re-anchoring occurs after
-        lap wrap-around or when boundary detection fails for too long.
 
         Args:
             x_path: X coordinates of driven path
@@ -95,7 +65,6 @@ class SegmentAssigner:
         """
         if len(x_path) != len(y_path):
             raise ValueError("x_path and y_path must have same length")
-
         if len(x_path) == 0:
             return np.array([], dtype=int)
 
@@ -103,110 +72,19 @@ class SegmentAssigner:
         current_seg = self._find_initial_segment(x_path[0], y_path[0])
         segment_ids[0] = current_seg
 
-        points_since_crossing = 0
-        reanchor_interval = self.params.get('reanchor_interval', 50)
-
         for i in range(1, len(x_path)):
             p1 = np.array([x_path[i-1], y_path[i-1]])
             p2 = np.array([x_path[i], y_path[i]])
-
-            prev_seg = current_seg
-            crossed = self._crossed_boundary(p1, p2, current_seg)
-
-            if crossed:
-                current_seg, points_since_crossing = \
-                    self._handle_boundary_crossing(
-                        prev_seg, x_path[i], y_path[i])
-            else:
-                current_seg, points_since_crossing = \
-                    self._handle_no_crossing(
-                        current_seg, points_since_crossing,
-                        reanchor_interval, x_path[i], y_path[i])
-
+            if self._crossed_boundary(p1, p2, current_seg):
+                num_segs = self.segmentation.num_segments
+                current_seg = (current_seg + 1) % num_segs
             segment_ids[i] = current_seg
 
         return segment_ids
 
-    def _handle_boundary_crossing(self, prev_seg: int,
-                                   x: float, y: float) -> tuple:
-        """
-        Handle segment advancement when boundary is crossed.
-
-        Returns:
-            Tuple of (new_segment_id, points_since_crossing)
-        """
-        current_seg = (prev_seg + 1) % self.segmentation.num_segments
-        points_since_crossing = 0
-
-        # After lap wrap-around, re-anchor to handle offset paths
-        is_wrap = (prev_seg == self.segmentation.num_segments - 1 and
-                   current_seg == 0)
-        if not is_wrap:
-            return current_seg, points_since_crossing
-
-        current_seg = self._find_initial_segment(x, y)
-        return current_seg, points_since_crossing
-
-    def _handle_no_crossing(self, current_seg: int,
-                            points_since_crossing: int,
-                            reanchor_interval: int,
-                            x: float, y: float) -> tuple:
-        """
-        Handle periodic re-anchoring when no boundary crossed.
-
-        Returns:
-            Tuple of (segment_id, points_since_crossing)
-        """
-        points_since_crossing += 1
-
-        if points_since_crossing < reanchor_interval:
-            return current_seg, points_since_crossing
-
-        detected = self._find_initial_segment(x, y)
-        if not self._is_segment_ahead(current_seg, detected):
-            return current_seg, points_since_crossing
-
-        return detected, 0
-
-    def _is_segment_ahead(self, current: int, candidate: int) -> bool:
-        """
-        Check if candidate segment is ahead of current in course order.
-
-        For re-anchoring purposes, only allows strict forward progression
-        (no wrap-around). Wrap-around from last segment to segment 0
-        must happen via actual boundary crossing, not via re-anchoring.
-        """
-        return current < candidate
-
-    def _is_index_in_segment(self, idx: int, seg) -> bool:
-        """
-        Check if index falls within segment boundaries.
-
-        Handles both normal and wrap-around segment ranges.
-
-        Args:
-            idx: Index to check
-            seg: Segment object with start_index and end_index
-
-        Returns:
-            True if index is within segment boundaries
-        """
-        # Normal case: start <= end
-        if seg.start_index <= seg.end_index:
-            return seg.start_index <= idx <= seg.end_index
-
-        # Wrap-around case: start > end (segment wraps across array bounds)
-        return idx >= seg.start_index or idx <= seg.end_index
-
     def _find_initial_segment(self, x: float, y: float) -> int:
         """
         Find initial segment using nearest-neighbor to mean course.
-
-        CRITICAL: For INITIAL segment detection only, we use nearest-neighbor
-        to find the closest point on the mean course, then look up which
-        segment that point belongs to.
-
-        Incremental crossing detection (while driving) uses tangent projection.
 
         Algorithm:
         1. Find nearest point on mean course to starting position
@@ -222,69 +100,38 @@ class SegmentAssigner:
         """
         point = np.array([x, y])
         mean = self.segmentation.mean_course
-
-        # Build array of mean course points
         course_points = np.column_stack([mean.x, mean.y])
-
-        # Find nearest point on mean course
         distances = np.linalg.norm(course_points - point, axis=1)
         nearest_idx = np.argmin(distances)
 
-        # Find which segment contains this index
         for seg in self.segmentation.segments:
             if self._is_index_in_segment(nearest_idx, seg):
                 return seg.segment_id
 
-        # Fallback to segment 0
-        return 0
+        raise ValueError(f"No segment found for index {nearest_idx}")
 
-    @staticmethod
-    def _signed_distance_along_normal(point: np.ndarray,
-                                      boundary: dict) -> float:
+    def _is_index_in_segment(self, idx: int, seg) -> bool:
         """
-        Compute signed distance from point to boundary along normal.
-
-        Positive distance means point is on the "positive" side of the boundary
-        (past the boundary in the direction of course progression).
+        Check if index falls within segment boundaries.
 
         Args:
-            point: Point to test (2D array)
-            boundary: Boundary dict with 'point' and 'normal'
+            idx: Index to check
+            seg: Segment object with start_index and end_index
 
         Returns:
-            Signed distance along normal (negative = before, positive = after)
+            True if index is within segment boundaries
         """
-        vec = point - boundary['point']
-        return np.dot(vec, boundary['normal'])
-
-    @staticmethod
-    def _signed_distance_along_tangent(point: np.ndarray,
-                                       boundary: dict) -> float:
-        """
-        Compute signed distance from point to boundary along course tangent.
-
-        Measures how far before (negative) or after (positive) the boundary
-        point the given point lies, projected onto the course direction.
-
-        Args:
-            point: Point to test (2D array)
-            boundary: Boundary dict with 'point' and 'tangent'
-
-        Returns:
-            Signed distance along tangent (negative = before, positive = after)
-        """
-        vec = point - boundary['point']
-        return np.dot(vec, boundary['tangent'])
+        if seg.start_index <= seg.end_index:
+            return seg.start_index <= idx <= seg.end_index
+        return idx >= seg.start_index or idx <= seg.end_index
 
     def _crossed_boundary(self, p1: np.ndarray, p2: np.ndarray,
-                         current_seg: int) -> bool:
+                          current_seg: int) -> bool:
         """
         Check if path segment crossed segment boundary.
 
-        Uses two methods:
-        1. Line intersection (strict, requires crossing near boundary point)
-        2. Signed distance (relaxed, checks if points crossed from before to
-           after boundary)
+        Boundary crossing occurs when dot(pos - boundary, tangent)
+        transitions from negative to positive.
 
         Args:
             p1: Start point
@@ -294,80 +141,22 @@ class SegmentAssigner:
         Returns:
             True if boundary was crossed
         """
-        # Find boundary exiting current_seg
-        boundary = None
-        for b in self.segmentation.segment_boundaries:
-            if b.get('segment_from') == current_seg:
-                boundary = b
-                break
-
+        boundary = self._get_boundary_from_segment(current_seg)
         if boundary is None:
             return False
 
-        # Method 1: Line intersection (for nearby crossings)
-        if self._line_intersection_crossing(p1, p2, boundary):
-            return True
-
-        # Method 2: Signed distance along tangent (for offset paths)
-        # This catches crossings that occur far from the boundary point
-        return self._signed_distance_crossing(p1, p2, boundary)
-
-    def _line_intersection_crossing(self, p1: np.ndarray, p2: np.ndarray,
-                                     boundary: dict) -> bool:
-        """Check crossing via line intersection (original method)."""
-        b_pos = boundary['point']  # Use 'point', not 'position'
-        b_normal = boundary['normal']
-
-        path_vec = p2 - p1
-        path_len = np.linalg.norm(path_vec)
-
-        zero_tol = self.params['crossing_zero_tolerance']
-        if path_len < zero_tol:
-            return False
-
-        cross = np.cross(path_vec, b_normal)
-        parallel_tol = self.params['parallel_tolerance']
-
-        if np.abs(cross) < parallel_tol:
-            return False
-
-        to_p1 = p1 - b_pos
-        t = np.cross(to_p1, path_vec) / cross
-        s = np.cross(to_p1, b_normal) / cross
-
-        t_tol = self.params['crossing_t_tolerance']
-        normal_limit = self.params['normal_limit_factor']
-
-        return 0 <= s <= 1 + t_tol and np.abs(t) < normal_limit
-
-    def _signed_distance_crossing(self, p1: np.ndarray, p2: np.ndarray,
-                                   boundary: dict) -> bool:
-        """
-        Check crossing via signed distance along NORMAL.
-
-        CRITICAL: Uses normal projection for tangent projection algorithm.
-
-        Detects when path moves from before boundary (negative side) to
-        after boundary (positive side) by checking signed distance along
-        the boundary normal vector.
-
-        Args:
-            p1: Start point of path segment
-            p2: End point of path segment
-            boundary: Boundary dict with 'point' and 'normal'
-
-        Returns:
-            True if crossed from negative to positive side
-        """
         b_point = boundary['point']
-        b_normal = boundary['normal']
-
-        # Signed distance along normal: negative = before, positive = after
-        d1 = np.dot(p1 - b_point, b_normal)
-        d2 = np.dot(p2 - b_point, b_normal)
-
-        # Crossed if we went from before (d1 <= 0) to after (d2 > 0)
+        b_tangent = boundary['tangent']
+        d1 = np.dot(p1 - b_point, b_tangent)
+        d2 = np.dot(p2 - b_point, b_tangent)
         return d1 <= 0 < d2
+
+    def _get_boundary_from_segment(self, segment_id: int) -> Optional[dict]:
+        """Get boundary exiting the given segment."""
+        for b in self.segmentation.segment_boundaries:
+            if b.get('segment_from') == segment_id:
+                return b
+        return None
 
 
 class SegmentEstimator:
@@ -385,23 +174,19 @@ class SegmentEstimator:
             segmentation: Course segmentation
         """
         self.segmentation = segmentation
-
-        # Build KD-tree from mean course
         mean = segmentation.mean_course
         self.course_points = np.column_stack([mean.x, mean.y])
 
-        # Build segment lookup (which segment each point belongs to)
         self.point_segments = np.zeros(len(mean), dtype=int)
         for seg in segmentation.segments:
-            self.point_segments[seg.start_index:seg.end_index+1] = \
-                seg.segment_id
+            start, end = seg.start_index, seg.end_index + 1
+            self.point_segments[start:end] = seg.segment_id
 
-        # Create KD-tree
         from scipy.spatial import KDTree
         self.kdtree = KDTree(self.course_points)
 
     def estimate(self, x: float, y: float,
-                heading: Optional[float] = None) -> SegmentEstimate:
+                 heading: Optional[float] = None) -> SegmentEstimate:
         """
         Estimate segment from position.
 
@@ -414,20 +199,11 @@ class SegmentEstimator:
             SegmentEstimate with segment ID and confidence
         """
         pos = np.array([x, y])
-
-        # Find nearest course point
         dist, idx = self.kdtree.query(pos)
-
-        # Get segment
         segment_id = int(self.point_segments[idx])
-
-        # Calculate confidence based on distance
         confidence = 1.0 / (1.0 + dist)
-
-        # Cross-track error
         cross_track_error = float(dist)
 
-        # Heading error (if provided)
         heading_error = 0.0
         if heading is not None:
             course_heading = self.segmentation.mean_course.heading[idx]

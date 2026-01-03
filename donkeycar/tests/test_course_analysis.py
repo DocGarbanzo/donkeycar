@@ -13,7 +13,7 @@ import unittest
 import numpy as np
 import json
 
-from donkeycar.parts.course_analysis import (
+from donkeycar.course_analysis.old.course_analysis import (
     MultiLapData, MeanCourse, CourseSegmentation, Segment, SegmentType,
     normalize_angle, angle_difference, circular_mean, circular_std
 )

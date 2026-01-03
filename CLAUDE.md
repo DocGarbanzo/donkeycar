@@ -463,24 +463,23 @@ Segment assignment uses TWO different methods for different purposes:
    - Used for all subsequent path points after initial detection
 
 **Boundary Crossing Detection (Tangent Projection):**
-Tangent projection determines segment crossing when the vehicle coordinates
-cross the normal of the tangent at the segment boundary (from negative to
-positive).
+The boundary is a LINE perpendicular to the course at each segment endpoint.
+This line extends in the normal direction (inward). We detect crossing by
+measuring progress along the tangent (driving direction).
 
 **Mathematical Definition:**
 - At each segment boundary, there is a point P on the mean course
-- The tangent vector T at P defines the boundary direction
-- The normal vector N is perpendicular to T (rotated 90°)
+- The tangent vector T at P points in the driving direction
+- The boundary LINE extends perpendicular to T (in the normal direction)
 - For vehicle position V, compute vector: `vec = V - P`
-- Signed distance along normal: `d = dot(vec, N)`
+- Signed distance along tangent: `d = dot(vec, T)`
 - **Boundary crossing occurs when d transitions from negative to positive**
 
 **Why tangent projection for crossing detection:**
-- Avoids ambiguity when vehicle is geometrically close to multiple segments
-- Example: Two hairpin 180° turns - vehicle could be close to 3 different
-  segments spatially, but tangent projection correctly identifies which
-  boundary is being crossed
-- Tangent projection tracks course progression, not spatial proximity
+- Measures progress along the course, not perpendicular distance
+- Before boundary: dot product is negative (behind P in driving direction)
+- After boundary: dot product is positive (ahead of P in driving direction)
+- Works correctly regardless of cross-track offset from mean course
 
 **Why nearest-neighbor for initial detection:**
 - Provides reliable starting segment when vehicle could be anywhere on course

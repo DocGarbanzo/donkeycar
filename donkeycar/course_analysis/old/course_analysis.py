@@ -1507,33 +1507,20 @@ class CourseSegmentation:
                                 distance: np.ndarray,
                                 min_length: float) -> List[int]:
         """
-        Filter out segments shorter than minimum length.
+        Filter out segments shorter than minimum length by merging.
+
+        Delegates to standalone utility function shared with new API.
 
         Args:
-            boundaries: List of boundary indices
+            boundaries: List of boundary indices (not including 0)
             distance: Distance array
             min_length: Minimum segment length
 
         Returns:
-            Filtered list of boundaries
+            Filtered list of boundaries (not including 0)
         """
-        if len(boundaries) < 2:
-            return boundaries
-
-        filtered = [boundaries[0]]
-
-        for i in range(1, len(boundaries)):
-            seg_start = filtered[-1]
-            seg_end = boundaries[i]
-            seg_length = distance[seg_end] - distance[seg_start]
-
-            if seg_length >= min_length:
-                filtered.append(boundaries[i])
-
-        if len(filtered) < 2:
-            return boundaries
-
-        return filtered
+        from ..segmentation import filter_short_boundaries
+        return filter_short_boundaries(boundaries, distance, min_length)
 
     def _handle_closed_loop(self, boundaries: List[int],
                              point_types: np.ndarray,
@@ -2300,6 +2287,72 @@ class CourseSegmentation:
             return False
         return True
 
+    def _segment_contains_index(self, seg, idx: int) -> bool:
+        """Check if segment contains the given index."""
+        # Handle normal segments
+        if seg.start_index <= seg.end_index:
+            return seg.start_index <= idx <= seg.end_index
+        # Handle wrap-around segments
+        return idx >= seg.start_index or idx <= seg.end_index
+
+    def _find_initial_segment_by_proximity(self, x: float, y: float) -> int:
+        """
+        Find initial segment using nearest-neighbor to mean course.
+
+        For INITIAL segment detection only, we use nearest-neighbor to find
+        the closest point on the mean course, then look up which segment
+        that point belongs to.
+
+        This avoids false positives from tangent projection on complex courses
+        like ovals where a point may be geometrically close to a distant
+        boundary.
+
+        Args:
+            x: X coordinate of starting position
+            y: Y coordinate of starting position
+
+        Returns:
+            Segment ID that the position belongs to
+        """
+        point = np.array([x, y])
+
+        # Build array of mean course points
+        course_points = np.column_stack([self.mean_course.x,
+                                         self.mean_course.y])
+
+        # Find nearest point on mean course
+        distances = np.linalg.norm(course_points - point, axis=1)
+        nearest_idx = np.argmin(distances)
+
+        # Find which segment contains this index
+        for seg in self.segments:
+            if self._segment_contains_index(seg, nearest_idx):
+                return seg.segment_id
+
+        # Fallback to segment 0
+        return 0
+
+    def _log_boundary_crossing_debug(self, i: int, p1: np.ndarray,
+                                     p2: np.ndarray, boundary: dict,
+                                     current_seg: int, next_seg: int) -> None:
+        """Log debug information for boundary crossing detection."""
+        if not logger.isEnabledFor(logging.DEBUG):
+            return
+
+        d1 = CourseSegmentation._signed_distance_to_line(
+            p1, boundary['point'], boundary['tangent'])
+        d2 = CourseSegmentation._signed_distance_to_line(
+            p2, boundary['point'], boundary['tangent'])
+        logger.debug(
+            "seg_assign i=%d seg=%d->%d d1=%.6f d2=%.6f "
+            "p1=[%.6f,%.6f] p2=[%.6f,%.6f] "
+            "bpt=[%.6f,%.6f] bnorm=[%.6f,%.6f]",
+            i, current_seg, next_seg, d1, d2,
+            p1[0], p1[1], p2[0], p2[1],
+            boundary['point'][0], boundary['point'][1],
+            boundary['normal'][0], boundary['normal'][1]
+        )
+
     def assign_segments_to_path(self,
                                 x_path: np.ndarray,
                                 y_path: np.ndarray) -> np.ndarray:
@@ -2341,20 +2394,12 @@ class CourseSegmentation:
         num_points = len(x_path)
         segment_ids = np.zeros(num_points, dtype=int)
 
-        # Determine initial segment by boundary position only:
-        # if point is past a boundary (positive along tangent),
-        # advance to next segment.
+        # Determine initial segment using nearest-neighbor to mean course
+        # This avoids false positives from tangent projection on complex courses
         point0 = np.array([x_path[0], y_path[0]])
-        current_segment = 0
-        for seg_id in range(self.total_segments):
-            boundary = self._boundary_map_from.get(seg_id)
-            if boundary is None:
-                break
-            dist_along = self._signed_distance_along_tangent(point0, boundary)
-            if dist_along > 0:
-                current_segment = boundary['segment_to']
-                continue
-            break
+        current_segment = self._find_initial_segment_by_proximity(
+            point0[0], point0[1]
+        )
 
         segment_ids[0] = current_segment
 
@@ -2370,35 +2415,27 @@ class CourseSegmentation:
 
             next_segment = (current_segment + 1) % self.total_segments
             boundary = self._boundary_map_from.get(current_segment)
-            should_transition = False
 
-            if boundary is not None:
-                if logger.isEnabledFor(logging.DEBUG):
-                    d1 = CourseSegmentation._signed_distance_to_line(
-                        p1, boundary['point'], boundary['tangent'])
-                    d2 = CourseSegmentation._signed_distance_to_line(
-                        p2, boundary['point'], boundary['tangent'])
-                    logger.debug(
-                        "seg_assign i=%d seg=%d->%d d1=%.6f d2=%.6f "
-                        "p1=[%.6f,%.6f] p2=[%.6f,%.6f] "
-                        "bpt=[%.6f,%.6f] bnorm=[%.6f,%.6f]",
-                        i, current_segment, next_segment, d1, d2,
-                        p1[0], p1[1], p2[0], p2[1],
-                        boundary['point'][0], boundary['point'][1],
-                        boundary['normal'][0], boundary['normal'][1]
-                    )
-                # Primary: Check for forward boundary crossing
-                crossed = self._crossed_boundary_forward(p1, p2, boundary)
-                if crossed:
-                    should_transition = True
-                    logger.debug(
-                        f"i={i}: Crossed boundary {boundary['segment_from']}->"
-                        f"{boundary['segment_to']} via crossing, "
-                        f"p2=[{p2[0]:.3f},{p2[1]:.3f}]"
-                    )
-            if should_transition:
-                current_segment = next_segment
+            if boundary is None:
+                segment_ids[i] = current_segment
+                continue
 
+            # Log debug info
+            self._log_boundary_crossing_debug(
+                i, p1, p2, boundary, current_segment, next_segment)
+
+            # Primary: Check for forward boundary crossing
+            crossed = self._crossed_boundary_forward(p1, p2, boundary)
+            if not crossed:
+                segment_ids[i] = current_segment
+                continue
+
+            logger.debug(
+                f"i={i}: Crossed boundary {boundary['segment_from']}->"
+                f"{boundary['segment_to']} via crossing, "
+                f"p2=[{p2[0]:.3f},{p2[1]:.3f}]"
+            )
+            current_segment = next_segment
             segment_ids[i] = current_segment
 
         return segment_ids

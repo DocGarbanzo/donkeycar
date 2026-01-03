@@ -23,6 +23,70 @@ from scipy.signal import find_peaks
 from .mean_course import MeanCourse
 
 
+def filter_short_boundaries(boundaries: List[int], distance: np.ndarray,
+                            min_length: float) -> List[int]:
+    """
+    Filter out segments shorter than minimum length by merging.
+
+    Standalone utility function used by both old and new APIs.
+    Short segments are merged with adjacent segments by removing
+    their end boundaries. For closed loops, also checks and merges
+    short wrap-around segments.
+
+    Note: Boundaries don't include index 0, but we need to check
+    the segment from 0 to first boundary.
+
+    Args:
+        boundaries: List of boundary indices (not including 0)
+        distance: Distance array
+        min_length: Minimum segment length
+
+    Returns:
+        Filtered list of boundaries (not including 0)
+    """
+    if len(boundaries) == 0:
+        return boundaries
+
+    # Check first segment (from 0 to first boundary)
+    merged = []
+    start_idx = 0
+
+    for i in range(len(boundaries)):
+        seg_end_idx = boundaries[i]
+        seg_length = distance[seg_end_idx] - distance[start_idx]
+        if seg_length < min_length: continue  # Skip short segments
+
+        merged.append(boundaries[i])
+        start_idx = boundaries[i]
+
+    # Check wrap-around segment length for closed loops
+    if len(merged) < 1:
+        return _handle_empty_merged(boundaries)
+
+    total_distance = distance[-1]
+    last_boundary_idx = merged[-1]
+    wrap_length = total_distance - distance[last_boundary_idx]
+
+    # Merge wrap-around if too short and we have > 1 boundary
+    if wrap_length < min_length and len(merged) > 1:
+        merged.pop()
+
+    # Handle empty merged list after wrap-around check
+    if len(merged) > 0:
+        return merged
+
+    return _handle_empty_merged(boundaries)
+
+
+def _handle_empty_merged(boundaries: List[int]) -> List[int]:
+    """Handle case when no boundaries meet min_length."""
+    if len(boundaries) < 1:
+        return boundaries
+
+    mid_idx = len(boundaries) // 2
+    return [boundaries[mid_idx]]
+
+
 class SegmentType(Enum):
     """Course segment types"""
     STRAIGHT = "straight"
@@ -184,14 +248,19 @@ class CourseSegmenter:
         # Load parameters
         self.params = self.DEFAULT_PARAMS.copy()
 
+        # Apply config parameters if provided
         if cfg is not None:
             seg_params = getattr(cfg, 'SEGMENTATION_PARAMS', {})
-            for key in self.params.keys():
-                if key in seg_params:
-                    self.params[key] = seg_params[key]
+            self._apply_config_params(seg_params)
 
+        # Apply explicit parameter overrides
         if params is not None:
             self.params.update(params)
+
+    def _apply_config_params(self, seg_params: Dict[str, Any]):
+        """Apply config parameters to self.params."""
+        updates = {k: v for k, v in seg_params.items() if k in self.params}
+        self.params.update(updates)
 
     def segment(self, mean_course: MeanCourse) -> 'CourseSegmentation':
         """
@@ -215,6 +284,11 @@ class CourseSegmenter:
         # Detect boundaries
         boundary_indices = self.strategy.detect_boundaries(
             curvature, mean_course.distance, self.params)
+
+        # Filter short segments by merging
+        boundary_indices = filter_short_boundaries(
+            boundary_indices, mean_course.distance,
+            self.params['min_segment_length'])
 
         # Create segments
         segments = self._create_segments(
