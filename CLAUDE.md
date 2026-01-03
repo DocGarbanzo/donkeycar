@@ -351,222 +351,43 @@ def run(self, image, steering, throttle):
 
 ## IMU Path Visualization and Analysis
 
-The IMU path system is a sophisticated tool for visualizing and analyzing
-recorded vehicle trajectories, particularly useful for understanding lap-based
-driving patterns and course geometry.
-
-### Overview
-
 **Command:** `donkey imupath --path <path_to_data>`
 
-**Purpose:** Visualize recorded vehicle position data, analyze multi-lap
-consistency, compute mean reference courses, and segment courses into geometric
-features (straights, turns, S-curves, chicanes).
+Visualizes recorded vehicle trajectories, detects laps, computes mean reference
+courses, and segments courses into geometric features.
 
 ### Key Files
 
-- **`donkeycar/utilities/imu_visualization.py`** (1455 lines)
-  - Main visualization implementation
-  - Interactive UI with matplotlib
-  - Real-time navigation through recorded data
-  - Currently uses old course_analysis API (Phase 7b pending)
-
-- **`donkeycar/course_analysis/`** - Refactored modular implementation
-  - `data_loader.py` - Immutable PathData container, CSV/Tub data sources
+- `donkeycar/utilities/imu_visualization.py` - Main UI (matplotlib)
+- `donkeycar/course_analysis/` - Modular implementation:
+  - `data_loader.py` - PathData container, CSV/Tub loading
   - `lap_detection.py` - YCrossingLapDetector, DriftLapDetector
-  - `mean_course.py` - MeanCourseBuilder (pure functions)
-  - `segmentation.py` - 4 segmentation strategies (threshold, extrema,
-    gradient, hybrid)
+  - `mean_course.py` - MeanCourseBuilder
+  - `segmentation.py` - 4 strategies: threshold, extrema, gradient, hybrid
   - `segment_assignment.py` - SegmentAssigner, SegmentEstimator
-  - `old/course_analysis.py` - Legacy monolithic implementation (2078 lines)
-    - Used by `donkey imupath` command
-    - Will be deprecated after Phase 7b refactoring
+- `donkeycar/course_analysis/old/course_analysis.py` - Legacy (pending deprecation)
 
 ### Data Format
 
-**CSV Format:** `t, x, y, h, v`
-- `t`: timestamp (seconds)
-- `x`: X position (meters, right direction)
-- `y`: Y position (meters, forward direction)
-- `h`: heading (degrees)
-- `v`: velocity (meters/second)
+**CSV:** `t, x, y, h, v` (timestamp, position x/y in meters, heading in degrees,
+velocity in m/s)
 
-**Tub Support:** Automatically extracts position data from Tub directories
-- Uses `_timestamp_ms`, `car/pos`, `car/euler`, `car/speed` records
+**Tub:** Extracts from `_timestamp_ms`, `car/pos`, `car/euler`, `car/speed`
 
-### Core Algorithms
+### Critical Design Constraint: Two-Stage Segment Assignment
 
-#### 1. Lap Detection (MultiLapData class)
+SegmentAssigner uses TWO methods:
 
-Three methods for detecting lap boundaries:
+1. **Initial detection (index 0 only):** Nearest-neighbor to find starting
+   segment
+2. **Crossing detection (all subsequent):** Tangent projection - detects when
+   path crosses boundary lines perpendicular to course direction
 
-- **y_crossing** (default): Detects when y-coordinate crosses from negative to
-  positive - works well for closed loops starting/ending near y=0
-- **drift**: Uses weighted average reversal point detection - handles courses
-  with drift
-- **distance**: Simple distance threshold method (legacy)
+**Why:** Nearest-neighbor finds where you start; tangent projection tracks
+progress along the course regardless of cross-track offset.
 
-#### 2. Mean Course Reconstruction (MeanCourse class)
-
-Process for computing reference course from multiple laps:
-1. Resample all laps onto common normalized arc-length axis (0 to 1)
-2. Compute weighted mean with equal lap contribution
-3. Apply smoothing (Savitzky-Golay filter for position, moving average for
-   heading)
-4. Apply loop closure correction (ensures start/end continuity at y=0)
-5. Compute cumulative distance along course
-
-#### 3. Course Segmentation (CourseSegmentation class)
-
-Four segmentation methods (configurable via `boundary_method`):
-
-- **gradient** (default): Detects where curvature changes most rapidly
-  (entry/exit points)
-- **threshold**: Detects transitions between straight/left/right based on
-  curvature threshold
-- **extrema**: Detects local peaks/valleys in curvature (apex points)
-- **hybrid**: Combines threshold + extrema methods
-
-**Segment Types:**
-- STRAIGHT: Low curvature sections
-- LEFT_TURN: Positive curvature
-- RIGHT_TURN: Negative curvature
-- S_CURVE_LR: Left-to-right inflection
-- S_CURVE_RL: Right-to-left inflection
-- CHICANE: Multiple rapid inflections
-
-**Algorithm:**
-1. Calculate curvature: κ = dθ/ds (radians/meter)
-2. Optionally compute adaptive threshold from curvature distribution
-3. Detect segment boundaries using selected method
-4. Classify segments based on curvature characteristics
-5. Merge adjacent segments of same type (conservative: only straights)
-
-#### 4. Segment Assignment (SegmentAssigner class)
-
-Assigns segment IDs to driven path positions using boundary crossing detection.
-
-**CRITICAL REQUIREMENT - Two-Stage Algorithm:**
-
-Segment assignment uses TWO different methods for different purposes:
-
-1. **Initial Segment Detection** (starting position only):
-   - Uses nearest-neighbor to find closest point on mean course
-   - Looks up which segment that mean course point belongs to
-   - Only used once at path start (index 0)
-   - Purpose: Determine which segment to start tracking from
-
-2. **Incremental Crossing Detection** (while driving and during replaying the 
-  recorded track):
-   - MUST use tangent projection algorithm (non-negotiable)
-   - Detects when driven path crosses segment boundaries
-   - Used for all subsequent path points after initial detection
-
-**Boundary Crossing Detection (Tangent Projection):**
-The boundary is a LINE perpendicular to the course at each segment endpoint.
-This line extends in the normal direction (inward). We detect crossing by
-measuring progress along the tangent (driving direction).
-
-**Mathematical Definition:**
-- At each segment boundary, there is a point P on the mean course
-- The tangent vector T at P points in the driving direction
-- The boundary LINE extends perpendicular to T (in the normal direction)
-- For vehicle position V, compute vector: `vec = V - P`
-- Signed distance along tangent: `d = dot(vec, T)`
-- **Boundary crossing occurs when d transitions from negative to positive**
-
-**Why tangent projection for crossing detection:**
-- Measures progress along the course, not perpendicular distance
-- Before boundary: dot product is negative (behind P in driving direction)
-- After boundary: dot product is positive (ahead of P in driving direction)
-- Works correctly regardless of cross-track offset from mean course
-
-**Why nearest-neighbor for initial detection:**
-- Provides reliable starting segment when vehicle could be anywhere on course
-- Spatial proximity determines which segment the starting position belongs to
-- Only used once, then tangent projection handles all subsequent crossings
-
-**Single Source of Truth:**
-- SegmentAssigner uses `self.segmentation.segment_boundaries` directly
-- NO duplicate boundary storage
-
-**Incremental updates:** Uses boundary crossing detection to advance segments
-as the vehicle moves along the course.
-
-#### 5. Real-Time Segment Estimation (SegmentEstimator class)
-
-For live driving, estimates current segment from vehicle position:
-- Uses tangent projection (same as SegmentAssigner)
-- Returns segment ID with confidence score based on position/heading alignment
-- Provides cross-track error and heading deviation metrics
-
-### Interactive UI Features
-
-**Display Elements:**
-- Full path scatter plot (color-coded by speed using viridis colormap)
-- Current position marker (red circle)
-- Current path line (red line from start to current time)
-- Mean course overlay (orange line with segment boundaries)
-- Segment boundary markers (perpendicular ticks at transitions)
-
-**Interactive Controls:**
-- Time slider: Navigate through recorded path
-- Keyboard arrows: Single-frame navigation (left/right)
-- Lap selector: Filter display by lap count, recomputes mean course
-- Segment method selector: RadioButtons to switch between segmentation methods
-- Display toggles: CheckButtons for Driven Path and Mean Course visibility
-
-**Status Panel (top-left):**
-- File source and path
-- Current speed, timestamp, position [x, y]
-- Current lap number
-- Total distance traveled, lap distance
-- Debug info (index, distance to origin)
-- Drift correction amount (if enabled)
-
-**Performance Optimizations:**
-- Throttled updates (100ms minimum between refreshes)
-- Display data downsampling for large datasets
-- Efficient data filtering using pandas masks
-
-### Configuration Parameters
-
-**Segmentation:**
-- `curvature_window`: Points for curvature calculation (default: 5)
-- `straight_curvature_threshold`: Threshold for straight detection
-  (default: 0.08 rad/m, auto-adjusted)
-- `min_segment_length`: Minimum segment length (default: 0.8m)
-- `boundary_method`: 'gradient', 'threshold', 'extrema', or 'hybrid'
-
-**Mean Course:**
-- `resampling_interval`: Distance between resampled points (default: 0.1m)
-- `position_smoothing_window`: Savitzky-Golay window (default: 11)
-- `heading_smoothing_window`: Moving average window (default: 5)
-
-### Usage Examples
-
-```bash
-# Visualize CSV data
-donkey imupath --path path_to_data.csv
-
-# Visualize Tub data
-donkey imupath --path path_to_tub_directory
-
-# Use specific lap detection method
-donkey imupath --path data.csv --lap-method drift
-
-# Save mean course and segmentation
-donkey imupath --path data.csv --save-mean-course mean_course.json
-```
-
-### Recent Development
-
-Recent work has focused on:
-- Multiple segmentation methods with interactive selector
-- Improved UI layout and status display
-- Lap filtering to recompute mean course from subset of laps
-- Better segment boundary visualization
-- Tub format support for direct loading from recorded data
+**Single source of truth:** Use `self.segmentation.segment_boundaries` directly,
+never duplicate boundary storage.
 
 ## Remote Development Workflow
 
