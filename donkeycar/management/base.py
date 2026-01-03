@@ -13,7 +13,7 @@ from progress.bar import IncrementalBar
 import donkeycar as dk
 from donkeycar.management.joystick_creator import CreateJoystick
 from donkeycar.management.tub import TubManager
-from donkeycar.management.imupath2 import ImuPath2Command
+from donkeycar.management.imupath import ImuPathCommand
 from donkeycar.utils import normalize_image, load_image, math
 
 PACKAGE_PATH = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -682,46 +682,6 @@ class Monitor(BaseCommand):
               .format(count, count / proc_time))
 
 
-class ImuPathVisualizer(BaseCommand):
-    """Command for visualizing IMU path data from CSV files or Tub directories."""
-
-    def parse_args(self, args):
-        parser = argparse.ArgumentParser(
-            prog='imupath',
-            usage='%(prog)s [options] [data_source]')
-        parser.add_argument('data_source', nargs='?', default='imu.csv',
-                           help='path to IMU CSV file or Tub directory (default: imu.csv)')
-        parser.add_argument('--drift-correction', action='store_true',
-                           help='enable loop drift correction')
-        parser.add_argument('--min-loop-distance', type=float, default=1.0,
-                           help='minimum distance to travel before considering loop closure (meters) (default: 1.0)')
-        parser.add_argument('--max-distance', type=float, default=0.5,
-                           help='maximum distance from origin to start looking for reversal point (meters) (default: 0.5)')
-        parser.add_argument('--downsample-factor', type=int, default=None,
-                           help='downsample factor for display '
-                                '(default: auto-calculate to ~10000 pts)')
-        parser.add_argument('--segment-method', type=str,
-                           choices=['threshold', 'extrema', 'gradient', 'hybrid'],
-                           default='gradient',
-                           help='segmentation method: threshold (simple), '
-                                'extrema (apex points), gradient (entry/exit), '
-                                'hybrid (combined) (default: gradient)')
-
-        parsed_args = parser.parse_args(args)
-        return parsed_args
-
-    def run(self, args):
-        args = self.parse_args(args)
-        from donkeycar.utilities.imu_visualization import visualize_imu_path
-
-        visualize_imu_path(args.data_source,
-                          correct_drift=args.drift_correction,
-                          min_loop_distance=args.min_loop_distance,
-                          max_distance=args.max_distance,
-                          downsample_factor=args.downsample_factor,
-                          segment_method=args.segment_method)
-
-
 def execute_from_command_line():
     """
     This is the function linked to the "donkey" terminal command.
@@ -741,8 +701,7 @@ def execute_from_command_line():
         'models': ModelDatabase,
         'ui': Gui,
         'monitor': Monitor,
-        'imupath': ImuPathVisualizer,
-        'imupath2': ImuPath2Command
+        'imupath': ImuPathCommand,
     }
 
     args = sys.argv[:]
