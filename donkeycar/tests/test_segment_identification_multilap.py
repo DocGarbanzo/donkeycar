@@ -34,7 +34,7 @@ def create_multilap_csv(num_laps=3, points_per_lap=200):
     Each lap starts just below y=0, makes a full circle, and
     returns to cross y=0 from below (negative to positive).
     """
-    all_t, all_x, all_y, all_heading = [], [], [], []
+    all_t, all_x, all_y, all_heading, all_velocity = [], [], [], [], []
 
     for lap in range(num_laps):
         # Start at bottom of circle (θ=-π/2, y=-2) and make full circle
@@ -45,6 +45,7 @@ def create_multilap_csv(num_laps=3, points_per_lap=200):
         x = 2.0 * np.cos(theta)
         y = 2.0 * np.sin(theta)
         heading = theta + np.pi/2
+        velocity = np.ones(len(theta)) * 2.0  # Constant velocity
 
         # Add noise
         np.random.seed(42 + lap)
@@ -57,15 +58,16 @@ def create_multilap_csv(num_laps=3, points_per_lap=200):
         all_x.extend(x)
         all_y.extend(y)
         all_heading.extend(heading)
+        all_velocity.extend(velocity)
 
-    # Create CSV file
+    # Create CSV file with correct column names (t, x, y, h, v)
     temp_csv = tempfile.NamedTemporaryFile(
         mode='w', suffix='.csv', delete=False
     )
-    temp_csv.write('timestamp,x,y,heading\n')
+    temp_csv.write('t,x,y,h,v\n')
     for i in range(len(all_t)):
         temp_csv.write(
-            f'{all_t[i]},{all_x[i]},{all_y[i]},{all_heading[i]}\n'
+            f'{all_t[i]},{all_x[i]},{all_y[i]},{all_heading[i]},{all_velocity[i]}\n'
         )
     temp_csv.close()
     return temp_csv.name
@@ -78,23 +80,33 @@ def compute_mean_course_from_n_laps(csv_file, num_laps_to_use):
     This simulates what the UI does when user selects N laps:
     apply_lap_selection() -> compute_mean_course_with_laps(N)
     """
-    multilap_data = MultiLapData()
-    multilap_data.load_data(
-        csv_file,
-        lap_detection_method='y_crossing',
-        min_loop_distance=1.0,
-        y_threshold=0.1,
-        min_lap_length=50
+    from donkeycar.course_analysis import (
+        CSVPathDataSource, YCrossingLapDetector, 
+        MeanCourseBuilder
     )
+    
+    # Load path data from CSV
+    source = CSVPathDataSource(csv_file)
+    
+    # Detect laps using Y-crossing detector with specified params
+    detector = YCrossingLapDetector(params={
+        'y_threshold': 0.1,
+        'min_loop_distance': 1.0,
+        'min_lap_length': 50
+    })
+    
+    # Create MultiLapData from source and detector
+    multilap_data = MultiLapData.from_source(source, detector)
 
     # Limit to N laps (like the real code does)
     if multilap_data.num_laps > num_laps_to_use:
-        multilap_data.laps = multilap_data.laps[:num_laps_to_use]
-        multilap_data.num_laps = num_laps_to_use
+        limited_boundaries = multilap_data.lap_boundaries[:num_laps_to_use]
+        multilap_data = MultiLapData(multilap_data.path_data, limited_boundaries)
 
-    # Compute mean course from these laps
-    mean_course = MeanCourse(multilap_data)
-    mean_course.compute()
+    # Build mean course from these laps
+    builder = MeanCourseBuilder()
+    mean_course = builder.build(multilap_data)
+    
     return mean_course, multilap_data
 
 
@@ -112,6 +124,11 @@ def test_segment_assignment_with_n_lap_mean_course(segment_method, num_laps_for_
 
     BUG: When num_laps_for_mean > 1, lap 1 gets stuck at segment 0
     """
+    from donkeycar.course_analysis import (
+        CourseSegmenter, GradientSegmentation, ThresholdSegmentation,
+        ExtremaSegmentation, HybridSegmentation, SegmentAssigner
+    )
+    
     csv_file = create_multilap_csv(num_laps=3)
 
     try:
@@ -123,10 +140,20 @@ def test_segment_assignment_with_n_lap_mean_course(segment_method, num_laps_for_
             csv_file, num_laps_to_use=num_laps_for_mean
         )
 
-        # Create segmentation from N-lap mean course
-        params = {'boundary_method': segment_method}
-        segmentation = CourseSegmentation(mean_course, params)
-        segmentation.compute()
+        # Create segmentation from N-lap mean course using new API
+        if segment_method == 'gradient':
+            strategy = GradientSegmentation()
+        elif segment_method == 'threshold':
+            strategy = ThresholdSegmentation()
+        elif segment_method == 'extrema':
+            strategy = ExtremaSegmentation()
+        elif segment_method == 'hybrid':
+            strategy = HybridSegmentation()
+        else:
+            pytest.skip(f"Unknown segmentation method: {segment_method}")
+            
+        segmenter = CourseSegmenter(strategy)
+        segmentation = segmenter.segment(mean_course)
 
         if segmentation.total_segments == 0:
             pytest.skip(f"No segments detected with {segment_method}")
@@ -135,15 +162,13 @@ def test_segment_assignment_with_n_lap_mean_course(segment_method, num_laps_for_
             pytest.skip(f"Only 1 segment detected with {segment_method} "
                        f"(circle too simple for this method)")
 
-        # Assign segments to FULL path
-        path_segment_ids = segmentation.assign_segments_to_path(
-            df['x'].values, df['y'].values
-        )
+        # Assign segments to FULL path using new API
+        assigner = SegmentAssigner(segmentation)
+        path_segment_ids = assigner.assign(df['x'].values, df['y'].values)
 
-        # Get ACTUAL lap 1 end from lap detection boundary indices
-        if len(multilap_data.lap_boundary_indices) > 0:
-            _, lap1_end_idx = multilap_data.lap_boundary_indices[0]
-            lap1_end_idx -= 1  # end_idx is exclusive, so last point is at end_idx - 1
+        # Get ACTUAL lap 1 end from lap detection boundary
+        if len(multilap_data.lap_boundaries) > 0:
+            lap1_end_idx = multilap_data.lap_boundaries[0].end_index
         else:
             pytest.skip("No laps detected")
 

@@ -6,9 +6,10 @@ import unittest
 import numpy as np
 
 from donkeycar.course_analysis import (
-    MeanCourse, CourseSegmentation, SegmentEstimator, SegmentEstimate,
-    normalize_angle
+    MeanCourse, CourseSegmenter, GradientSegmentation, SegmentEstimator, 
+    SegmentEstimate, normalize_angle
 )
+from donkeycar.tests.course_test_fixtures import create_mean_course_from_arrays
 
 
 class TestSegmentEstimator(unittest.TestCase):
@@ -28,15 +29,12 @@ class TestSegmentEstimator(unittest.TestCase):
         ds = np.sqrt(dx**2 + dy**2)
         distance = np.concatenate([[0], np.cumsum(ds)])
 
-        mean_course = MeanCourse()
-        mean_course.x = x
-        mean_course.y = y
-        mean_course.heading = heading
-        mean_course.distance = distance
-        mean_course.num_laps = 1
+        # Use new MeanCourse constructor with required parameters
+        mean_course = create_mean_course_from_arrays(x, y, heading, distance)
 
-        segmentation = CourseSegmentation(mean_course)
-        segmentation.compute()
+        # Create segmentation using CourseSegmenter
+        segmenter = CourseSegmenter(GradientSegmentation())
+        segmentation = segmenter.segment(mean_course)
 
         return mean_course, segmentation
 
@@ -54,7 +52,7 @@ class TestSegmentEstimator(unittest.TestCase):
         self.assertIsInstance(estimate, SegmentEstimate)
         self.assertIsNotNone(estimate.segment_id)
         self.assertGreater(estimate.confidence, 0.5)
-        self.assertLess(estimate.distance_to_course, 0.5)
+        self.assertLess(estimate.cross_track_error, 0.5)
 
     def test_estimate_near_course(self):
         """Test estimation for position near course"""
@@ -70,7 +68,7 @@ class TestSegmentEstimator(unittest.TestCase):
 
         self.assertIsNotNone(estimate.segment_id)
         self.assertGreater(estimate.confidence, 0.3)
-        self.assertLess(estimate.distance_to_course, 2.0)
+        self.assertLess(estimate.cross_track_error, 2.0)
 
     def test_estimate_off_course(self):
         """Test estimation for position far off course"""
@@ -84,12 +82,13 @@ class TestSegmentEstimator(unittest.TestCase):
 
         estimate = estimator.estimate(x, y, heading)
 
-        self.assertIsNone(estimate.segment_id)
+        # New API always returns a segment (nearest neighbor)
+        self.assertIsNotNone(estimate.segment_id)
         self.assertLess(estimate.confidence, 0.5)
-        self.assertGreater(estimate.distance_to_course, 10.0)
+        self.assertGreater(estimate.cross_track_error, 10.0)
 
     def test_estimate_with_heading(self):
-        """Test that heading helps disambiguation"""
+        """Test that heading is captured in estimate"""
         mean_course, segmentation = self._create_test_course_and_segmentation()
 
         estimator = SegmentEstimator(segmentation)
@@ -102,25 +101,24 @@ class TestSegmentEstimator(unittest.TestCase):
         estimate1 = estimator.estimate(x, y, correct_heading)
         estimate2 = estimator.estimate(x, y, wrong_heading)
 
-        self.assertGreater(estimate1.confidence, estimate2.confidence)
+        # Heading error should be different
+        self.assertLess(estimate1.heading_error, estimate2.heading_error)
 
-    def test_estimate_batch(self):
-        """Test batch estimation"""
+    def test_estimate_multiple_positions(self):
+        """Test estimating multiple positions (replacing batch test)"""
         mean_course, segmentation = self._create_test_course_and_segmentation()
 
         estimator = SegmentEstimator(segmentation)
 
         indices = [0, 50, 100, 150]
-        positions = np.array([
-            [mean_course.x[i], mean_course.y[i], mean_course.heading[i]]
-            for i in indices
-        ])
+        
+        for i in indices:
+            x = mean_course.x[i]
+            y = mean_course.y[i]
+            heading = mean_course.heading[i]
+            
+            estimate = estimator.estimate(x, y, heading)
 
-        estimates = estimator.estimate_batch(positions)
-
-        self.assertEqual(len(estimates), len(positions))
-
-        for estimate in estimates:
             self.assertIsInstance(estimate, SegmentEstimate)
             self.assertIsNotNone(estimate.segment_id)
             self.assertGreater(estimate.confidence, 0.5)
