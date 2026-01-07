@@ -389,6 +389,93 @@ progress along the course regardless of cross-track offset.
 **Single source of truth:** Use `self.segmentation.segment_boundaries` directly,
 never duplicate boundary storage.
 
+## Segment-Based Performance for Training
+
+**Concept:** Instead of training on best complete laps, train on best-driven
+instances of each segment across all laps. This creates a "synthetic perfect
+lap" that outperforms any single recorded lap.
+
+### Workflow
+
+1. **Record multi-lap data** - Drive multiple laps with IMU enabled
+2. **Compute segment assignments** - Run segmentation on the tub
+   ```bash
+   donkey segment --tub ./data/tub_1
+   ```
+3. **Train with segment performance** - Enable in config and train
+   ```python
+   SEGMENT_PCT_MODE = True
+   ```
+   ```bash
+   python manage.py train --tub ./data/tub_1
+   ```
+
+### How It Works
+
+**Data Structure:**
+- `car/segment` field written to each tub record (integer segment ID)
+- Metadata stores segmentation parameters (num_segments, strategy, etc.)
+- Performance rankings: `session_rank[session_id][lap_num][segment_id] =
+  [time_pct, gyro_z_pct, distance_pct]`
+
+**Example:** 3 laps, 4 segments per lap
+
+Lap 1: Segments [Fast, Slow, Medium, Fast]
+Lap 2: Segments [Medium, Fast, Fast, Slow]
+Lap 3: Segments [Slow, Medium, Slow, Medium]
+
+Training prioritizes:
+- Segment 0 from Lap 1 (fastest instance of segment 0)
+- Segment 1 from Lap 2 (fastest instance of segment 1)
+- Segment 2 from Lap 2 (fastest instance of segment 2)
+- Segment 3 from Lap 1 (fastest instance of segment 3)
+
+This creates a "synthetic best lap" combining the best-driven instances of each
+segment!
+
+### Configuration
+
+`donkeycar/templates/cfg_complete.py`:
+
+```python
+#SEGMENT PERFORMANCE
+SEGMENT_PCT_MODE = False  # True = segment-based, False = lap-based
+SEGMENT_STRATEGY = 'hybrid'  # threshold, extrema, gradient, or hybrid
+SEGMENT_LAP_DETECTOR = 'ycrossing'  # ycrossing or drift
+SEGMENT_MIN_LENGTH = 1.0  # Minimum segment length in meters
+SEGMENT_CURVATURE_THRESHOLD = 0.1  # Curvature threshold for segmentation
+```
+
+### Iterative Training Strategy
+
+1. Train with segment_pct on initial multi-lap data
+2. Drive with trained model (will perform better in some segments)
+3. Collect new data from model-driven laps
+4. Re-segment combined data (original + new laps)
+5. Retrain - model learns from new best segments
+6. Repeat - iteratively improve beyond initial human best lap
+
+### Implementation Details
+
+**PctMode Enum** (`donkeycar/pipeline/types.py`):
+- `PctMode.NONE` - No performance ranking
+- `PctMode.LAP` - Lap-based ranking (original behavior)
+- `PctMode.SEGMENT` - Segment-based ranking (new feature)
+
+**Key Methods:**
+- `TubStatistics.compute_segment_assignments()` - Computes segments, writes to
+  records
+- `TubStatistics.calculate_segment_performance()` - Ranks segment instances
+- `TubDataset.__init__(pct_mode=PctMode.SEGMENT)` - Enables segment mode
+- `TubRecord.extend()` - Populates `lap_pct` from segment rankings
+
+**Command:**
+```bash
+donkey segment --help
+donkey segment --tub ./data/tub_1 --strategy hybrid
+donkey segment --tub ./data/tub_1 --min-segment-length 1.0
+```
+
 ## Remote Development Workflow
 
 ### Raspberry Pi Development Setup

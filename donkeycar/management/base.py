@@ -14,6 +14,7 @@ import donkeycar as dk
 from donkeycar.management.joystick_creator import CreateJoystick
 from donkeycar.management.tub import TubManager
 from donkeycar.management.imupath import ImuPathCommand
+from donkeycar.management.segment import SegmentCommand
 from donkeycar.utils import normalize_image, load_image, math
 
 PACKAGE_PATH = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -702,6 +703,7 @@ def execute_from_command_line():
         'ui': Gui,
         'monitor': Monitor,
         'imupath': ImuPathCommand,
+        'segment': SegmentCommand,
     }
 
     args = sys.argv[:]

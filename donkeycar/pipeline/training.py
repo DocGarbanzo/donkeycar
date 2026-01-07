@@ -12,7 +12,7 @@ from donkeycar.parts.interpreter import keras_model_to_tflite, \
     saved_model_to_tensor_rt
 from donkeycar.pipeline.database import PilotDatabase
 from donkeycar.pipeline.sequence import PipelineGenerator
-from donkeycar.pipeline.types import TubDataset, TubRecord
+from donkeycar.pipeline.types import TubDataset, TubRecord, PctMode
 from donkeycar.pipeline.augmentations import ImageAugmentation
 from donkeycar.parts.image_transformations import ImageTransformations
 from donkeycar.utils import get_model_by_type, normalize_image, train_test_split
@@ -136,9 +136,18 @@ def train(cfg: Config, tub_paths: str, model: str = None,
     tubs = tub_paths.split(',')
     all_tub_paths = [os.path.expanduser(tub) for tub in tubs]
     add_lap_pct = kl.use_lap_pct()
+
+    # Determine pct_mode from configuration
+    pct_mode = PctMode.NONE
+    if getattr(cfg, 'SEGMENT_PCT_MODE', False):
+        pct_mode = PctMode.SEGMENT
+    elif add_lap_pct or cfg.LAP_QUANTIFIER is not None:
+        pct_mode = PctMode.LAP
+
     dataset = TubDataset(config=cfg, tub_paths=all_tub_paths,
                          seq_size=kl.seq_size(),
-                         add_lap_pct=add_lap_pct)
+                         add_lap_pct=add_lap_pct,
+                         pct_mode=pct_mode)
     train_records, val_records \
         = train_test_split(dataset.get_records(), shuffle=True,
                            test_size=(1. - cfg.TRAIN_TEST_SPLIT))

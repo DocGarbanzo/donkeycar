@@ -21,6 +21,19 @@ class CachePolicy(Enum):
     ARRAY = 2
 
 
+class PctMode(Enum):
+    """
+    Performance ranking mode for training.
+
+    NONE: No performance ranking (no lap_pct field)
+    LAP: Lap-based performance ranking
+    SEGMENT: Segment-based performance ranking
+    """
+    NONE = 0
+    LAP = 1
+    SEGMENT = 2
+
+
 TubRecordDict = TypedDict(
     'TubRecordDict',
     {
@@ -165,38 +178,60 @@ class TubRecord(object):
             self._cache_processed_image(_image, as_nparray)
         return _image
 
-    def extend(self, session_lap_rank, ranking_keys=None):
+    def extend(self, session_lap_rank, ranking_keys=None,
+               pct_mode=PctMode.NONE):
         """
-        Extend record with lap performance rankings.
+        Extend record with lap or segment performance rankings.
 
         :param session_lap_rank: Dictionary of session -> lap -> ranking data
+                                For LAP mode: {session_id: {lap: rankings}}
+                                For SEGMENT mode: {session_id: {lap: {segment:
+                                rankings}}}
         :param ranking_keys: Optional list of keys to extract for lap_pct.
-                           If None, uses default ('time', 'distance', 'gyro_z_agg')
+                           If None, uses default ('time', 'distance',
+                           'gyro_z_agg')
                            for backward compatibility.
+        :param pct_mode: Performance mode (NONE, LAP, or SEGMENT)
         :return: True if extension succeeded, False otherwise
         """
         if not session_lap_rank:
             return True
         session_id = self.underlying['_session_id']
-        lap_i = self.underlying['car/lap']
-        lap_i_dict = None
+        lap_i = self.underlying.get('car/lap', 0)
 
         # Use default keys for backward compatibility
         if ranking_keys is None:
             ranking_keys = ('time', 'distance', 'gyro_z_agg')
 
-        if session_lap_rank:
-            # we won't get a result for the last lap as this is incomplete and
-            # doesn't have a time.
-            lap_i_dict = session_lap_rank[session_id].get(lap_i)
+        if pct_mode == PctMode.SEGMENT:
+            # Segment mode: session -> lap -> segment structure
+            segment_id = self.underlying.get('car/segment')
+            if segment_id is None:
+                return False  # No segment assignment, exclude from training
+
+            lap_dict = session_lap_rank.get(session_id, {}).get(lap_i)
+            if lap_dict and segment_id in lap_dict:
+                segment_rank_dict = lap_dict[segment_id]
+                # Convert dict to list in same order as LAP mode
+                lap_pct = [segment_rank_dict[key] for key in ranking_keys
+                          if key in segment_rank_dict]
+                if lap_pct:
+                    self.underlying['lap_pct'] = lap_pct
+                    return True  # Successfully populated lap_pct
+
+            return False  # Couldn't populate lap_pct, exclude from training
+        else:
+            # LAP mode or backward compatibility
+            lap_i_dict = session_lap_rank.get(session_id, {}).get(lap_i)
             if lap_i_dict:
                 # Extract only keys that exist in lap_i_dict
                 lap_pct = [lap_i_dict[key] for key in ranking_keys
                           if key in lap_i_dict]
                 if lap_pct:  # Only set if we have values
                     self.underlying['lap_pct'] = lap_pct
+                    return True  # Successfully populated lap_pct
 
-        return lap_i_dict is not None
+            return False  # Couldn't populate lap_pct, exclude from training
 
     def __repr__(self) -> str:
         return repr(self.underlying)
@@ -209,7 +244,8 @@ class TubDataset(object):
 
     def __init__(self, config: Config, tub_paths: List[str],
                  seq_size: int = 0, add_lap_pct: bool = False,
-                 ranking_keys: Optional[List[str]] = None) -> None:
+                 ranking_keys: Optional[List[str]] = None,
+                 pct_mode: PctMode = PctMode.NONE) -> None:
         """
         Initialize TubDataset.
 
@@ -219,6 +255,7 @@ class TubDataset(object):
         :param add_lap_pct: Whether to add lap_pct to records
         :param ranking_keys: Optional list of keys to use for lap_pct rankings.
                            If None, uses default ('time', 'distance', 'gyro_z_agg')
+        :param pct_mode: Performance mode (NONE, LAP, or SEGMENT)
         """
         self.config = config
         self.tub_paths = tub_paths
@@ -230,10 +267,11 @@ class TubDataset(object):
         self.num_bins = getattr(config, 'NUM_BINS_FOR_LAP_STATS', None)
         self.add_lap_pct = add_lap_pct
         self.seq_size = seq_size
-        self.ranking_keys = ranking_keys  # New parameter for configurable ranking keys
+        self.ranking_keys = ranking_keys
+        self.pct_mode = pct_mode
         logger.info(f'Created TubDataset with add_lap_pct: {self.add_lap_pct} '
                     f'compress: {self.compress} num bins {self.num_bins} '
-                    f'ranking_keys: {self.ranking_keys}')
+                    f'ranking_keys: {self.ranking_keys} pct_mode: {self.pct_mode}')
 
     def get_records(self) -> Union[List[TubRecord], List[List[TubRecord]]]:
         """
@@ -252,9 +290,10 @@ class TubDataset(object):
             session_lap_rank = None
 
             for tub in self.tubs:
-                # Calculate lap performance if needed
-                if self.add_lap_pct:
-                    session_lap_rank = self._calculate_lap_statistics(tub)
+                # Calculate lap or segment performance if needed
+                if self.add_lap_pct or self.pct_mode != PctMode.NONE:
+                    session_lap_rank = self._calculate_performance_statistics(
+                        tub)
 
                 # Load and filter records
                 for underlying in tub:
@@ -265,8 +304,9 @@ class TubDataset(object):
                         filtered_records += 1
                         continue
 
-                    # Extend record with lap rankings
-                    if record.extend(session_lap_rank, self.ranking_keys):
+                    # Extend record with rankings (lap or segment)
+                    if record.extend(session_lap_rank, self.ranking_keys,
+                                   self.pct_mode):
                         self.records.append(record)
                         used_records += 1
                     else:
@@ -284,22 +324,34 @@ class TubDataset(object):
 
         return self.records
 
-    def _calculate_lap_statistics(self, tub: Tub) -> dict:
+    def _calculate_performance_statistics(self, tub: Tub) -> dict:
         """
-        Calculate lap statistics for a tub.
+        Calculate lap or segment performance statistics for a tub.
 
         Separated from get_records() for better modularity.
 
         :param tub: Tub to calculate statistics for
-        :return: Session lap rank dictionary
+        :return: Session performance rank dictionary
+                 For LAP mode: {session_id: {lap: [rankings]}}
+                 For SEGMENT mode: {session_id: {lap: {segment: [rankings]}}}
         """
         tub_stat = TubStatistics(
             tub, getattr(self.config, "GYRO_Z_INDEX", 2))
-        session_lap_rank = tub_stat.calculate_lap_performance(
-            self.config.USE_LAP_0,
-            num_bins=self.num_bins,
-            compress=self.compress)
-        return session_lap_rank
+
+        # Determine mode: prefer pct_mode, fall back to add_lap_pct
+        if self.pct_mode == PctMode.SEGMENT:
+            session_rank = tub_stat.calculate_segment_performance(
+                self.config.USE_LAP_0,
+                num_bins=self.num_bins)
+        elif self.pct_mode == PctMode.LAP or self.add_lap_pct:
+            session_rank = tub_stat.calculate_lap_performance(
+                self.config.USE_LAP_0,
+                num_bins=self.num_bins,
+                compress=self.compress)
+        else:
+            session_rank = None
+
+        return session_rank
 
     @staticmethod
     def convert_to_weight(session_lap_rank):

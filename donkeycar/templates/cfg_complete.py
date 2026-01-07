@@ -761,3 +761,12 @@ STOP_SIGN_REVERSE_THROTTLE = -0.5     # Throttle during reversing when detected 
 # FPS counter
 SHOW_FPS = False
 FPS_DEBUG_INTERVAL = 10    # the interval in seconds for printing the frequency info into the shell
+
+#SEGMENT PERFORMANCE
+#Enable segment-based performance ranking for training
+#When enabled, model learns from best-driven segments across laps instead of best complete laps
+SEGMENT_PCT_MODE = False  # True = segment-based, False = lap-based
+SEGMENT_STRATEGY = 'hybrid'  # Segmentation strategy: threshold, extrema, gradient, or hybrid
+SEGMENT_LAP_DETECTOR = 'ycrossing'  # Lap detection strategy: ycrossing or drift
+SEGMENT_MIN_LENGTH = 1.0  # Minimum segment length in meters
+SEGMENT_CURVATURE_THRESHOLD = 0.1  # Curvature threshold for segmentation
