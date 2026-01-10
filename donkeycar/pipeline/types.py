@@ -335,8 +335,7 @@ class TubDataset(object):
                  For LAP mode: {session_id: {lap: [rankings]}}
                  For SEGMENT mode: {session_id: {lap: {segment: [rankings]}}}
         """
-        tub_stat = TubStatistics(
-            tub, getattr(self.config, "GYRO_Z_INDEX", 2))
+        tub_stat = TubStatistics(tub, config=self.config)
 
         # Determine mode: prefer pct_mode, fall back to add_lap_pct
         if self.pct_mode == PctMode.SEGMENT:

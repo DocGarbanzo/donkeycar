@@ -770,3 +770,69 @@ SEGMENT_STRATEGY = 'hybrid'  # Segmentation strategy: threshold, extrema, gradie
 SEGMENT_LAP_DETECTOR = 'ycrossing'  # Lap detection strategy: ycrossing or drift
 SEGMENT_MIN_LENGTH = 1.0  # Minimum segment length in meters
 SEGMENT_CURVATURE_THRESHOLD = 0.1  # Curvature threshold for segmentation
+
+#FIELD AGGREGATIONS FOR LAP/SEGMENT PERFORMANCE
+#Configure which tub fields to aggregate per lap/segment and how to rank them
+#This enables custom behavioral parameters for training (e.g., smoothness, speed, accel)
+
+# Define transform functions (like TRAIN_FILTER pattern)
+def abs_transform(value):
+    """Absolute value transform."""
+    return abs(value)
+
+# Default field aggregations (can be customized)
+# DEPRECATED: GYRO_Z_INDEX is superseded by FIELD_AGGREGATIONS
+# To maintain backward compatibility, this config uses GYRO_Z_INDEX if FIELD_AGGREGATIONS is not specified
+FIELD_AGGREGATIONS = [
+    {
+        'field': 'car/gyro',
+        'index': 2,                    # Z-axis (default GYRO_Z_INDEX)
+        'output_key': 'gyro_z_agg',
+        'transform': abs_transform,
+        'aggregation': 'avg'           # Options: avg, sum, min, max, median
+    }
+]
+
+# Sorting criteria for ranking laps/segments
+# These keys must match the 'output_key' values in FIELD_AGGREGATIONS
+LAP_SORTING_CRITERIA = [
+    {'key': 'time'},                   # Primary: lap time
+    {'key': 'distance'},               # Secondary: distance traveled
+    {'key': 'gyro_z_agg'},            # Tertiary: smoothness (gyro)
+]
+
+# Example: Custom field aggregation for acceleration
+# def clip_1g_transform(value):
+#     """Clip acceleration to 1 g"""
+#     return min(abs(value) * 9.81, 9.81)
+#
+# FIELD_AGGREGATIONS = [
+#     {
+#         'field': 'car/gyro',
+#         'index': 2,
+#         'output_key': 'gyro_z_agg',
+#         'transform': abs_transform,
+#         'aggregation': 'avg'
+#     },
+#     {
+#         'field': 'car/accel',
+#         'index': 0,                  # X-axis acceleration
+#         'output_key': 'accel_x_sum',
+#         'transform': clip_1g_transform,
+#         'aggregation': 'sum'
+#     },
+#     {
+#         'field': 'car/speed',
+#         'index': None,               # Scalar field
+#         'output_key': 'speed_min',
+#         'transform': None,
+#         'aggregation': 'min'
+#     }
+# ]
+#
+# LAP_SORTING_CRITERIA = [
+#     {'key': 'time'},
+#     {'key': 'gyro_z_agg'},
+#     {'key': 'accel_x_sum'},
+#     {'key': 'speed_min'}
+# ]

@@ -141,7 +141,7 @@ def train(cfg: Config, tub_paths: str, model: str = None,
     pct_mode = PctMode.NONE
     if getattr(cfg, 'SEGMENT_PCT_MODE', False):
         pct_mode = PctMode.SEGMENT
-    elif add_lap_pct or cfg.LAP_QUANTIFIER is not None:
+    elif add_lap_pct or getattr(cfg, 'LAP_QUANTIFIER', None) is not None:
         pct_mode = PctMode.LAP
 
     dataset = TubDataset(config=cfg, tub_paths=all_tub_paths,
