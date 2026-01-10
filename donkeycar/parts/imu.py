@@ -299,11 +299,18 @@ class BNO055Ada:
         if self.time is None:
             self.time = new_time
         dt = new_time - self.time
-        self.gyro *= (1.0 - self.alpha)
-        self.gyro += self.alpha * np.array(self.sensor.gyro)
 
-        self.accel *= (1.0 - self.alpha)
-        self.accel += self.alpha * np.array(self.sensor.linear_acceleration)
+        # Read gyro and ignore [0, 0, 0] sensor errors
+        gyro_reading = np.array(self.sensor.gyro)
+        if np.any(gyro_reading):
+            self.gyro *= (1.0 - self.alpha)
+            self.gyro += self.alpha * gyro_reading
+
+        # Read accel and ignore [0, 0, 0] sensor errors
+        accel_reading = np.array(self.sensor.linear_acceleration)
+        if np.any(accel_reading):
+            self.accel *= (1.0 - self.alpha)
+            self.accel += self.alpha * accel_reading
 
         # euler angles are in z, y, x order in the sensor
         euler_reading = np.array(self.sensor.euler[::-1])
