@@ -2,6 +2,7 @@ from collections import defaultdict
 from operator import itemgetter
 import logging
 from copy import copy
+from dataclasses import dataclass
 from typing import Optional, List, Dict, Callable, Any
 
 from donkeycar.parts.tub_v2 import Tub
@@ -21,6 +22,153 @@ from donkeycar.course_analysis import (
 logger = logging.getLogger(__name__)
 
 
+class SegmentTracker:
+    """Tracks segment state during iteration to avoid nesting."""
+
+    def __init__(self, field_aggregations, use_lap_0):
+        self.field_aggregations = field_aggregations
+        self.use_lap_0 = use_lap_0
+        self.current_session = None
+        self.current_lap = None
+        self.current_segment = None
+        self.segment_start_time = None
+        self.segment_start_dist = None
+        self.field_accumulators = self._create_accumulators()
+
+    def _create_accumulators(self):
+        return {
+            spec.output_key: FieldAccumulator(spec.aggregation)
+            for spec in self.field_aggregations
+        }
+
+    def should_skip(self, record):
+        """Check if record should be skipped."""
+        segment = record.get('car/segment')
+        if segment is None:
+            return True
+
+        lap = record.get('car/lap')
+        if not self.use_lap_0 and lap == 0:
+            return True
+
+        return False
+
+    def handle_session_change(self, session_id, lap, segment, timestamp_ms,
+                             distance, segment_instances,
+                             finalize_callback):
+        """Handle session change, return True if changed."""
+        if session_id == self.current_session:
+            return False
+
+        finalize_callback(segment_instances, self.current_session,
+                         self.current_lap, self.current_segment,
+                         self.segment_start_time, self.segment_start_dist,
+                         timestamp_ms, distance, self.field_accumulators)
+
+        self.current_session = session_id
+        self.current_lap = lap
+        self.current_segment = segment
+        self.segment_start_time = timestamp_ms
+        self.segment_start_dist = distance
+        self.field_accumulators = self._create_accumulators()
+        return True
+
+    def handle_lap_change(self, lap, segment, timestamp_ms, distance,
+                         segment_instances, finalize_callback):
+        """Handle lap change, return True if changed."""
+        if lap == self.current_lap:
+            return False
+
+        finalize_callback(segment_instances, self.current_session,
+                         self.current_lap, self.current_segment,
+                         self.segment_start_time, self.segment_start_dist,
+                         timestamp_ms, distance, self.field_accumulators)
+
+        self.current_lap = lap
+        self.current_segment = segment
+        self.segment_start_time = timestamp_ms
+        self.segment_start_dist = distance
+        self.field_accumulators = self._create_accumulators()
+        return True
+
+    def handle_segment_change(self, segment, timestamp_ms, distance,
+                             segment_instances, finalize_callback):
+        """Handle segment change, return True if changed."""
+        if segment == self.current_segment:
+            return False
+
+        finalize_callback(segment_instances, self.current_session,
+                         self.current_lap, self.current_segment,
+                         self.segment_start_time, self.segment_start_dist,
+                         timestamp_ms, distance, self.field_accumulators)
+
+        self.current_segment = segment
+        self.segment_start_time = timestamp_ms
+        self.segment_start_dist = distance
+        self.field_accumulators = self._create_accumulators()
+        return True
+
+    def accumulate_fields(self, record):
+        """Accumulate field values for current segment."""
+        for spec in self.field_aggregations:
+            value = spec.extract(record)
+            if value is None:
+                continue
+            self.field_accumulators[spec.output_key].add(value)
+
+
+@dataclass
+class FieldAggregationSpec:
+    """Specification for aggregating a field across lap/segment."""
+    field: str                           # e.g., 'car/gyro'
+    output_key: str                      # e.g., 'gyro_z_agg'
+    index: Optional[int] = None          # Vector index (None for scalars)
+    transform: Optional[Callable] = None # Transform function
+    aggregation: str = 'avg'             # avg, sum, min, max, median
+
+    def extract(self, record: dict) -> Optional[float]:
+        """Extract and transform value from record."""
+        try:
+            value = record[self.field]
+            if self.index is not None:
+                value = value[self.index]
+            if self.transform:
+                value = self.transform(value)
+            return float(value)
+        except (KeyError, IndexError, TypeError):
+            return None
+
+
+class FieldAccumulator:
+    """Accumulates field values for aggregation."""
+
+    def __init__(self, aggregation_method: str):
+        self.method = aggregation_method
+        self.values = []
+
+    def add(self, value: float):
+        self.values.append(value)
+
+    def compute(self) -> Optional[float]:
+        if not self.values:
+            return None
+
+        if self.method == 'avg':
+            return sum(self.values) / len(self.values)
+        elif self.method == 'sum':
+            return sum(self.values)
+        elif self.method == 'min':
+            return min(self.values)
+        elif self.method == 'max':
+            return max(self.values)
+        elif self.method == 'median':
+            sorted_vals = sorted(self.values)
+            mid = len(sorted_vals) // 2
+            return sorted_vals[mid]
+        else:
+            raise ValueError(f'Unknown aggregation method: {self.method}')
+
+
 class TubStatistics(object):
     """
     A statistics calculator for tub data. Sorts and calculates quantiles for
@@ -29,39 +177,138 @@ class TubStatistics(object):
 
     def __init__(self,
                  tub: Tub,
+                 config: Optional[Any] = None,
                  gyro_z_index: int = 1,
                  sorting_strategy: Optional[SortingStrategy] = None,
-                 field_aggregations: Optional[List[Dict[str, Any]]] = None):
+                 field_aggregations: Optional[List] = None):
         """
         Construct tub statistics calculator for tub
 
         :param tub:                 input tub
-        :param gyro_z_index:        z coordinate in 3d gyro vector (backward compat)
-        :param sorting_strategy:    Optional custom sorting strategy for lap ranking.
-                                    If None, uses default (time, distance, gyro_z_agg)
-        :param field_aggregations:  Optional list of field aggregation specs:
-                                    [{'field': 'car/gyro',
-                                      'output_key': 'gyro_z_agg',
-                                      'extractor': lambda r: r['car/gyro'][1],
-                                      'transform': abs}]
-                                    If None, uses default gyro aggregation
+        :param config:              Config object (loads FIELD_AGGREGATIONS,
+                                    LAP_SORTING_CRITERIA)
+        :param gyro_z_index:        z coordinate in 3d gyro vector (deprecated,
+                                    use config)
+        :param sorting_strategy:    Optional custom sorting strategy (backward compat)
+        :param field_aggregations:  Optional list of FieldAggregationSpec or
+                                    old-style dicts (backward compat)
         """
         self.tub = tub
-        self.sorting_strategy = sorting_strategy or default_lap_sorting_strategy()
 
-        # Default field aggregation (backward compatible)
-        if field_aggregations is None:
-            self.field_aggregations = [{
-                'field': 'car/gyro',
-                'output_key': 'gyro_z_agg',
-                'extractor': lambda record: record['car/gyro'][gyro_z_index],
-                'transform': abs
-            }]
+        # Load field aggregations with precedence:
+        # 1. Direct parameter (backward compat)
+        # 2. From config (new preferred method)
+        # 3. Default fallback
+        if field_aggregations is not None:
+            # Handle both old-style dicts and new FieldAggregationSpec
+            self.field_aggregations = self._normalize_field_aggregations(
+                field_aggregations, gyro_z_index)
+        elif config:
+            self.field_aggregations = (
+                self._load_field_aggregations_from_config(config))
         else:
-            self.field_aggregations = field_aggregations
+            # Backward compatible defaults
+            self.field_aggregations = [
+                FieldAggregationSpec(
+                    field='car/gyro',
+                    output_key='gyro_z_agg',
+                    index=gyro_z_index,
+                    transform=abs,
+                    aggregation='avg'
+                )
+            ]
+
+        # Load sorting strategy
+        if sorting_strategy:
+            self.sorting_strategy = sorting_strategy
+        elif config:
+            self.sorting_strategy = (
+                self._load_sorting_strategy_from_config(config))
+        else:
+            self.sorting_strategy = default_lap_sorting_strategy()
 
         logger.info(f'Creating TubStatistics with '
                     f'{len(self.field_aggregations)} field aggregations')
+
+    def _normalize_field_aggregations(self, field_aggregations: List,
+                                     gyro_z_index: int) -> List[
+                                         FieldAggregationSpec]:
+        """Convert old-style dict specs to FieldAggregationSpec."""
+        normalized = []
+        for spec in field_aggregations:
+            if isinstance(spec, FieldAggregationSpec):
+                normalized.append(spec)
+            elif isinstance(spec, dict):
+                # Old style dict with 'extractor' and 'transform'
+                if 'extractor' in spec:
+                    # Cannot convert old-style extractor lambdas,
+                    # use gyro_z_index default
+                    logger.warning('Old-style field_aggregations dict with '
+                                 'extractor not supported. Using defaults.')
+                    normalized.append(FieldAggregationSpec(
+                        field=spec['field'],
+                        output_key=spec['output_key'],
+                        index=gyro_z_index,
+                        transform=spec.get('transform'),
+                        aggregation='avg'
+                    ))
+                else:
+                    # New style dict
+                    normalized.append(FieldAggregationSpec(
+                        field=spec['field'],
+                        output_key=spec['output_key'],
+                        index=spec.get('index'),
+                        transform=spec.get('transform'),
+                        aggregation=spec.get('aggregation', 'avg')
+                    ))
+        return normalized
+
+    def _load_field_aggregations_from_config(self, config) -> List[
+        FieldAggregationSpec]:
+        """Load field aggregation specs from config."""
+        config_specs = getattr(config, 'FIELD_AGGREGATIONS', None)
+
+        if not config_specs:
+            # Fallback to legacy GYRO_Z_INDEX
+            gyro_z_index = getattr(config, 'GYRO_Z_INDEX', 1)
+            logger.info(f'No FIELD_AGGREGATIONS in config, using '
+                       f'default gyro aggregation with index {gyro_z_index}')
+            return [
+                FieldAggregationSpec(
+                    field='car/gyro',
+                    output_key='gyro_z_agg',
+                    index=gyro_z_index,
+                    transform=abs,
+                    aggregation='avg'
+                )
+            ]
+
+        # Convert config dicts to FieldAggregationSpec
+        specs = []
+        for spec_dict in config_specs:
+            spec = FieldAggregationSpec(
+                field=spec_dict['field'],
+                output_key=spec_dict['output_key'],
+                index=spec_dict.get('index'),
+                transform=spec_dict.get('transform'),
+                aggregation=spec_dict.get('aggregation', 'avg')
+            )
+            specs.append(spec)
+            logger.info(f'Loaded field aggregation: {spec.output_key} from '
+                       f'{spec.field}[{spec.index}] using {spec.aggregation}')
+
+        return specs
+
+    def _load_sorting_strategy_from_config(self, config) -> SortingStrategy:
+        """Load sorting strategy from config."""
+        criteria = getattr(config, 'LAP_SORTING_CRITERIA', None)
+        if criteria:
+            logger.info(f'Loaded sorting criteria from config: '
+                       f'{[c["key"] for c in criteria]}')
+            return SortingStrategy(criteria)
+        else:
+            logger.info('No LAP_SORTING_CRITERIA in config, using defaults')
+            return default_lap_sorting_strategy()
 
     def generate_laptimes_from_records(self, overwrite=False):
 
@@ -115,11 +362,9 @@ class TubStatistics(object):
         res[session_id] = lap_times
 
         for sess_id, lap_times in res.items():
-            meta_session_id_dict = self.tub.manifest.metadata.get(sess_id)
-            if not meta_session_id_dict:
-                self.tub.manifest.metadata[sess_id] = dict(laptimer=lap_times)
-            elif ('laptimer' in meta_session_id_dict and overwrite
-                  or 'laptimer' not in meta_session_id_dict):
+            meta_session_id_dict = self.tub.manifest.metadata.setdefault(
+                sess_id, {})
+            if overwrite or 'laptimer' not in meta_session_id_dict:
                 meta_session_id_dict['laptimer'] = lap_times
 
         self.tub.manifest.write_metadata()
@@ -285,10 +530,8 @@ class TubStatistics(object):
                     self.tub.write_record(record)
 
             # Store metadata
-            session_dict = self.tub.manifest.metadata.get(session_id)
-            if not session_dict:
-                self.tub.manifest.metadata[session_id] = {}
-                session_dict = self.tub.manifest.metadata[session_id]
+            session_dict = self.tub.manifest.metadata.setdefault(
+                session_id, {})
 
             session_dict['segmentation'] = {
                 'num_segments': len(segmentation.segment_boundaries),
@@ -311,170 +554,128 @@ class TubStatistics(object):
 
     def calculate_segment_performance(self, use_lap_0=False, num_bins=None):
         """
-        Calculate performance rankings for each segment across all laps.
+        Calculate performance rankings for each segment instance across laps.
 
-        Similar to calculate_lap_performance() but operates on segments within
-        laps. Returns rankings in session -> lap -> segment structure.
+        Uses same field aggregation specs as lap performance for consistency.
 
         :param use_lap_0: If the 0'th lap should be ignored
         :param num_bins: If given, buckets the segments into as many buckets
 
         :return: dict of type
-                 {sess_id: {lap_i: {seg_i: [time_pct, gyro_z_pct,
-                 distance_pct]}}}
+                 {sess_id: {lap_i: {seg_i: rankings_dict}}}
         """
         self._calculate_aggregated_fields()
         logger.info(f'Calculating segment performance in tub '
                     f'{self.tub.base_path}')
 
-        sessions = self.tub.manifest.manifest_metadata['sessions'][
-            'all_full_ids']
-
-        # Collect segment data across all laps
-        # segment_instances[session_id][segment_id] = [
-        #    {'lap': 0, 'time': t, 'distance': d, 'gyro_z_agg': g}, ...
-        # ]
         segment_instances = defaultdict(lambda: defaultdict(list))
-
-        # First pass: collect all segment instances
-        current_session = None
-        current_lap = None
-        current_segment = None
-        segment_start_time = None
-        segment_start_dist = None
-        segment_gyro_sum = 0.0
-        segment_gyro_count = 0
+        tracker = SegmentTracker(self.field_aggregations, use_lap_0)
 
         for record in self.tub:
+            if tracker.should_skip(record):
+                continue
+
             session_id = record.get('_session_id')
             lap = record.get('car/lap')
             segment = record.get('car/segment')
             timestamp_ms = record.get('_timestamp_ms', 0)
             distance = record.get('car/distance', 0.0)
 
-            # Skip records without segment assignment
-            if segment is None:
+            # Handle state changes (early continue on change)
+            if tracker.handle_session_change(
+                session_id, lap, segment, timestamp_ms, distance,
+                segment_instances, self._finalize_segment_instance):
                 continue
 
-            # Skip lap 0 if requested
-            if not use_lap_0 and lap == 0:
+            if tracker.handle_lap_change(
+                lap, segment, timestamp_ms, distance, segment_instances,
+                self._finalize_segment_instance):
                 continue
 
-            # Get gyro value
-            gyro_value = None
-            try:
-                gyro = record.get('car/gyro')
-                if gyro:
-                    gyro_value = abs(gyro[self.sorting_strategy.gyro_z_index]
-                                   if hasattr(self.sorting_strategy,
-                                            'gyro_z_index')
-                                   else gyro[1])
-            except (TypeError, IndexError):
-                pass
-
-            # Session change - reset tracking
-            if session_id != current_session:
-                current_session = session_id
-                current_lap = lap
-                current_segment = segment
-                segment_start_time = timestamp_ms
-                segment_start_dist = distance
-                segment_gyro_sum = gyro_value or 0.0
-                segment_gyro_count = 1 if gyro_value else 0
+            if tracker.handle_segment_change(
+                segment, timestamp_ms, distance, segment_instances,
+                self._finalize_segment_instance):
                 continue
 
-            # Lap change - finalize previous segment
-            if lap != current_lap:
-                if (current_segment is not None and segment_start_time
-                    is not None):
-                    seg_time = (timestamp_ms - segment_start_time) / 1000.0
-                    seg_dist = distance - segment_start_dist
-                    seg_gyro = (segment_gyro_sum / segment_gyro_count
-                               if segment_gyro_count > 0 else 0.0)
-
-                    segment_instances[current_session][current_segment].append(
-                        {
-                            'lap': current_lap,
-                            'time': seg_time,
-                            'distance': seg_dist,
-                            'gyro_z_agg': seg_gyro
-                        }
-                    )
-
-                current_lap = lap
-                current_segment = segment
-                segment_start_time = timestamp_ms
-                segment_start_dist = distance
-                segment_gyro_sum = gyro_value or 0.0
-                segment_gyro_count = 1 if gyro_value else 0
-                continue
-
-            # Segment change within lap - finalize previous segment
-            if segment != current_segment:
-                if segment_start_time is not None:
-                    seg_time = (timestamp_ms - segment_start_time) / 1000.0
-                    seg_dist = distance - segment_start_dist
-                    seg_gyro = (segment_gyro_sum / segment_gyro_count
-                               if segment_gyro_count > 0 else 0.0)
-
-                    segment_instances[current_session][current_segment].append(
-                        {
-                            'lap': current_lap,
-                            'time': seg_time,
-                            'distance': seg_dist,
-                            'gyro_z_agg': seg_gyro
-                        }
-                    )
-
-                current_segment = segment
-                segment_start_time = timestamp_ms
-                segment_start_dist = distance
-                segment_gyro_sum = gyro_value or 0.0
-                segment_gyro_count = 1 if gyro_value else 0
-            else:
-                # Same segment, accumulate gyro
-                if gyro_value:
-                    segment_gyro_sum += gyro_value
-                    segment_gyro_count += 1
+            # Accumulate field values
+            tracker.accumulate_fields(record)
 
         # Finalize last segment
-        if (current_segment is not None and segment_start_time is not None
-            and current_session is not None):
-            # Use last recorded values
-            for record in self.tub:
-                pass
-            seg_time = (record.get('_timestamp_ms', 0) - segment_start_time
-                       ) / 1000.0
-            seg_dist = record.get('car/distance', 0.0) - segment_start_dist
-            seg_gyro = (segment_gyro_sum / segment_gyro_count
-                       if segment_gyro_count > 0 else 0.0)
+        self._finalize_last_segment(segment_instances, tracker)
 
-            segment_instances[current_session][current_segment].append({
-                'lap': current_lap,
-                'time': seg_time,
-                'distance': seg_dist,
-                'gyro_z_agg': seg_gyro
-            })
+        return self._rank_segment_instances(segment_instances, num_bins)
 
-        # Second pass: rank segments across laps
+    def _finalize_last_segment(self, segment_instances, tracker):
+        """Finalize the last segment using last record data."""
+        last_timestamp = None
+        last_distance = None
+        for record in self.tub:
+            last_timestamp = record.get('_timestamp_ms', 0)
+            last_distance = record.get('car/distance', 0.0)
+
+        if tracker.current_session and last_timestamp is not None:
+            self._finalize_segment_instance(
+                segment_instances, tracker.current_session,
+                tracker.current_lap, tracker.current_segment,
+                tracker.segment_start_time, tracker.segment_start_dist,
+                last_timestamp, last_distance, tracker.field_accumulators
+            )
+
+    def _finalize_segment_instance(self, segment_instances, session_id, lap,
+                                   segment_id, start_time, start_dist,
+                                   end_time, end_dist, field_accumulators):
+        """Finalize a segment instance and add to collection."""
+        if (session_id is None or segment_id is None or
+            start_time is None or start_dist is None):
+            return
+
+        # Compute time and distance
+        seg_time = (end_time - start_time) / 1000.0
+        seg_dist = end_dist - start_dist
+
+        # Build instance dict with all field values
+        instance = {
+            'lap': lap,
+            'time': seg_time,
+            'distance': seg_dist
+        }
+
+        # Add aggregated field values
+        for output_key, accumulator in field_accumulators.items():
+            value = accumulator.compute()
+            if value is not None:
+                instance[output_key] = value
+
+        segment_instances[session_id][segment_id].append(instance)
+
+    def _rank_segment_instances(self, segment_instances, num_bins):
+        """Rank segment instances and return session->lap->segment structure."""
         session_segment_rank = defaultdict(lambda: defaultdict(dict))
 
         for session_id, segments in segment_instances.items():
-            for segment_id, instances in segments.items():
-                if not instances:
-                    continue
-
-                # Rank instances using sorting strategy
-                rankings = self.sorting_strategy.rank_laps(instances,
-                                                          num_bins)
-
-                # Store in session -> lap -> segment structure
-                for inst_idx, inst_rankings in rankings.items():
-                    lap_num = instances[inst_idx]['lap']
-                    session_segment_rank[session_id][lap_num][segment_id] = (
-                        inst_rankings)
+            self._rank_session_segments(session_id, segments, num_bins,
+                                       session_segment_rank)
 
         return session_segment_rank
+
+    def _rank_session_segments(self, session_id, segments, num_bins,
+                              session_segment_rank):
+        """Rank all segments for a single session."""
+        for segment_id, instances in segments.items():
+            if not instances:
+                continue
+
+            rankings = self.sorting_strategy.rank_laps(instances, num_bins)
+            self._store_segment_rankings(session_id, segment_id, instances,
+                                        rankings, session_segment_rank)
+
+    def _store_segment_rankings(self, session_id, segment_id, instances,
+                                rankings, session_segment_rank):
+        """Store segment rankings in the result structure."""
+        for inst_idx, inst_rankings in rankings.items():
+            lap_num = instances[inst_idx]['lap']
+            session_segment_rank[session_id][lap_num][segment_id] = (
+                inst_rankings)
 
     def _calculate_aggregated_fields(self):
         """
@@ -489,47 +690,59 @@ class TubStatistics(object):
         for field_spec in self.field_aggregations:
             self._aggregate_single_field(field_spec)
 
-    def _calculate_aggregated_gyro(self):
-        """
-        Backward compatibility alias for _calculate_aggregated_fields().
-
-        Deprecated: Use _calculate_aggregated_fields() instead.
-        """
-        self._calculate_aggregated_fields()
-
-    def _aggregate_single_field(self, field_spec: dict):
-        """Aggregate a single field across all records."""
-        output_key = field_spec['output_key']
-        extractor = field_spec['extractor']
-        transform = field_spec.get('transform', lambda x: x)
-
-        aggregator = FieldAggregator()
+    def _aggregate_single_field(self, spec: FieldAggregationSpec):
+        """Aggregate a single field across all laps in all sessions."""
+        current_session = None
+        current_lap = None
+        accumulator = FieldAccumulator(spec.aggregation)
+        lap_field_map = {}
 
         for record in self.tub:
+            session_id = record.get('_session_id')
             lap = record.get('car/lap', 0)
-            session_id = record['_session_id']
 
-            # Extract and transform value, skip on error
-            value = self._extract_and_transform(record, extractor, transform, output_key)
+            # Handle session change - finalize previous if exists
+            if session_id != current_session:
+                self._maybe_finalize_session(lap_field_map, current_lap,
+                                            accumulator, current_session,
+                                            spec.output_key)
+                current_session = session_id
+                current_lap = lap
+                lap_field_map = {}
+                accumulator = FieldAccumulator(spec.aggregation)
+
+            # Handle lap change
+            if lap != current_lap:
+                lap_field_map[current_lap] = accumulator.compute()
+                current_lap = lap
+                accumulator = FieldAccumulator(spec.aggregation)
+
+            # Accumulate value
+            value = spec.extract(record)
             if value is None:
                 continue
+            accumulator.add(value)
 
-            # Update aggregation state
-            aggregator.process_record(session_id, lap, value,
-                                     lambda data, sess: self._update_field_metadata(data, sess, output_key))
+        # Finalize last lap
+        self._maybe_finalize_session(lap_field_map, current_lap,
+                                    accumulator, current_session,
+                                    spec.output_key)
 
-        # Finalize last session
-        aggregator.finalize(lambda data, sess: self._update_field_metadata(data, sess, output_key))
+    def _maybe_finalize_session(self, lap_field_map, current_lap,
+                               accumulator, current_session, output_key):
+        """Helper to finalize session only if it exists."""
+        if current_session is None:
+            return
+        self._finalize_lap_field(lap_field_map, current_lap,
+                                accumulator, current_session,
+                                output_key)
 
-    def _extract_and_transform(self, record: dict, extractor: Callable,
-                               transform: Callable, output_key: str) -> Optional[float]:
-        """Extract value from record and apply transformation."""
-        try:
-            raw_val = extractor(record)
-            return transform(raw_val)
-        except (KeyError, IndexError, TypeError) as e:
-            logger.warning(f'Failed to extract {output_key}: {e}')
-            return None
+    def _finalize_lap_field(self, lap_field_map, current_lap,
+                           accumulator, current_session, output_key):
+        """Finalize lap field data and update metadata."""
+        lap_field_map[current_lap] = accumulator.compute()
+        self._update_field_metadata(lap_field_map, current_session,
+                                   output_key)
 
     def _update_field_metadata(self, lap_field_map: dict, session: str,
                                output_key: str):
@@ -545,69 +758,10 @@ class TubStatistics(object):
         for entry in lap_timer:
             lap_i = entry['lap']
             agg_value = lap_field_map.get(lap_i)
+
+            # Early continue eliminates else branch
             if agg_value is None:
                 entry['valid'] = False
-            else:
-                entry[output_key] = agg_value
+                continue
 
-
-class FieldAggregator:
-    """
-    Handles state for aggregating field values across sessions and laps.
-
-    Separates state management from the main logic to reduce nesting.
-    """
-
-    def __init__(self):
-        self.current_session = None
-        self.current_lap = None
-        self.lap_sum = 0.0
-        self.lap_count = 0
-        self.lap_field_map = {}
-
-    def process_record(self, session_id: str, lap: int, value: float,
-                      update_callback: Callable):
-        """Process a single record's value."""
-        # Session change - finalize previous session
-        if session_id != self.current_session:
-            self._finalize_session(update_callback)
-            self._start_new_session(session_id)
-            self.current_lap = lap
-
-        # Lap change - finalize previous lap
-        elif lap != self.current_lap:
-            self._finalize_lap()
-            self.current_lap = lap
-
-        # Accumulate value for current lap
-        self.lap_sum += value
-        self.lap_count += 1
-
-    def _finalize_lap(self):
-        """Save accumulated data for current lap."""
-        if self.lap_count == 0 or self.current_lap is None:
-            return
-
-        avg_value = self.lap_sum / self.lap_count
-        self.lap_field_map[self.current_lap] = avg_value
-        self.lap_sum = 0.0
-        self.lap_count = 0
-
-    def _finalize_session(self, update_callback: Callable):
-        """Save accumulated data for current session."""
-        if self.current_session is None:
-            return
-
-        self._finalize_lap()
-        update_callback(self.lap_field_map, self.current_session)
-        self.lap_field_map = {}
-
-    def _start_new_session(self, session_id: str):
-        """Initialize state for new session."""
-        self.current_session = session_id
-        self.lap_sum = 0.0
-        self.lap_count = 0
-
-    def finalize(self, update_callback: Callable):
-        """Finalize any remaining data."""
-        self._finalize_session(update_callback)
+            entry[output_key] = agg_value

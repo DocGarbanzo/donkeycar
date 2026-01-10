@@ -321,8 +321,8 @@ class TestTubDatasetSortingAndTransformation(unittest.TestCase):
         stats = TubStatistics(tub, gyro_z_index=1)
         stats.generate_laptimes_from_records()
 
-        # Calculate aggregated gyro (uses abs internally)
-        stats._calculate_aggregated_gyro()
+        # Calculate aggregated fields (uses abs internally for gyro)
+        stats._calculate_aggregated_fields()
 
         session_id = tub.manifest.session_id[1]
         lap_times = tub.manifest.metadata[session_id]['laptimer']

@@ -17,6 +17,7 @@ import os
 
 from donkeycar.parts.tub_v2 import Tub
 from donkeycar.parts.tub_statistics import TubStatistics
+from donkeycar.config import load_config
 
 
 class SegmentCommand:
@@ -43,6 +44,8 @@ class SegmentCommand:
                            help='minimum segment length in meters (default: 1.0)')
         parser.add_argument('--curvature-threshold', type=float, default=0.1,
                            help='curvature threshold for segmentation (default: 0.1)')
+        parser.add_argument('--config', type=str, default=None,
+                           help='path to config file for field aggregations')
         parser.add_argument('--visualize', action='store_true',
                            help='show visualization after segmentation')
 
@@ -80,9 +83,25 @@ class SegmentCommand:
             traceback.print_exc()
             return
 
+        # Load config if provided
+        config = None
+        if args.config:
+            config_path = os.path.expanduser(args.config)
+            if os.path.exists(config_path):
+                print(f"\nLoading config from {config_path}...")
+                try:
+                    config = load_config(config_path)
+                    print("  Config loaded successfully")
+                except Exception as e:
+                    print(f"Warning: Failed to load config: {e}")
+                    print("  Using default field aggregations")
+            else:
+                print(f"Warning: Config file not found: {config_path}")
+                print("  Using default field aggregations")
+
         print("\nComputing segment assignments...")
         try:
-            stats = TubStatistics(tub)
+            stats = TubStatistics(tub, config=config)
             stats.compute_segment_assignments(
                 lap_detector=args.lap_detector,
                 segmentation_strategy=args.strategy,

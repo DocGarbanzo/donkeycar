@@ -279,8 +279,8 @@ class TestTubStatistics(unittest.TestCase):
         # First generate lap times
         stats.generate_laptimes_from_records()
         
-        # Then calculate aggregated gyro
-        stats._calculate_aggregated_gyro()
+        # Then calculate aggregated fields (including gyro)
+        stats._calculate_aggregated_fields()
         
         session_id = tub.manifest.session_id[1]  # Get actual session ID
         lap_times = tub.manifest.metadata[session_id]['laptimer']
@@ -573,7 +573,7 @@ class TestTubStatistics(unittest.TestCase):
         session_id1 = tub1.manifest.session_id[1]
         stats1 = TubStatistics(tub1, gyro_z_index=1)
         stats1.generate_laptimes_from_records()
-        stats1._calculate_aggregated_gyro()
+        stats1._calculate_aggregated_fields()
         
         lap_times1 = tub1.manifest.metadata[session_id1]['laptimer']
         # Should use 0.5 as the gyro value
@@ -607,7 +607,7 @@ class TestTubStatistics(unittest.TestCase):
         session_id2 = tub2.manifest.session_id[1]
         stats2 = TubStatistics(tub2, gyro_z_index=2)
         stats2.generate_laptimes_from_records()
-        stats2._calculate_aggregated_gyro()
+        stats2._calculate_aggregated_fields()
         
         lap_times2 = tub2.manifest.metadata[session_id2]['laptimer']
         # Should use 0.9 as the gyro value
