@@ -58,7 +58,7 @@ class InteractiveIMUVisualizer:
     """
 
     def __init__(self, path_data, cfg, lap_method='y_crossing',
-                 segment_method='gradient', file_path=''):
+                 segment_method='gradient', file_path='', tub_path=None):
         """
         Initialize the interactive visualizer.
 
@@ -69,11 +69,15 @@ class InteractiveIMUVisualizer:
             segment_method: Initial segmentation method
                 ('threshold', 'extrema', 'gradient', 'hybrid')
             file_path: Path to source data file (for display)
+            tub_path: Path to Tub directory if source is Tub
+                (for segment stats)
         """
         # Store immutable data
         self.path_data = path_data
         self.cfg = cfg
         self.file_path = file_path
+        self.tub_path = tub_path
+        self.is_tub_data = (tub_path is not None)
 
         # Create DataFrame for easier time-based indexing
         self.df = pd.DataFrame({
@@ -117,9 +121,15 @@ class InteractiveIMUVisualizer:
         self.lap_minus_button = None
         self.lap_plus_button = None
         self.segment_radio = None
+        self.stats_radio = None
 
         # Status text elements (will be created in setup_ui)
         self.status_texts = {}
+
+        # Segment statistics (for Tub data only)
+        self.segment_rankings = {}
+        self.available_ranking_keys = []
+        self.current_stats_field = None
 
         # Performance tracking
         self.last_update_time = 0
@@ -127,6 +137,9 @@ class InteractiveIMUVisualizer:
 
         # Initialize data processing pipeline
         self._initialize_data_pipeline()
+
+        # Load segment statistics if Tub data
+        self._load_segment_statistics()
 
     def _initialize_data_pipeline(self):
         """
@@ -210,6 +223,92 @@ class InteractiveIMUVisualizer:
             self.path_data.x, self.path_data.y)
 
         logger.info("Assigned segments to driven path")
+
+    def _load_segment_statistics(self):
+        """Load segment rankings from TubStatistics if available."""
+        if not self.is_tub_data or not self.tub_path:
+            return
+
+        try:
+            tub = self._open_tub_for_statistics()
+            if not tub:
+                return
+
+            if not self._check_has_segment_data(tub):
+                tub.close()
+                return
+
+            session_rank = self._compute_segment_rankings(tub)
+            self._build_ranking_index(tub, session_rank)
+            self._initialize_ranking_keys()
+
+            tub.close()
+
+        except Exception as e:
+            logger.error(f"Failed to load segment statistics: {e}")
+            self.segment_rankings = {}
+            self.available_ranking_keys = []
+
+    def _open_tub_for_statistics(self):
+        """Open tub for reading statistics."""
+        from donkeycar.parts.tub_v2 import Tub
+        return Tub(self.tub_path, read_only=True)
+
+    def _check_has_segment_data(self, tub):
+        """Check if tub has segment assignments."""
+        for record in tub:
+            if 'car/segment' in record.underlying:
+                return True
+
+        logger.info("No segment assignments found. "
+                   "Run 'donkey segment' to compute.")
+        return False
+
+    def _compute_segment_rankings(self, tub):
+        """Compute segment performance rankings."""
+        from donkeycar.parts.tub_statistics import TubStatistics
+
+        logger.info("Computing segment performance rankings...")
+        stats = TubStatistics(tub, config=self.cfg)
+        return stats.calculate_segment_performance()
+
+    def _build_ranking_index(self, tub, session_rank):
+        """Build index → ranking mapping."""
+        for idx, record in enumerate(tub):
+            ranking = self._get_record_ranking(record, session_rank)
+            if not ranking:
+                continue
+
+            self.segment_rankings[idx] = ranking
+
+    def _get_record_ranking(self, record, session_rank):
+        """Get ranking for a single record."""
+        session_id = record.underlying.get('_session_id')
+        lap = record.underlying.get('car/lap')
+        segment = record.underlying.get('car/segment')
+
+        if not (session_id and lap is not None and segment is not None):
+            return None
+
+        rankings = (session_rank.get(session_id, {})
+                   .get(lap, {})
+                   .get(segment, {}))
+
+        if not rankings:
+            return None
+
+        return rankings
+
+    def _initialize_ranking_keys(self):
+        """Initialize available ranking keys from first ranking."""
+        if not self.segment_rankings:
+            return
+
+        first_ranking = next(iter(self.segment_rankings.values()))
+        self.available_ranking_keys = sorted(first_ranking.keys())
+        self.current_stats_field = self.available_ranking_keys[0]
+        logger.info(f"Loaded rankings: "
+                   f"{', '.join(self.available_ranking_keys)}")
 
     def setup_ui(self):
         """
@@ -308,9 +407,10 @@ class InteractiveIMUVisualizer:
                 0.775, 'Total distance: 0.00m'),
             'lap_dist': self._create_styled_text(0.74, 'Lap distance: 0.00m'),
             'segment': self._create_styled_text(0.705, 'Segment: --'),
-            'debug': self._create_styled_text(0.67, 'Debug: idx=0, dist=0.00m'),
+            'seg_ranking': self._create_styled_text(0.67, ''),
+            'debug': self._create_styled_text(0.635, 'Debug: idx=0, dist=0.00m'),
             'controls': self._create_styled_text(
-                0.635, 'Controls: ← → arrows to navigate', color='yellow')
+                0.60, 'Controls: ← → arrows to navigate', color='yellow')
         }
 
     def _create_widgets(self):
@@ -380,6 +480,29 @@ class InteractiveIMUVisualizer:
             circle.set_edgecolor('white')
             circle.set_linewidth(1.5)
         self.segment_radio.on_clicked(self._on_segment_method_changed)
+
+        # Segment statistics field selector (only if data available)
+        if self.available_ranking_keys:
+            ax_stats = plt.axes([0.02, 0.08, 0.16, 0.10],
+                               facecolor='#1a1a1a')
+            self.fig.text(0.02, 0.19, 'Segment Stats',
+                         transform=self.fig.transFigure, fontsize=10)
+
+            # Create display labels (capitalize, replace underscores)
+            display_labels = [
+                key.replace('_', ' ').title()
+                for key in self.available_ranking_keys
+            ]
+
+            self.stats_radio = RadioButtons(
+                ax_stats, display_labels, active=0)
+
+            # Style radio buttons (match segment method selector style)
+            for circle in self.stats_radio.circles:
+                circle.set_edgecolor('white')
+                circle.set_linewidth(1.5)
+
+            self.stats_radio.on_clicked(self._on_stats_field_changed)
 
         # Keyboard navigation
         self.fig.canvas.mpl_connect('key_press_event',
@@ -679,10 +802,54 @@ class InteractiveIMUVisualizer:
         else:
             self.status_texts['segment'].set_text('Segment: --')
 
+        # Update segment ranking (only if available)
+        if not self._should_show_segment_ranking(current_idx):
+            self.status_texts['seg_ranking'].set_text('')
+        else:
+            self._display_segment_ranking(current_idx)
+
         # Debug info
         dist_to_origin = np.sqrt(row['x']**2 + row['y']**2)
         self.status_texts['debug'].set_text(
             f'Debug: idx={current_idx}, dist={dist_to_origin:.2f}m')
+
+    def _should_show_segment_ranking(self, current_idx):
+        """Check if segment ranking should be displayed."""
+        return (self.segment_rankings and
+                current_idx in self.segment_rankings and
+                self.current_stats_field)
+
+    def _display_segment_ranking(self, current_idx):
+        """Display segment ranking with color coding."""
+        ranking = self.segment_rankings[current_idx]
+        value = ranking.get(self.current_stats_field)
+
+        if value is None:
+            self.status_texts['seg_ranking'].set_text('')
+            return
+
+        text, color = self._format_ranking_display(value)
+        self.status_texts['seg_ranking'].set_text(text)
+        self.status_texts['seg_ranking'].set_color(color)
+
+    def _format_ranking_display(self, value):
+        """Format ranking value with color coding."""
+        pct = value * 100
+        color = self._get_ranking_color(pct)
+
+        field_display = (self.current_stats_field
+                        .replace('_', ' ').title())
+        text = f'Seg Rank ({field_display}): {pct:.0f}%'
+
+        return text, color
+
+    def _get_ranking_color(self, pct):
+        """Get color for ranking percentage."""
+        if pct < 33:
+            return '#4CAF50'  # Green
+        if pct < 66:
+            return '#FFC107'  # Yellow
+        return '#F44336'  # Red
 
     # Widget event handlers
 
@@ -798,6 +965,26 @@ class InteractiveIMUVisualizer:
 
         # Refresh visualizations
         self._refresh_visualizations()
+
+    def _on_stats_field_changed(self, label):
+        """Handle stats field radio button change."""
+        # Map display label back to key
+        label_to_key = {
+            key.replace('_', ' ').title(): key
+            for key in self.available_ranking_keys
+        }
+        new_field = label_to_key.get(label)
+
+        if not new_field or new_field == self.current_stats_field:
+            return
+
+        self.current_stats_field = new_field
+
+        # Update status panel immediately
+        current_idx = len(self.df[self.df['t'] <= self.time_slider.val]) - 1
+        self._update_status_panel(current_idx)
+
+        self.fig.canvas.draw_idle()
 
     def _on_keyboard_press(self, event):
         """Handle keyboard navigation"""

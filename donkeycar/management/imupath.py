@@ -70,8 +70,10 @@ class ImuPathCommand:
         try:
             if os.path.isfile(data_source) and data_source.endswith('.csv'):
                 source = CSVPathDataSource(data_source)
+                tub_path = None
             elif os.path.isdir(data_source):
                 source = TubPathDataSource(data_source)
+                tub_path = data_source
             else:
                 print("Error: Source must be CSV file or Tub directory")
                 return
@@ -86,6 +88,10 @@ class ImuPathCommand:
             traceback.print_exc()
             return
 
+        # Check for segment statistics if Tub data
+        if tub_path:
+            print("\nChecking for segment statistics...")
+
         print("\nInitializing visualization...")
         try:
             viz = InteractiveIMUVisualizer(
@@ -93,9 +99,22 @@ class ImuPathCommand:
                 cfg=None,
                 lap_method=args.lap_method,
                 segment_method=args.segment_method,
-                file_path=data_source
+                file_path=data_source,
+                tub_path=tub_path
             )
             viz.setup_ui()
+
+            # Print segment stats info
+            if tub_path:
+                if viz.segment_rankings:
+                    print(f"  ✓ Loaded segment rankings for "
+                         f"{len(viz.segment_rankings)} records")
+                    print(f"  Available metrics: "
+                         f"{', '.join(viz.available_ranking_keys)}")
+                else:
+                    print("  ⓘ No segment performance data found")
+                    print("  Run 'donkey segment <tub>' to compute "
+                         "segment assignments")
 
             print("\n" + "=" * 70)
             print("Controls:")
