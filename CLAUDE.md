@@ -281,6 +281,111 @@ Supports multiple ML frameworks:
 - **Datastore** (`parts/datastore*.py`) - Data management abstractions
 - Pipeline architecture for processing training data
 
+### Tub Data Integrity (CRITICAL)
+
+**Background:** Tub data corruption occurred when attempting to modify catalog
+files directly. This section documents the correct approach to working with tub
+data.
+
+#### Tub Data Structure
+
+A tub directory contains:
+```
+data/
+├── manifest.json           # Metadata file (5 lines, can be modified)
+├── catalog_0.catalog       # Record data (NEVER modify directly)
+├── catalog_0.catalog_manifest
+├── catalog_1.catalog
+├── catalog_1.catalog_manifest
+└── images/                 # Image files referenced by records
+```
+
+**manifest.json structure (5 lines):**
+1. **Line 1:** Input field names (e.g., `["cam/image_array", "car/pos", ...]`)
+2. **Line 2:** Field types (e.g., `["image_array", "vector", ...]`)
+3. **Line 3:** Per-session metadata (e.g., `{"session_id": {"laptimer": [...]}}`)
+4. **Line 4:** Manifest metadata (sessions info, creation time)
+5. **Line 5:** Catalog paths and index info
+
+#### NEVER Modify Catalog Files Directly
+
+**CRITICAL:** The `catalog_*.catalog` files contain immutable sensor recordings.
+These files must NEVER be modified after recording because:
+
+1. `Tub.write_record()` filters fields through `input_types` - any field not in
+   the original schema is silently dropped
+2. Overwriting records strips fields like `car/pos`, `car/distance`, etc.
+3. There is no schema migration - once data is lost, it cannot be recovered
+
+**What happened (2026-01-11):** Attempting to add `car/segment` field to
+existing records via `write_record()` corrupted 3500+ records, stripping all
+IMU data fields.
+
+#### Safe Ways to Add Computed Data
+
+**DO: Store in manifest.json metadata (Line 3)**
+```python
+# Safe: Adds computed data to session metadata
+session_dict = tub.manifest.metadata.setdefault(session_id, {})
+session_dict['segmentation'] = {
+    'num_segments': 5,
+    'segment_boundaries': [...],
+    'rankings': {...}
+}
+tub.manifest.write_metadata()  # Only updates manifest.json
+```
+
+**DO: Create separate analysis files**
+```python
+# Safe: Store analysis results in separate file
+import json
+with open(f'{tub_path}/segment_analysis.json', 'w') as f:
+    json.dump(analysis_results, f)
+```
+
+**DON'T: Modify catalog records**
+```python
+# DANGEROUS: This corrupts data!
+for record in tub:
+    record['car/segment'] = segment_id
+    tub.write_record(record)  # Strips fields not in input_types!
+```
+
+#### Safe Tub Operations
+
+| Operation | Method | Safe? |
+|-----------|--------|-------|
+| Read records | `for record in tub:` | ✅ Yes |
+| Add new records during recording | `TubWriter.run()` | ✅ Yes |
+| Delete records | `tub.delete_records()` | ✅ Yes (marks deleted) |
+| Update session metadata | `tub.manifest.metadata[session_id] = {...}` | ✅ Yes |
+| Write manifest metadata | `tub.manifest.write_metadata()` | ✅ Yes |
+| Overwrite existing records | `tub.write_record(record)` with `_index` | ❌ DANGEROUS |
+
+#### Example: Laptimer Data (Safe Pattern)
+
+The laptimer correctly stores computed lap times in metadata, not records:
+```python
+# From TubWriter.close() - CORRECT approach
+if self.lap_timer:
+    self.tub.manifest.metadata[self.tub.manifest.session_id[1]] \
+        = dict(laptimer=self.lap_timer.to_list())
+# Only manifest.json is modified, catalogs untouched
+```
+
+#### Segment Rankings Design
+
+For segment-based training rankings, store in manifest metadata:
+```python
+session_dict['segment_rankings'] = {
+    'lap_1': {'segment_0': 0.85, 'segment_1': 0.92, ...},
+    'lap_2': {'segment_0': 0.78, 'segment_1': 0.88, ...},
+}
+tub.manifest.write_metadata()
+```
+
+The training pipeline reads rankings from metadata, not from individual records.
+
 ## Coding Guidelines
 
 ### Code Style
@@ -413,10 +518,13 @@ lap" that outperforms any single recorded lap.
 ### How It Works
 
 **Data Structure:**
-- `car/segment` field written to each tub record (integer segment ID)
-- Metadata stores segmentation parameters (num_segments, strategy, etc.)
+- Segment assignments stored in manifest metadata (NOT in catalog records)
+- Metadata stores: segmentation parameters, segment boundaries, rankings
 - Performance rankings: `session_rank[session_id][lap_num][segment_id] =
   [time_pct, gyro_z_pct, distance_pct]`
+
+**IMPORTANT:** See "Tub Data Integrity" section - segment data is computed at
+training time from manifest metadata, NOT stored in individual records.
 
 **Example:** 3 laps, 4 segments per lap
 
@@ -463,11 +571,11 @@ SEGMENT_CURVATURE_THRESHOLD = 0.1  # Curvature threshold for segmentation
 - `PctMode.SEGMENT` - Segment-based ranking (new feature)
 
 **Key Methods:**
-- `TubStatistics.compute_segment_assignments()` - Computes segments, writes to
-  records
+- `TubStatistics.compute_segment_assignments()` - Computes segments, stores in
+  manifest metadata (NOT in catalog records)
 - `TubStatistics.calculate_segment_performance()` - Ranks segment instances
 - `TubDataset.__init__(pct_mode=PctMode.SEGMENT)` - Enables segment mode
-- `TubRecord.extend()` - Populates `lap_pct` from segment rankings
+- `TubRecord.extend()` - Populates `lap_pct` from segment rankings in metadata
 
 **Command:**
 ```bash
