@@ -551,9 +551,9 @@ class TubStatistics(object):
                 # Segment data for initial segment detection
                 'segments': [
                     {
-                        'segment_id': seg.segment_id,
-                        'start_index': seg.start_index,
-                        'end_index': seg.end_index,
+                        'segment_id': int(seg.segment_id),
+                        'start_index': int(seg.start_index),
+                        'end_index': int(seg.end_index),
                     }
                     for seg in segmentation.segments
                 ],
@@ -562,10 +562,10 @@ class TubStatistics(object):
                     {
                         'point': b['point'].tolist(),
                         'tangent': b['tangent'].tolist(),
-                        'tangent_limit': b['tangent_limit'],
-                        'expected_denom_sign': b['expected_denom_sign'],
-                        'segment_from': b['segment_from'],
-                        'segment_to': b['segment_to'],
+                        'tangent_limit': float(b['tangent_limit']),
+                        'expected_denom_sign': int(b['expected_denom_sign']),
+                        'segment_from': int(b['segment_from']),
+                        'segment_to': int(b['segment_to']),
                     }
                     for b in segmentation.segment_boundaries
                 ],
