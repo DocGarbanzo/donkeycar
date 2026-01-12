@@ -49,11 +49,9 @@ class SegmentTracker:
         }
 
     def should_skip(self, record):
-        """Check if record should be skipped."""
-        segment = record.get('car/segment')
-        if segment is None:
-            return True
-
+        """Check if record should be skipped (lap 0 filter only)."""
+        # Note: Don't check car/segment here - it's computed on-the-fly
+        # from manifest metadata if not present in record
         lap = record.get('car/lap')
         if not self.use_lap_0 and lap == 0:
             return True
