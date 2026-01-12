@@ -5,6 +5,8 @@ from copy import copy
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Callable, Any
 
+import numpy as np
+
 from donkeycar.parts.tub_v2 import Tub
 from donkeycar.pipeline.transformations import (
     SortingStrategy,
@@ -14,9 +16,14 @@ from donkeycar.course_analysis import (
     TubPathDataSource,
     YCrossingLapDetector,
     DriftLapDetector,
+    MultiLapData,
     MeanCourseBuilder,
-    CourseSegmentation,
-    SegmentAssigner
+    CourseSegmenter,
+    HybridSegmentation,
+    ThresholdSegmentation,
+    ExtremaSegmentation,
+    GradientSegmentation,
+    get_or_compute_segment_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -462,15 +469,14 @@ class TubStatistics(object):
         curvature_threshold=0.1
     ):
         """
-        Compute segment assignments for all sessions and write to tub records.
+        Compute segment assignments for all sessions, store in metadata.
 
         For each session:
         - Loads PathData from tub records
         - Detects laps
         - Builds mean course from ALL laps
         - Segments the course
-        - Assigns segment IDs to all records (writes car/segment field)
-        - Stores metadata (num_segments, parameters)
+        - Stores segmentation data in manifest metadata
 
         :param lap_detector: 'ycrossing' or 'drift'
         :param segmentation_strategy: 'threshold', 'extrema', 'gradient',
@@ -499,42 +505,71 @@ class TubStatistics(object):
             else:
                 raise ValueError(f'Unknown lap detector: {lap_detector}')
 
-            multilap_data = detector.detect(path_data)
+            lap_boundaries = detector.detect_laps(path_data)
+            multilap_data = MultiLapData(path_data, lap_boundaries)
 
-            if len(multilap_data.laps) == 0:
+            if multilap_data.num_laps == 0:
                 logger.warning(f'No laps detected in session {session_id}')
                 continue
 
             # Build mean course from ALL laps
             builder = MeanCourseBuilder()
-            mean_course = builder.compute(multilap_data)
+            mean_course = builder.build(multilap_data)
 
-            # Segment the course
-            segmentation = CourseSegmentation(
-                mean_course,
-                strategy=segmentation_strategy,
-                min_segment_length=min_segment_length,
-                curvature_threshold=curvature_threshold
+            # Create segmenter with appropriate strategy
+            strategy_map = {
+                'threshold': ThresholdSegmentation(),
+                'extrema': ExtremaSegmentation(),
+                'gradient': GradientSegmentation(),
+                'hybrid': HybridSegmentation()
+            }
+            strategy = strategy_map.get(
+                segmentation_strategy, HybridSegmentation())
+            segmenter = CourseSegmenter(
+                strategy,
+                params={
+                    'min_segment_length': min_segment_length,
+                    'straight_curvature_threshold': curvature_threshold
+                }
             )
-            segmentation.compute()
+            segmentation = segmenter.segment(mean_course)
 
-            # Assign segments to all records
-            assigner = SegmentAssigner(segmentation)
-            segment_ids = assigner.assign_segments_to_path(
-                path_data.x, path_data.y)
-
-            # Write car/segment to tub records
-            for idx, record in enumerate(self.tub):
-                if record.get('_session_id') == session_id:
-                    record.underlying['car/segment'] = int(segment_ids[idx])
-                    self.tub.write_record(record)
-
-            # Store metadata
+            # Store segmentation data in manifest metadata (NOT in records)
+            # This enables on-the-fly segment ID computation at training time
             session_dict = self.tub.manifest.metadata.setdefault(
                 session_id, {})
 
             session_dict['segmentation'] = {
-                'num_segments': len(segmentation.segment_boundaries),
+                'num_segments': len(segmentation.segments),
+                # Mean course data for reconstruction
+                'mean_course': {
+                    'x': mean_course.x.tolist(),
+                    'y': mean_course.y.tolist(),
+                    'heading': mean_course.heading.tolist(),
+                    'distance': mean_course.distance.tolist(),
+                },
+                # Segment data for initial segment detection
+                'segments': [
+                    {
+                        'segment_id': seg.segment_id,
+                        'start_index': seg.start_index,
+                        'end_index': seg.end_index,
+                    }
+                    for seg in segmentation.segments
+                ],
+                # Boundary data for crossing detection
+                'segment_boundaries': [
+                    {
+                        'point': b['point'].tolist(),
+                        'tangent': b['tangent'].tolist(),
+                        'tangent_limit': b['tangent_limit'],
+                        'expected_denom_sign': b['expected_denom_sign'],
+                        'segment_from': b['segment_from'],
+                        'segment_to': b['segment_to'],
+                    }
+                    for b in segmentation.segment_boundaries
+                ],
+                # Parameters for reference
                 'mean_course_params': {
                     'num_laps': len(multilap_data.laps)
                 },
@@ -557,6 +592,7 @@ class TubStatistics(object):
         Calculate performance rankings for each segment instance across laps.
 
         Uses same field aggregation specs as lap performance for consistency.
+        Computes segment IDs on-the-fly from stored segmentation metadata.
 
         :param use_lap_0: If the 0'th lap should be ignored
         :param num_bins: If given, buckets the segments into as many buckets
@@ -571,15 +607,28 @@ class TubStatistics(object):
         segment_instances = defaultdict(lambda: defaultdict(list))
         tracker = SegmentTracker(self.field_aggregations, use_lap_0)
 
+        # Lazy-load assigners per session for on-the-fly segment computation
+        assigners = {}
+        prev_segments = {}
+
         for record in self.tub:
             if tracker.should_skip(record):
                 continue
 
             session_id = record.get('_session_id')
             lap = record.get('car/lap')
-            segment = record.get('car/segment')
             timestamp_ms = record.get('_timestamp_ms', 0)
             distance = record.get('car/distance', 0.0)
+
+            # Try to get segment ID from record first (backward compatibility)
+            segment = record.get('car/segment')
+
+            # If not in record, compute on-the-fly from metadata
+            if segment is None:
+                segment = self._compute_segment_from_metadata(
+                    record, session_id, assigners, prev_segments)
+                if segment is None:
+                    continue  # No segmentation data for this session
 
             # Handle state changes (early continue on change)
             if tracker.handle_session_change(
@@ -765,3 +814,11 @@ class TubStatistics(object):
                 continue
 
             entry[output_key] = agg_value
+
+    def _compute_segment_from_metadata(self, record, session_id,
+                                       assigners, prev_segments):
+        """Compute segment ID from metadata for records without car/segment."""
+        pos = record.get('car/pos')
+        return get_or_compute_segment_id(
+            session_id, pos, self.tub.manifest.metadata,
+            assigners, prev_segments)

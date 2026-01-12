@@ -66,6 +66,13 @@ from .segment_assignment import (
     SegmentEstimator,
 )
 
+# Segment reconstruction utilities
+from .segment_reconstruction import (
+    reconstruct_segment_assigner,
+    compute_segment_id,
+    get_or_compute_segment_id,
+)
+
 # Utility functions
 from .utils import (
     normalize_angle,
@@ -103,6 +110,10 @@ __all__ = [
     'SegmentEstimate',
     'SegmentAssigner',
     'SegmentEstimator',
+    # Segment reconstruction utilities
+    'reconstruct_segment_assigner',
+    'compute_segment_id',
+    'get_or_compute_segment_id',
     # Utility functions
     'normalize_angle',
     'angle_difference',

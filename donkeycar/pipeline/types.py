@@ -10,6 +10,7 @@ from donkeycar.parts.tub_v2 import Tub
 from donkeycar.utils import load_image, load_pil_image, binary_to_img, \
     img_to_arr, img_to_binary, arr_to_binary
 from typing_extensions import TypedDict
+from donkeycar.course_analysis import get_or_compute_segment_id
 
 
 logger = logging.getLogger(__name__)
@@ -179,7 +180,7 @@ class TubRecord(object):
         return _image
 
     def extend(self, session_lap_rank, ranking_keys=None,
-               pct_mode=PctMode.NONE):
+               pct_mode=PctMode.NONE, segment_id=None):
         """
         Extend record with lap or segment performance rankings.
 
@@ -192,6 +193,8 @@ class TubRecord(object):
                            'gyro_z_agg')
                            for backward compatibility.
         :param pct_mode: Performance mode (NONE, LAP, or SEGMENT)
+        :param segment_id: Pre-computed segment ID (for SEGMENT mode).
+                          If provided, uses instead of reading record.
         :return: True if extension succeeded, False otherwise
         """
         if not session_lap_rank:
@@ -204,8 +207,9 @@ class TubRecord(object):
             ranking_keys = ('time', 'distance', 'gyro_z_agg')
 
         if pct_mode == PctMode.SEGMENT:
-            # Segment mode: session -> lap -> segment structure
-            segment_id = self.underlying.get('car/segment')
+            # Use passed segment_id if provided, otherwise read from record
+            if segment_id is None:
+                segment_id = self.underlying.get('car/segment')
             if segment_id is None:
                 return False  # No segment assignment, exclude from training
 
@@ -253,8 +257,8 @@ class TubDataset(object):
         :param tub_paths: List of paths to tub directories
         :param seq_size: Sequence size for RNN (0 for non-sequential)
         :param add_lap_pct: Whether to add lap_pct to records
-        :param ranking_keys: Optional list of keys to use for lap_pct rankings.
-                           If None, uses default ('time', 'distance', 'gyro_z_agg')
+        :param ranking_keys: Keys for lap_pct rankings.
+                           Defaults: ('time', 'distance', 'gyro_z_agg')
         :param pct_mode: Performance mode (NONE, LAP, or SEGMENT)
         """
         self.config = config
@@ -269,9 +273,10 @@ class TubDataset(object):
         self.seq_size = seq_size
         self.ranking_keys = ranking_keys
         self.pct_mode = pct_mode
-        logger.info(f'Created TubDataset with add_lap_pct: {self.add_lap_pct} '
-                    f'compress: {self.compress} num bins {self.num_bins} '
-                    f'ranking_keys: {self.ranking_keys} pct_mode: {self.pct_mode}')
+        logger.info(
+            f'TubDataset: lap_pct={self.add_lap_pct} '
+            f'compress={self.compress} bins={self.num_bins} '
+            f'keys={self.ranking_keys} mode={self.pct_mode}')
 
     def get_records(self) -> Union[List[TubRecord], List[List[TubRecord]]]:
         """
@@ -295,6 +300,10 @@ class TubDataset(object):
                     session_lap_rank = self._calculate_performance_statistics(
                         tub)
 
+                # For SEGMENT mode, lazy-load assigners per session
+                assigners = {}
+                prev_segments = {}
+
                 # Load and filter records
                 for underlying in tub:
                     record = TubRecord(self.config, tub.base_path, underlying)
@@ -304,9 +313,15 @@ class TubDataset(object):
                         filtered_records += 1
                         continue
 
+                    # Compute segment_id for SEGMENT mode
+                    segment_id = None
+                    if self.pct_mode == PctMode.SEGMENT:
+                        segment_id = self._get_segment_id(
+                            underlying, tub, assigners, prev_segments)
+
                     # Extend record with rankings (lap or segment)
                     if record.extend(session_lap_rank, self.ranking_keys,
-                                   self.pct_mode):
+                                   self.pct_mode, segment_id=segment_id):
                         self.records.append(record)
                         used_records += 1
                     else:
@@ -361,6 +376,20 @@ class TubDataset(object):
             weights = softmax_plus(num_laps)
             for i_weight, key in enumerate(lap_rank.keys()):
                 lap_rank[key] = weights[i_weight]
+
+    def _get_segment_id(self, underlying, tub, assigners, prev_segments):
+        """Get segment ID for record, computing on-the-fly if needed."""
+        # First try to get from record (backward compatibility)
+        segment_id = underlying.get('car/segment')
+        if segment_id is not None:
+            return segment_id
+
+        # Compute on-the-fly from metadata
+        session_id = underlying['_session_id']
+        pos = underlying.get('car/pos')
+        return get_or_compute_segment_id(
+            session_id, pos, tub.manifest.metadata,
+            assigners, prev_segments)
 
     def close(self):
         logger.info(f'Closing TubDataset')
