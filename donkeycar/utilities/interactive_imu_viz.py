@@ -255,7 +255,14 @@ class InteractiveIMUVisualizer:
         return Tub(self.tub_path, read_only=True)
 
     def _check_has_segment_data(self, tub):
-        """Check if tub has segment assignments."""
+        """Check if tub has segment data (in records or manifest metadata)."""
+        # Check manifest metadata first (new approach)
+        for session_id in tub.manifest.metadata:
+            session_data = tub.manifest.metadata.get(session_id, {})
+            if 'segmentation' in session_data:
+                return True
+
+        # Fall back to checking records (old approach, backward compat)
         for record in tub:
             if 'car/segment' in record.underlying:
                 return True
@@ -274,30 +281,33 @@ class InteractiveIMUVisualizer:
 
     def _build_ranking_index(self, tub, session_rank):
         """Build index → ranking mapping."""
+        from donkeycar.course_analysis import get_or_compute_segment_id
+
+        # Lazy-load assigners for on-the-fly segment computation
+        assigners = {}
+        prev_segments = {}
+
         for idx, record in enumerate(tub):
-            ranking = self._get_record_ranking(record, session_rank)
-            if not ranking:
+            session_id = record.get('_session_id')
+            lap = record.get('car/lap')
+
+            # Get segment ID from record or compute on-the-fly
+            segment = record.get('car/segment')
+            if segment is None:
+                pos = record.get('car/pos')
+                segment = get_or_compute_segment_id(
+                    session_id, pos, tub.manifest.metadata,
+                    assigners, prev_segments)
+
+            if not (session_id and lap is not None and segment is not None):
                 continue
 
-            self.segment_rankings[idx] = ranking
+            rankings = (session_rank.get(session_id, {})
+                       .get(lap, {})
+                       .get(segment, {}))
 
-    def _get_record_ranking(self, record, session_rank):
-        """Get ranking for a single record."""
-        session_id = record.underlying.get('_session_id')
-        lap = record.underlying.get('car/lap')
-        segment = record.underlying.get('car/segment')
-
-        if not (session_id and lap is not None and segment is not None):
-            return None
-
-        rankings = (session_rank.get(session_id, {})
-                   .get(lap, {})
-                   .get(segment, {}))
-
-        if not rankings:
-            return None
-
-        return rankings
+            if rankings:
+                self.segment_rankings[idx] = rankings
 
     def _initialize_ranking_keys(self):
         """Initialize available ranking keys from first ranking."""
