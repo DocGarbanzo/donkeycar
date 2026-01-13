@@ -461,6 +461,16 @@ def run(self, image, steering, throttle):
 Visualizes recorded vehicle trajectories, detects laps, computes mean reference
 courses, and segments courses into geometric features.
 
+**Segment stats:** For Tub data, imupath computes segment performance on the
+fly using `FIELD_AGGREGATIONS` and `LAP_SORTING_CRITERIA`. It loads
+`./config.py` by default; pass `--config` to use another config and include
+custom tub fields in the Segment Stats selector.
+Changing lap count or segmentation method in the UI recomputes the stats.
+The UI prints "Computing segment statistics..." on startup for tub sources.
+Segment stats ignore trailing partial laps beyond the last boundary.
+Segment stats collapse multiple instances per lap to keep ranks unique.
+Lap labels show the trailing partial lap as N+1.
+
 ### Key Files
 
 - `donkeycar/utilities/imu_visualization.py` - Main UI (matplotlib)

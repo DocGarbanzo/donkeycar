@@ -16,6 +16,7 @@ Example:
 import argparse
 import os
 
+from donkeycar.config import load_config
 from donkeycar.course_analysis import (
     CSVPathDataSource,
     TubPathDataSource,
@@ -47,6 +48,8 @@ class ImuPathCommand:
                            help='minimum loop distance in meters')
         parser.add_argument('--num-laps', type=int, default=None,
                            help='number of laps for mean course (default: all)')
+        parser.add_argument('--config', type=str, default='./config.py',
+                           help='path to config file for segment stats')
 
         return parser.parse_args(args)
 
@@ -65,6 +68,21 @@ class ImuPathCommand:
         print(f"Lap detection: {args.lap_method}")
         print(f"Segmentation: {args.segment_method}")
         print("=" * 70)
+
+        cfg = None
+        if args.config:
+            config_path = os.path.expanduser(args.config)
+            if os.path.exists(config_path):
+                print("\nLoading config...")
+                try:
+                    cfg = load_config(config_path)
+                    print(f"  Loaded config from {config_path}")
+                except Exception as e:
+                    print(f"Warning: Failed to load config: {e}")
+                    print("  Using default segment fields")
+            elif args.config != './config.py':
+                print(f"Warning: Config file not found: {config_path}")
+                print("  Using default segment fields")
 
         print("\nLoading data...")
         try:
@@ -90,13 +108,13 @@ class ImuPathCommand:
 
         # Check for segment statistics if Tub data
         if tub_path:
-            print("\nChecking for segment statistics...")
+            print("\nComputing segment statistics...")
 
         print("\nInitializing visualization...")
         try:
             viz = InteractiveIMUVisualizer(
                 path_data=path_data,
-                cfg=None,
+                cfg=cfg,
                 lap_method=args.lap_method,
                 segment_method=args.segment_method,
                 file_path=data_source,
@@ -111,10 +129,13 @@ class ImuPathCommand:
                          f"{len(viz.segment_rankings)} records")
                     print(f"  Available metrics: "
                          f"{', '.join(viz.available_ranking_keys)}")
+                    print("  Stats are computed on the fly (not written)")
+                    if not args.config:
+                        print("  Tip: Use --config to include additional "
+                              "FIELD_AGGREGATIONS")
                 else:
                     print("  ⓘ No segment performance data found")
-                    print("  Run 'donkey segment <tub>' to compute "
-                         "segment assignments")
+                    print("  Check lap detection/segmentation settings")
 
             print("\n" + "=" * 70)
             print("Controls:")

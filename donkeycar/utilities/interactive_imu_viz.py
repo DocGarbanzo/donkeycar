@@ -21,6 +21,10 @@ from matplotlib.widgets import (
 )
 import logging
 
+from donkeycar.parts.tub_v2 import Tub
+from donkeycar.parts.tub_statistics import TubStatistics, FieldAccumulator
+from donkeycar.pipeline.transformations import default_lap_sorting_strategy
+
 # Import new refactored course_analysis API
 from donkeycar.course_analysis import (
     YCrossingLapDetector,
@@ -225,89 +229,253 @@ class InteractiveIMUVisualizer:
         logger.info("Assigned segments to driven path")
 
     def _load_segment_statistics(self):
-        """Load segment rankings from TubStatistics if available."""
+        """
+        Compute segment rankings using visualization's detected laps.
+
+        Uses the on-the-fly lap detection (multilap_data) and segment
+        assignments (segment_ids) to compute performance rankings.
+        This approach works regardless of whether car/lap is set in records.
+        """
         if not self.is_tub_data or not self.tub_path:
+            return
+        if self.segment_ids is None or self.multilap_data is None:
+            return
+        if self.segmentation is None or self.segmentation.num_segments == 0:
             return
 
         try:
-            tub = self._open_tub_for_statistics()
-            if not tub:
-                return
-
-            if not self._check_has_segment_data(tub):
-                tub.close()
-                return
-
-            session_rank = self._compute_segment_rankings(tub)
-            self._build_ranking_index(tub, session_rank)
+            print("Computing segment statistics...")
+            self._compute_segment_rankings_from_visualization()
             self._initialize_ranking_keys()
-
-            tub.close()
-
         except Exception as e:
-            logger.error(f"Failed to load segment statistics: {e}")
+            logger.error(f"Failed to compute segment statistics: {e}")
             self.segment_rankings = {}
             self.available_ranking_keys = []
 
-    def _open_tub_for_statistics(self):
-        """Open tub for reading statistics."""
-        from donkeycar.parts.tub_v2 import Tub
-        return Tub(self.tub_path, read_only=True)
+    def _compute_segment_rankings_from_visualization(self):
+        """
+        Compute segment rankings using visualization's lap/segment data.
 
-    def _check_has_segment_data(self, tub):
-        """Check if tub has segment data (in records or manifest metadata)."""
-        # Check manifest metadata first (new approach)
-        for session_id in tub.manifest.metadata:
-            session_data = tub.manifest.metadata.get(session_id, {})
-            if 'segmentation' in session_data:
-                return True
-
-        # Fall back to checking records (old approach, backward compat)
-        for record in tub:
-            if 'car/segment' in record.underlying:
-                return True
-
-        logger.info("No segment assignments found. "
-                   "Run 'donkey segment' to compute.")
-        return False
-
-    def _compute_segment_rankings(self, tub):
-        """Compute segment performance rankings."""
-        from donkeycar.parts.tub_statistics import TubStatistics
-
+        Uses self.multilap_data.lap_boundaries for lap info and
+        self.segment_ids for segment assignments. Reads tub records
+        to aggregate field values per (lap, segment) combination.
+        """
         logger.info("Computing segment performance rankings...")
+
+        tub = Tub(self.tub_path, read_only=True)
+        try:
+            field_specs, sorting_strategy = self._load_stats_config(tub)
+            lap_end_indices = self._build_lap_end_indices()
+            segment_instances = self._collect_segment_instances(
+                tub, lap_end_indices, field_specs)
+        finally:
+            tub.close()
+
+        active_laps = len(self._active_lap_boundaries())
+        segment_lap_rankings = self._compute_segment_lap_rankings(
+            segment_instances, sorting_strategy, active_laps)
+        self._map_indices_to_rankings(segment_lap_rankings)
+
+    def _load_stats_config(self, tub):
+        """Load field aggregation specs and sorting strategy."""
         stats = TubStatistics(tub, config=self.cfg)
-        return stats.calculate_segment_performance()
+        return stats.field_aggregations, stats.sorting_strategy
 
-    def _build_ranking_index(self, tub, session_rank):
-        """Build index → ranking mapping."""
-        from donkeycar.course_analysis import get_or_compute_segment_id
+    def _build_lap_end_indices(self):
+        """Build set of lap end indices for O(1) lookup."""
+        return {b.end_index for b in self._active_lap_boundaries()}
 
-        # Lazy-load assigners for on-the-fly segment computation
-        assigners = {}
-        prev_segments = {}
+    def _collect_segment_instances(self, tub, lap_end_indices, field_specs):
+        """Collect segment instances with metrics from tub records."""
+        from collections import defaultdict
+
+        segment_instances = defaultdict(list)
+        state = self._init_segment_tracking_state(field_specs)
+        last_timestamp_ms = 0
+        last_distance = 0.0
+        max_idx = self._last_boundary_index()
 
         for idx, record in enumerate(tub):
-            session_id = record.get('_session_id')
-            lap = record.get('car/lap')
+            if max_idx is not None and idx > max_idx:
+                break
+            if idx >= len(self.segment_ids):
+                break
 
-            # Get segment ID from record or compute on-the-fly
-            segment = record.get('car/segment')
-            if segment is None:
-                pos = record.get('car/pos')
-                segment = get_or_compute_segment_id(
-                    session_id, pos, tub.manifest.metadata,
-                    assigners, prev_segments)
+            last_timestamp_ms = record.get('_timestamp_ms', 0)
+            last_distance = record.get('car/distance', 0.0)
 
-            if not (session_id and lap is not None and segment is not None):
+            self._process_record_for_segment(
+                idx, record, state, segment_instances, lap_end_indices,
+                field_specs)
+
+        # Finalize last segment using tracked values
+        self._finalize_segment_metrics(
+            segment_instances, state['lap'], state['segment'],
+            state['start_time'], last_timestamp_ms,
+            state['start_dist'], last_distance, state['field_accumulators'])
+
+        return segment_instances
+
+    def _init_segment_tracking_state(self, field_specs):
+        """Initialize state for segment tracking."""
+        initial_segment = (
+            self.segment_ids[0] if len(self.segment_ids) > 0 else None)
+        return {
+            'lap': 0,
+            'segment': initial_segment,
+            'start_time': None,
+            'start_dist': 0.0,
+            'field_accumulators': self._create_field_accumulators(field_specs)
+        }
+
+    def _process_record_for_segment(self, idx, record, state,
+                                    segment_instances, lap_end_indices,
+                                    field_specs):
+        """Process a single record for segment metrics collection."""
+        segment = self.segment_ids[idx]
+        timestamp_ms = record.get('_timestamp_ms', 0)
+        distance = record.get('car/distance', 0.0)
+
+        # Initialize start values on first record
+        if state['start_time'] is None:
+            state['start_time'] = timestamp_ms
+            state['start_dist'] = distance
+
+        self._accumulate_field_values(
+            record, field_specs, state['field_accumulators'])
+
+        # Check for segment or lap change
+        if segment == state['segment'] and idx not in lap_end_indices:
+            return
+
+        # Finalize current segment instance
+        self._finalize_segment_metrics(
+            segment_instances, state['lap'], state['segment'],
+            state['start_time'], timestamp_ms,
+            state['start_dist'], distance, state['field_accumulators'])
+
+        # Update lap if boundary crossed
+        if idx in lap_end_indices:
+            state['lap'] += 1
+
+        # Reset for new segment
+        state['segment'] = segment
+        state['start_time'] = timestamp_ms
+        state['start_dist'] = distance
+        state['field_accumulators'] = self._create_field_accumulators(
+            field_specs)
+
+    def _create_field_accumulators(self, field_specs):
+        """Create accumulators for each configured field."""
+        return {
+            spec.output_key: FieldAccumulator(spec.aggregation)
+            for spec in field_specs
+        }
+
+    def _accumulate_field_values(self, record, field_specs, accumulators):
+        """Accumulate configured field values from a tub record."""
+        for spec in field_specs:
+            value = spec.extract(record)
+            if value is None:
                 continue
+            accumulators[spec.output_key].add(value)
 
-            rankings = (session_rank.get(session_id, {})
-                       .get(lap, {})
-                       .get(segment, {}))
+    def _finalize_segment_metrics(self, segment_instances, lap, segment_id,
+                                  start_time, end_time, start_dist, end_dist,
+                                  field_accumulators):
+        """Finalize segment metrics and add to collection."""
+        if segment_id is None or start_time is None:
+            return
 
+        seg_time = (end_time - start_time) / 1000.0
+        seg_dist = end_dist - start_dist
+
+        instance = {
+            'lap': lap,
+            'time': seg_time,
+            'distance': seg_dist
+        }
+        for output_key, accumulator in field_accumulators.items():
+            value = accumulator.compute()
+            if value is None:
+                continue
+            instance[output_key] = value
+
+        segment_instances[segment_id].append(instance)
+
+    def _compute_segment_lap_rankings(self, segment_instances,
+                                      sorting_strategy, num_laps):
+        """Compute rankings for each segment's lap instances."""
+        segment_lap_rankings = {}
+        for segment_id, instances in segment_instances.items():
+            if not instances:
+                continue
+            segment_lap_rankings[segment_id] = self._rank_segment_instances(
+                instances, sorting_strategy, num_laps)
+        return segment_lap_rankings
+
+    def _rank_segment_instances(self, instances, sorting_strategy, num_laps):
+        """Rank all instances of a single segment by configured criteria."""
+        strategy = sorting_strategy or default_lap_sorting_strategy()
+        filtered = instances
+        if num_laps is not None:
+            filtered = [inst for inst in instances
+                       if inst.get('lap') is not None and
+                       inst['lap'] < num_laps]
+        deduped = self._select_best_instances_by_lap(filtered, strategy)
+        num_buckets = num_laps or None
+        rankings = strategy.rank_laps(deduped, num_buckets)
+        lap_rankings = {}
+        for inst_idx, inst_rankings in rankings.items():
+            lap = deduped[inst_idx]['lap']
+            lap_rankings[lap] = inst_rankings
+        return lap_rankings
+
+    def _map_indices_to_rankings(self, segment_lap_rankings):
+        """Map record indices to their segment rankings."""
+        active_laps = len(self._active_lap_boundaries())
+        for idx, segment_id in enumerate(self.segment_ids):
+            lap = self._find_lap_for_index(idx)
+            if lap >= active_laps:
+                continue
+            rankings = segment_lap_rankings.get(segment_id, {}).get(lap)
             if rankings:
                 self.segment_rankings[idx] = rankings
+
+    def _find_lap_for_index(self, idx):
+        """Find which lap contains the given index."""
+        boundaries = self._active_lap_boundaries()
+        for lap_idx, boundary in enumerate(boundaries):
+            if idx <= boundary.end_index:
+                return lap_idx
+        return len(boundaries)
+
+    def _active_lap_boundaries(self):
+        """Return lap boundaries for the current lap selection."""
+        if self.num_laps_for_mean is None:
+            boundaries = self.multilap_data.lap_boundaries
+        else:
+            boundaries = self.multilap_data.lap_boundaries[
+                :self.num_laps_for_mean]
+        return sorted(boundaries, key=lambda b: b.end_index)
+
+    def _last_boundary_index(self):
+        """Return last boundary index or None if no boundaries."""
+        boundaries = self._active_lap_boundaries()
+        if not boundaries:
+            return None
+        return boundaries[-1].end_index
+
+    def _lap_start_index(self, lap_idx):
+        """Compute lap start index for a given lap index."""
+        if lap_idx <= 0:
+            return 0
+        boundaries = self._active_lap_boundaries()
+        if lap_idx - 1 < len(boundaries):
+            return boundaries[lap_idx - 1].end_index + 1
+        if boundaries:
+            return boundaries[-1].end_index + 1
+        return 0
 
     def _initialize_ranking_keys(self):
         """Initialize available ranking keys from first ranking."""
@@ -320,6 +488,37 @@ class InteractiveIMUVisualizer:
         logger.info(f"Loaded rankings: "
                    f"{', '.join(self.available_ranking_keys)}")
 
+    def _select_best_instances_by_lap(self, instances, strategy):
+        """Pick one instance per lap using the sorting criteria."""
+        if not instances:
+            return []
+
+        criteria = strategy.criteria
+
+        def sort_key(instance):
+            key = []
+            for spec in criteria:
+                value = instance.get(spec['key'])
+                if value is None:
+                    value = float('inf')
+                else:
+                    value = spec['transform'](value)
+                if spec['reverse']:
+                    value = -value
+                key.append(value)
+            return tuple(key)
+
+        best_by_lap = {}
+        for instance in instances:
+            lap = instance.get('lap')
+            if lap is None:
+                continue
+            key = sort_key(instance)
+            if lap not in best_by_lap or key < best_by_lap[lap][0]:
+                best_by_lap[lap] = (key, instance)
+
+        return [best_by_lap[lap][1] for lap in sorted(best_by_lap)]
+
     def setup_ui(self):
         """
         Create all matplotlib widgets and set up event handlers.
@@ -327,7 +526,7 @@ class InteractiveIMUVisualizer:
         # Create figure with single axis
         plt.style.use('dark_background')
         self.fig, self.ax = plt.subplots(figsize=(12, 8))
-        self.fig.canvas.manager.set_window_title('Donkey imupath2')
+        self.fig.canvas.manager.set_window_title('Donkey imupath')
 
         # Adjust layout to make room for widgets
         plt.subplots_adjust(bottom=0.2, right=0.95, top=0.87, left=0.08)
@@ -418,9 +617,10 @@ class InteractiveIMUVisualizer:
             'lap_dist': self._create_styled_text(0.74, 'Lap distance: 0.00m'),
             'segment': self._create_styled_text(0.705, 'Segment: --'),
             'seg_ranking': self._create_styled_text(0.67, ''),
-            'debug': self._create_styled_text(0.635, 'Debug: idx=0, dist=0.00m'),
+            'debug': self._create_styled_text(
+                0.635, 'Debug: idx=0, dist=0.00m'),
             'controls': self._create_styled_text(
-                0.60, 'Controls: ← → arrows to navigate', color='yellow')
+                0.62, 'Controls: ← → arrows to navigate', color='yellow')
         }
 
     def _create_widgets(self):
@@ -452,11 +652,11 @@ class InteractiveIMUVisualizer:
         # Lap selector (only if multiple laps detected)
         if self.multilap_data.num_laps > 1:
             # Label
-            self.fig.text(0.02, 0.20, 'Laps',
+            self.fig.text(0.02, 0.28, 'Laps',
                          transform=self.fig.transFigure, fontsize=10)
 
             # TextBox
-            ax_textbox = plt.axes([0.02, 0.155, 0.065, 0.035])
+            ax_textbox = plt.axes([0.02, 0.235, 0.065, 0.035])
             self.lap_textbox = TextBox(
                 ax_textbox, '', initial=str(self.num_laps_for_mean),
                 color='white', hovercolor='lightgray')
@@ -465,13 +665,13 @@ class InteractiveIMUVisualizer:
             self.lap_textbox.on_submit(self._on_lap_text_submit)
 
             # Minus button
-            ax_minus = plt.axes([0.02, 0.11, 0.03, 0.03])
+            ax_minus = plt.axes([0.02, 0.195, 0.03, 0.03])
             self.lap_minus_button = Button(
                 ax_minus, '−', color='#1a1a1a', hovercolor='#333333')
             self.lap_minus_button.on_clicked(self._on_lap_minus)
 
             # Plus button
-            ax_plus = plt.axes([0.06, 0.11, 0.03, 0.03])
+            ax_plus = plt.axes([0.06, 0.195, 0.03, 0.03])
             self.lap_plus_button = Button(
                 ax_plus, '+', color='#1a1a1a', hovercolor='#333333')
             self.lap_plus_button.on_clicked(self._on_lap_plus)
@@ -493,9 +693,9 @@ class InteractiveIMUVisualizer:
 
         # Segment statistics field selector (only if data available)
         if self.available_ranking_keys:
-            ax_stats = plt.axes([0.02, 0.08, 0.16, 0.10],
+            ax_stats = plt.axes([0.02, 0.06, 0.16, 0.07],
                                facecolor='#1a1a1a')
-            self.fig.text(0.02, 0.19, 'Segment Stats',
+            self.fig.text(0.02, 0.145, 'Segment Stats',
                          transform=self.fig.transFigure, fontsize=10)
 
             # Create display labels (capitalize, replace underscores)
@@ -769,13 +969,13 @@ class InteractiveIMUVisualizer:
             f'Position: [{row["x"]:.2f}, {row["y"]:.2f}]')
 
         # Calculate current lap
-        current_lap = 1
-        for i, boundary in enumerate(self.multilap_data.lap_boundaries):
-            if current_idx <= boundary.end_index:
-                current_lap = i + 1
-                break
-
-        self.status_texts['lap'].set_text(f'Lap: {current_lap}')
+        lap_idx = self._find_lap_for_index(current_idx)
+        boundaries = self._active_lap_boundaries()
+        if boundaries and current_idx > boundaries[-1].end_index:
+            lap_display = len(boundaries) + 1
+        else:
+            lap_display = lap_idx + 1
+        self.status_texts['lap'].set_text(f'Lap: {lap_display}')
 
         # Calculate total distance (cumulative)
         if current_idx > 0:
@@ -789,8 +989,7 @@ class InteractiveIMUVisualizer:
             f'Total distance: {total_dist:.2f}m')
 
         # Calculate lap distance
-        lap_start_idx = (self.multilap_data.lap_boundaries[current_lap - 2]
-                        .end_index + 1 if current_lap > 1 else 0)
+        lap_start_idx = self._lap_start_index(lap_idx)
         if current_idx > lap_start_idx:
             dx = np.diff(self.df['x'][lap_start_idx:current_idx + 1])
             dy = np.diff(self.df['y'][lap_start_idx:current_idx + 1])
@@ -924,7 +1123,37 @@ class InteractiveIMUVisualizer:
         """Refresh mean course visualization and legend"""
         self._refresh_mean_course()
         self._update_legend_texts()
+        self._refresh_segment_statistics()
         self.fig.canvas.draw_idle()
+
+    def _refresh_segment_statistics(self):
+        """Recompute segment rankings after lap/segment changes."""
+        if not self.is_tub_data:
+            return
+        if self.segment_ids is None:
+            return
+        if self.segmentation is None or self.segmentation.num_segments == 0:
+            return
+
+        try:
+            self.segment_rankings = {}
+            self.available_ranking_keys = []
+            self.current_stats_field = None
+            self._compute_segment_rankings_from_visualization()
+            self._initialize_ranking_keys()
+            self._refresh_current_ranking_display()
+        except Exception as e:
+            logger.error(f"Failed to refresh segment statistics: {e}")
+            self.segment_rankings = {}
+            self.available_ranking_keys = []
+            self.current_stats_field = None
+
+    def _refresh_current_ranking_display(self):
+        """Refresh ranking display for current slider position."""
+        if not self.time_slider:
+            return
+        current_idx = len(self.df[self.df['t'] <= self.time_slider.val]) - 1
+        self._update_status_panel(current_idx)
 
     def _set_lap_value(self, num_laps):
         """Set lap value with validation"""
