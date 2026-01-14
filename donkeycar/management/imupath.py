@@ -11,6 +11,7 @@ Example:
     donkey imupath ./recording.csv
     donkey imupath ./tub_directory
     donkey imupath --lap-method drift --segment-method hybrid ./data.csv
+    donkey imupath --web ./tub_directory  # Web-based UI
 """
 
 import argparse
@@ -35,6 +36,8 @@ class ImuPathCommand:
 
         parser.add_argument('data_source', nargs='?', default='imu.csv',
                            help='path to CSV file or Tub directory')
+        parser.add_argument('--web', action='store_true',
+                           help='launch web-based UI (default: matplotlib UI)')
         parser.add_argument('--lap-method', type=str,
                            choices=['y_crossing', 'drift'],
                            default='y_crossing',
@@ -50,6 +53,8 @@ class ImuPathCommand:
                            help='number of laps for mean course (default: all)')
         parser.add_argument('--config', type=str, default='./config.py',
                            help='path to config file for segment stats')
+        parser.add_argument('--port', type=int, default=8000,
+                           help='web server port (default: 8000, only with --web)')
 
         return parser.parse_args(args)
 
@@ -61,6 +66,50 @@ class ImuPathCommand:
             print(f"Error: File or directory {data_source} not found.")
             return
 
+        # Branch to web UI if --web flag is provided
+        if args.web:
+            self._run_web_ui(args, data_source)
+        else:
+            self._run_matplotlib_ui(args, data_source)
+
+    def _run_web_ui(self, args, data_source):
+        """Launch web-based IMU path visualizer."""
+        try:
+            from donkeycar.web.imupath_api import run_web_ui
+        except ImportError as e:
+            print("Error: Web UI dependencies not installed.")
+            print("Install with: pip install fastapi uvicorn")
+            print(f"Details: {e}")
+            return
+
+        # Load config
+        cfg = None
+        config_path = None
+        if args.config:
+            config_path = os.path.expanduser(args.config)
+            if os.path.exists(config_path):
+                try:
+                    cfg = load_config(config_path)
+                except Exception as e:
+                    print(f"Warning: Failed to load config: {e}")
+                    print("  Using default parameters")
+            elif args.config != './config.py':
+                print(f"Warning: Config file not found: {config_path}")
+                print("  Using default parameters")
+
+        # Launch web UI
+        run_web_ui(
+            data_source=data_source,
+            cfg=cfg,
+            lap_method=args.lap_method,
+            segment_method=args.segment_method,
+            num_laps=args.num_laps,
+            config_path=config_path,
+            port=args.port
+        )
+
+    def _run_matplotlib_ui(self, args, data_source):
+        """Launch matplotlib-based IMU path visualizer (original behavior)."""
         print("=" * 70)
         print("IMU Path Analysis")
         print("=" * 70)

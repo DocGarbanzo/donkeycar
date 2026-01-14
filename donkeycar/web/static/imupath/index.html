@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IMU Path Visualizer</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚗 IMU Path Visualizer</h1>
+            <div class="header-info" id="metadata"></div>
+        </header>
+        
+        <div class="main-content">
+            <!-- Left panel: Visualization -->
+            <div class="viz-panel">
+                <div id="plot-container"></div>
+                
+                <!-- Time control -->
+                <div class="controls time-controls">
+                    <button id="play-btn" class="control-btn">▶ Play</button>
+                    <button id="pause-btn" class="control-btn" disabled>⏸ Pause</button>
+                    <div class="slider-container">
+                        <label>Time:</label>
+                        <input type="range" id="time-slider" min="0" max="100" value="0" class="slider">
+                        <span id="time-display">0 / 0</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right panel: Controls and Info -->
+            <div class="control-panel">
+                <!-- Visualization Settings -->
+                <div class="panel-section">
+                    <h3>Settings</h3>
+                    
+                    <div class="control-group">
+                        <label>Number of Laps for Mean Course:</label>
+                        <div class="button-group">
+                            <button id="lap-minus" class="small-btn">-</button>
+                            <input type="number" id="lap-count" min="1" value="1" class="small-input">
+                            <button id="lap-plus" class="small-btn">+</button>
+                        </div>
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Segment Method:</label>
+                        <select id="segment-method" class="select">
+                            <option value="threshold">Threshold</option>
+                            <option value="extrema">Extrema</option>
+                            <option value="gradient" selected>Gradient</option>
+                            <option value="hybrid">Hybrid</option>
+                        </select>
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Stats Field:</label>
+                        <select id="stats-field" class="select">
+                            <option value="time_pct">Time Percentile</option>
+                        </select>
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Display:</label>
+                        <div class="checkbox-group">
+                            <label>
+                                <input type="checkbox" id="show-path" checked>
+                                Driven Path
+                            </label>
+                            <label>
+                                <input type="checkbox" id="show-mean" checked>
+                                Mean Course
+                            </label>
+                            <label>
+                                <input type="checkbox" id="show-segments" checked>
+                                Segments
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <button id="update-btn" class="primary-btn">Update Visualization</button>
+                </div>
+                
+                <!-- Current Point Info -->
+                <div class="panel-section">
+                    <h3>Current Point</h3>
+                    <div id="current-info" class="info-display">
+                        <div class="info-row">
+                            <span class="info-label">Time:</span>
+                            <span id="info-time">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Lap:</span>
+                            <span id="info-lap">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Segment:</span>
+                            <span id="info-segment">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Velocity:</span>
+                            <span id="info-velocity">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Heading:</span>
+                            <span id="info-heading">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Position:</span>
+                            <span id="info-position">-</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Best Per Lap Stats -->
+                <div class="panel-section">
+                    <h3>Segment Statistics</h3>
+                    <div id="stats-display" class="info-display">
+                        <p class="info-note">Statistics will appear here when available</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Status bar -->
+        <div id="status-bar" class="status-bar">
+            <span id="status-text">Loading...</span>
+        </div>
+    </div>
+    
+    <script src="/static/app.js"></script>
+</body>
+</html>
