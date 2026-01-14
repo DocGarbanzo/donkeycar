@@ -372,13 +372,13 @@ class IMUPathDataPreparation:
         # Segment data
         segments = []
         for i in range(self.segmentation.num_segments):
-            boundary = self.segmentation.segment_boundaries[i]
+            segment = self.segmentation.get_segment(i)
             segments.append({
                 'id': i,
-                'start_idx': int(boundary.start_index),
-                'end_idx': int(boundary.end_index),
-                'x': float(self.mean_course.x[boundary.start_index]),
-                'y': float(self.mean_course.y[boundary.start_index]),
+                'start_idx': int(segment.start_index),
+                'end_idx': int(segment.end_index),
+                'x': float(self.mean_course.x[segment.start_index]),
+                'y': float(self.mean_course.y[segment.start_index]),
                 'label': f"S{i}"
             })
         
