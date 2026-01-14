@@ -12,8 +12,6 @@ Then open your browser to http://localhost:8887/imupath
 """
 
 import tempfile
-import os
-import sys
 
 
 def create_test_csv():

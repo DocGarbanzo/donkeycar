@@ -7,7 +7,6 @@ visualizer, reusing the existing course analysis stack from the matplotlib UI.
 
 import numpy as np
 import logging
-from typing import Dict, List, Any, Optional
 
 from donkeycar.parts.tub_v2 import Tub
 from donkeycar.parts.tub_statistics import TubStatistics
@@ -183,10 +182,9 @@ class IMUPathDataBuilder:
         if len(indices) <= max_points:
             return indices
         
-        # Uniform downsampling
-        step = len(indices) / max_points
-        downsampled = [int(i * step) for i in range(max_points)]
-        return np.array(downsampled)
+        # Uniform downsampling using linspace to avoid out-of-bounds indices
+        downsampled = np.linspace(0, len(indices) - 1, num=max_points, dtype=int)
+        return downsampled
     
     def build_json_payload(self, num_laps=None, segment_method=None,
                           max_display_points=1000):

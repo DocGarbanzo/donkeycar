@@ -125,7 +125,6 @@ class LocalWebController(tornado.web.Application):
         self.loop = None
         
         # IMU path visualization data (set by CLI when --web flag used)
-        self.imupath_data = None
         self.imupath_builder = None
 
         handlers = [

@@ -220,7 +220,7 @@ Available stats fields are shown in the UI dropdown (when Tub data loaded).
 
 ```bash
 # Create test data
-python test_imupath_web_manual.py
+python donkeycar/tests/test_imupath_web_manual.py
 
 # Test default behavior (matplotlib)
 donkey imupath <test_file>

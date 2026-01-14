@@ -77,7 +77,7 @@ Then open browser to: **http://localhost:8887/imupath**
 ### Quick Test
 ```bash
 # Create test data
-python test_imupath_web_manual.py
+python donkeycar/tests/test_imupath_web_manual.py
 
 # Test web UI
 donkey imupath --web /tmp/tmpXXXXXX.csv

@@ -8,7 +8,7 @@ This implementation adds a web-based IMU path visualizer to Donkeycar as an opt-
 
 ```bash
 # Create test data
-python test_imupath_web_manual.py
+python donkeycar/tests/test_imupath_web_manual.py
 
 # Test default matplotlib UI (unchanged)
 donkey imupath /tmp/tmpXXXXXX.csv
@@ -98,7 +98,7 @@ Then open browser to: http://localhost:8887/imupath
 
 ```bash
 # Create test data
-python test_imupath_web_manual.py
+python donkeycar/tests/test_imupath_web_manual.py
 
 # Start web UI
 donkey imupath --web /tmp/tmpXXXXXX.csv

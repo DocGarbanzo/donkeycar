@@ -112,6 +112,7 @@ function setupEventHandlers() {
   
   // Lap selector
   $('#lap-selector').change(function() {
+    if (!appState.data) return;
     const numLaps = parseInt($(this).val());
     stopPlayback();
     loadData(numLaps, appState.data.metadata.segment_method);
@@ -119,6 +120,7 @@ function setupEventHandlers() {
   
   // Segment method selector
   $('#segment-method').change(function() {
+    if (!appState.data) return;
     const method = $(this).val();
     stopPlayback();
     loadData(appState.data.metadata.num_laps, method);
@@ -281,16 +283,32 @@ function updateTimePosition(time) {
   const data = appState.data;
   const pathPoints = data.path_points;
   
-  // Find closest point to this time
+  // Find closest point to this time using binary search
+  // Assumes pathPoints are sorted by monotonically increasing 't'
   let closestIdx = 0;
-  let minDiff = Math.abs(pathPoints[0].t - time);
-  
-  for (let i = 1; i < pathPoints.length; i++) {
-    const diff = Math.abs(pathPoints[i].t - time);
-    if (diff < minDiff) {
-      minDiff = diff;
-      closestIdx = i;
+  if (pathPoints.length > 1) {
+    let left = 0;
+    let right = pathPoints.length - 1;
+
+    // Find first index where pathPoints[idx].t >= time
+    while (left < right) {
+      const mid = Math.floor((left + right) / 2);
+      if (pathPoints[mid].t < time) {
+        left = mid + 1;
+      } else {
+        right = mid;
+      }
     }
+
+    // 'left' is the first index with t >= time (or 0 if all are >= time).
+    // Compare this point with the previous one (if any) to get the closest.
+    const idxAfter = left;
+    const idxBefore = left > 0 ? left - 1 : left;
+
+    const diffBefore = Math.abs(pathPoints[idxBefore].t - time);
+    const diffAfter = Math.abs(pathPoints[idxAfter].t - time);
+
+    closestIdx = diffBefore <= diffAfter ? idxBefore : idxAfter;
   }
   
   appState.currentTimeIndex = closestIdx;
@@ -340,7 +358,6 @@ function startPlayback() {
   $('#pause-btn').show();
   
   const data = appState.data;
-  const pathPoints = data.path_points;
   const slider = $('#time-slider');
   const minTime = parseFloat(slider.attr('min'));
   const maxTime = parseFloat(slider.attr('max'));
@@ -392,7 +409,7 @@ function togglePathVisibility() {
  */
 function toggleMeanCourseVisibility() {
   const visible = $('#show-mean-course').is(':checked');
-  if (appState.plotInitialized) {
+  if (appState.plotInitialized && appState.data && appState.data.segments) {
     Plotly.restyle('plot-container', { visible: visible }, 1);
     // Also toggle segment markers (indices 3+)
     const numTraces = appState.data.segments.length;

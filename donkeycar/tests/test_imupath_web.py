@@ -2,7 +2,6 @@
 Test web-based IMU path visualizer components
 """
 
-import pytest
 import json
 import os
 import tempfile
