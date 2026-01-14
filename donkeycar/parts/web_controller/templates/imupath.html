@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Donkey IMU Path Visualizer</title>
+
+  <script src="/static/jquery-3.1.1.min.js"></script>
+  <link href="/static/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
+  <script src="/static/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+  
+  <!-- Plotly.js for interactive visualization -->
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js" 
+          integrity="sha384-OLBgp1GsljhM2TJ+sbHjaiH9txEUvgdDTAzHv2P24donTt6/529l+9Ua0vFImLlb" 
+          crossorigin="anonymous"></script>
+  
+  <style>
+    body {
+      background-color: #1a1a1a;
+      color: #e0e0e0;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    
+    .navbar {
+      margin-bottom: 0;
+    }
+    
+    .container-fluid {
+      padding: 20px;
+    }
+    
+    #plot-container {
+      width: 100%;
+      height: 600px;
+      background-color: #000;
+      border: 1px solid #333;
+      margin-bottom: 20px;
+    }
+    
+    .control-panel {
+      background-color: #2a2a2a;
+      padding: 20px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+    }
+    
+    .control-row {
+      margin-bottom: 15px;
+    }
+    
+    .control-label {
+      display: inline-block;
+      width: 150px;
+      font-weight: bold;
+    }
+    
+    .info-panel {
+      background-color: #2a2a2a;
+      padding: 20px;
+      border-radius: 5px;
+    }
+    
+    .info-section {
+      margin-bottom: 15px;
+    }
+    
+    .info-title {
+      font-weight: bold;
+      font-size: 16px;
+      margin-bottom: 10px;
+      color: #4CAF50;
+    }
+    
+    .info-value {
+      font-family: 'Courier New', monospace;
+      margin-left: 20px;
+    }
+    
+    .slider-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    #time-slider {
+      flex-grow: 1;
+    }
+    
+    .btn-control {
+      margin-right: 10px;
+    }
+    
+    select, input[type="range"] {
+      background-color: #3a3a3a;
+      color: #e0e0e0;
+      border: 1px solid #555;
+      padding: 5px;
+      border-radius: 3px;
+    }
+    
+    .loading {
+      text-align: center;
+      padding: 50px;
+      font-size: 18px;
+    }
+    
+    .error {
+      color: #ff6b6b;
+      padding: 20px;
+      background-color: #2a1a1a;
+      border-radius: 5px;
+      margin: 20px;
+    }
+  </style>
+</head>
+
+<body>
+<nav class="navbar navbar-default">
+  <div class="container-fluid">
+    <div class="navbar-header">
+      <a class="navbar-brand" href="/">Donkey</a>
+    </div>
+    <div class="collapse navbar-collapse">
+      <ul class="nav navbar-nav">
+        <li><a href="/drive">Drive</a></li>
+        <li class="active"><a href="/imupath">IMU Path</a></li>
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid">
+  <h2>IMU Path Visualization</h2>
+  
+  <div id="loading" class="loading">
+    Loading IMU path data...
+  </div>
+  
+  <div id="error" class="error" style="display: none;"></div>
+  
+  <div id="main-content" style="display: none;">
+    <!-- Plot Container -->
+    <div id="plot-container"></div>
+    
+    <!-- Control Panel -->
+    <div class="control-panel">
+      <h4>Controls</h4>
+      
+      <div class="control-row">
+        <span class="control-label">Time Position:</span>
+        <div class="slider-container">
+          <button id="play-btn" class="btn btn-sm btn-success btn-control">▶ Play</button>
+          <button id="pause-btn" class="btn btn-sm btn-warning btn-control" style="display:none;">⏸ Pause</button>
+          <input type="range" id="time-slider" min="0" max="100" value="0" step="0.1">
+          <span id="time-value">0.0s</span>
+        </div>
+      </div>
+      
+      <div class="control-row">
+        <span class="control-label">Number of Laps:</span>
+        <select id="lap-selector">
+          <!-- Populated dynamically -->
+        </select>
+      </div>
+      
+      <div class="control-row">
+        <span class="control-label">Segment Method:</span>
+        <select id="segment-method">
+          <option value="threshold">Threshold</option>
+          <option value="extrema">Extrema</option>
+          <option value="gradient" selected>Gradient</option>
+          <option value="hybrid">Hybrid</option>
+        </select>
+      </div>
+      
+      <div class="control-row" id="stats-control" style="display: none;">
+        <span class="control-label">Stats Field:</span>
+        <select id="stats-field">
+          <!-- Populated dynamically if tub data -->
+        </select>
+      </div>
+      
+      <div class="control-row">
+        <label>
+          <input type="checkbox" id="show-path" checked> Show Driven Path
+        </label>
+        &nbsp;&nbsp;
+        <label>
+          <input type="checkbox" id="show-mean-course" checked> Show Mean Course
+        </label>
+      </div>
+    </div>
+    
+    <!-- Info Panels -->
+    <div class="row">
+      <div class="col-md-6">
+        <div class="info-panel">
+          <div class="info-title">Current Position</div>
+          <div class="info-section">
+            <div class="info-value">Time: <span id="current-time">0.0</span>s</div>
+            <div class="info-value">Lap: <span id="current-lap">0</span></div>
+            <div class="info-value">Segment: <span id="current-segment">0</span></div>
+            <div class="info-value">Speed: <span id="current-speed">0.0</span> m/s</div>
+            <div class="info-value">Heading: <span id="current-heading">0.0</span>°</div>
+            <div class="info-value">Position: (<span id="current-x">0.0</span>, <span id="current-y">0.0</span>)</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="col-md-6">
+        <div class="info-panel">
+          <div class="info-title">Dataset Info</div>
+          <div class="info-section">
+            <div class="info-value">Total Laps: <span id="info-laps">0</span></div>
+            <div class="info-value">Total Points: <span id="info-points">0</span></div>
+            <div class="info-value">Duration: <span id="info-duration">0.0</span>s</div>
+            <div class="info-value">Distance: <span id="info-distance">0.0</span>m</div>
+            <div class="info-value">Segments: <span id="info-segments">0</span></div>
+            <div class="info-value">Mean Course: <span id="info-mean-length">0.0</span>m</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/imupath.js"></script>
+</body>
+</html>
