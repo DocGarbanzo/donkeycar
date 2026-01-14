@@ -226,6 +226,8 @@ class IMUPathDataBuilder:
                 'v': float(self.path_data.velocity[idx]),
                 'h': float(self.path_data.heading[idx]),
                 'lap': self._find_lap_for_index(int(idx)),
+                # Defensive check: segment_ids should match path_data length,
+                # but guard against edge cases during initialization
                 'segment': int(self.segment_ids[idx]) if idx < len(
                     self.segment_ids) else None,
             }
