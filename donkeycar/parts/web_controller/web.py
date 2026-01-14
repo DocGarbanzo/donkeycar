@@ -123,6 +123,10 @@ class LocalWebController(tornado.web.Application):
         self.num_records = 0
         self.wsclients = []
         self.loop = None
+        
+        # IMU path visualization data (set by CLI when --web flag used)
+        self.imupath_data = None
+        self.imupath_builder = None
 
         handlers = [
             (r"/", RedirectHandler, dict(url="/drive")),
@@ -132,6 +136,8 @@ class LocalWebController(tornado.web.Application):
             (r"/calibrate", CalibrateHandler),
             (r"/video", VideoAPI),
             (r"/wsTest", WsTest),
+            (r"/imupath", IMUPathHandler),
+            (r"/api/imupath/data", IMUPathDataAPI),
 
             (r"/static/(.*)", StaticFileHandler,
              {"path": self.static_file_path}),
@@ -394,6 +400,55 @@ class VideoAPI(RequestHandler):
                     pass
             else:
                 await tornado.gen.sleep(interval)
+
+
+class IMUPathHandler(RequestHandler):
+    """Serves the IMU path visualization page."""
+    
+    async def get(self):
+        data = {}
+        await self.render("templates/imupath.html", **data)
+
+
+class IMUPathDataAPI(RequestHandler):
+    """
+    API endpoint for IMU path data.
+    Returns JSON data for visualization.
+    """
+    
+    async def get(self):
+        # Get optional query parameters
+        num_laps = self.get_argument('num_laps', default=None)
+        segment_method = self.get_argument('segment_method', default=None)
+        max_display_points = self.get_argument('max_display_points',
+                                               default='1000')
+        
+        # Convert parameters
+        if num_laps is not None:
+            num_laps = int(num_laps)
+        if max_display_points is not None:
+            max_display_points = int(max_display_points)
+        
+        # Check if data is available
+        if self.application.imupath_builder is None:
+            self.set_status(404)
+            self.write({'error': 'No IMU path data loaded'})
+            return
+        
+        try:
+            # Build JSON payload
+            data = self.application.imupath_builder.build_json_payload(
+                num_laps=num_laps,
+                segment_method=segment_method,
+                max_display_points=max_display_points
+            )
+            
+            self.set_header('Content-Type', 'application/json')
+            self.write(json.dumps(data))
+        except Exception as e:
+            logger.error(f"Error building IMU path data: {e}", exc_info=True)
+            self.set_status(500)
+            self.write({'error': str(e)})
 
 
 class BaseHandler(RequestHandler):
