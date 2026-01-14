@@ -323,5 +323,6 @@ def prepare_imupath_data(path_data, cfg=None, lap_method='y_crossing',
     
     return builder.build_json_payload(
         num_laps=num_laps,
+        segment_method=segment_method,
         max_display_points=max_display_points
     )

@@ -3,6 +3,10 @@
  * Interactive visualization using Plotly.js
  */
 
+// Configuration constants
+const PLAYBACK_INTERVAL_MS = 50;  // 50ms interval for playback
+const PLAYBACK_TIME_INCREMENT = PLAYBACK_INTERVAL_MS / 1000.0;  // Convert to seconds
+
 // Global state
 let appState = {
   data: null,
@@ -341,12 +345,12 @@ function startPlayback() {
   const minTime = parseFloat(slider.attr('min'));
   const maxTime = parseFloat(slider.attr('max'));
   
-  // Playback at ~20 FPS
+  // Playback at configured FPS
   appState.playInterval = setInterval(function() {
     let currentTime = parseFloat(slider.val());
     
-    // Advance time (real-time playback)
-    currentTime += 0.05;  // 50ms interval
+    // Advance time using configured increment
+    currentTime += PLAYBACK_TIME_INCREMENT;
     
     if (currentTime >= maxTime) {
       currentTime = minTime;  // Loop back
@@ -354,7 +358,7 @@ function startPlayback() {
     
     slider.val(currentTime);
     updateTimePosition(currentTime);
-  }, 50);
+  }, PLAYBACK_INTERVAL_MS);
 }
 
 /**

@@ -444,7 +444,7 @@ class IMUPathDataAPI(RequestHandler):
             )
             
             self.set_header('Content-Type', 'application/json')
-            self.write(json.dumps(data))
+            self.write(json.dumps(data, ensure_ascii=False, separators=(',', ':')))
         except Exception as e:
             logger.error(f"Error building IMU path data: {e}", exc_info=True)
             self.set_status(500)
