@@ -97,12 +97,14 @@ function initializeUI() {
 function setupEventHandlers() {
   // Time slider
   $('#time-slider').on('input', function() {
+    if (!appState.data) return;
     const time = parseFloat($(this).val());
     updateTimePosition(time);
   });
   
   // Play/Pause buttons
   $('#play-btn').click(function() {
+    if (!appState.data) return;
     startPlayback();
   });
   
@@ -128,6 +130,7 @@ function setupEventHandlers() {
   
   // Display toggles
   $('#show-path').change(function() {
+    if (!appState.data) return;
     togglePathVisibility();
   });
   
@@ -361,7 +364,6 @@ function startPlayback() {
   $('#play-btn').hide();
   $('#pause-btn').show();
   
-  const data = appState.data;
   const slider = $('#time-slider');
   const minTime = parseFloat(slider.attr('min'));
   const maxTime = parseFloat(slider.attr('max'));

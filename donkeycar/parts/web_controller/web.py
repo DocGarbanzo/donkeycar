@@ -422,11 +422,23 @@ class IMUPathDataAPI(RequestHandler):
         max_display_points = self.get_argument('max_display_points',
                                                default='1000')
         
-        # Convert parameters
-        if num_laps is not None:
-            num_laps = int(num_laps)
-        if max_display_points is not None:
-            max_display_points = int(max_display_points)
+        # Validate segment_method parameter
+        valid_methods = ['threshold', 'extrema', 'gradient', 'hybrid']
+        if segment_method is not None and segment_method not in valid_methods:
+            self.set_status(400)
+            self.write({'error': f'Invalid segment_method. Must be one of: {", ".join(valid_methods)}'})
+            return
+        
+        # Convert parameters with error handling
+        try:
+            if num_laps is not None:
+                num_laps = int(num_laps)
+            if max_display_points is not None:
+                max_display_points = int(max_display_points)
+        except ValueError:
+            self.set_status(400)
+            self.write({'error': 'Invalid query parameter: num_laps and max_display_points must be integers.'})
+            return
         
         # Check if data is available
         if self.application.imupath_builder is None:

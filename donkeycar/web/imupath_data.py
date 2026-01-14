@@ -270,12 +270,13 @@ class IMUPathDataBuilder:
         
         # Build rankings (if available)
         rankings = {}
-        if self.is_tub_data and self.segment_rankings:
+        if self.is_tub_data:
             # Note: This is a simplified version - full implementation
-            # would require computing segment rankings on-the-fly
-            # For now, just indicate which stats are available
+            # would require computing segment rankings on-the-fly.
+            # For now, just indicate which stats are available and whether
+            # any rankings data is actually present.
             rankings = {
-                'available': True,
+                'available': bool(self.segment_rankings),
                 'fields': self.available_ranking_keys,
             }
         
