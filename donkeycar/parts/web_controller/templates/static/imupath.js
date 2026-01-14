@@ -278,13 +278,17 @@ function renderPlot() {
 
 /**
  * Update time position
+ * 
+ * Note: This function assumes path_points are sorted by monotonically
+ * increasing 't' (timestamp). This is guaranteed by the data source
+ * (PathData from course_analysis) which maintains temporal ordering.
  */
 function updateTimePosition(time) {
   const data = appState.data;
   const pathPoints = data.path_points;
   
   // Find closest point to this time using binary search
-  // Assumes pathPoints are sorted by monotonically increasing 't'
+  // Binary search is efficient (O(log n)) because timestamps are sorted
   let closestIdx = 0;
   if (pathPoints.length > 1) {
     let left = 0;

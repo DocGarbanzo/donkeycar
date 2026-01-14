@@ -177,12 +177,14 @@ class IMUPathDataBuilder:
             max_points: Maximum number of points to return
             
         Returns:
-            Downsampled array of indices
+            Downsampled array of indices (unique, no duplicates)
         """
+        # No downsampling needed if we have fewer points than max
         if len(indices) <= max_points:
             return indices
         
         # Uniform downsampling using linspace to avoid out-of-bounds indices
+        # linspace with integer dtype produces unique indices (no duplicates)
         downsampled = np.linspace(0, len(indices) - 1, num=max_points, dtype=int)
         return downsampled
     
