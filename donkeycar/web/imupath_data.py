@@ -249,7 +249,7 @@ class IMUPathDataBuilder:
                 'start_idx': int(segment.start_index),
                 'end_idx': int(segment.end_index),
                 'label': f"Seg {i}",
-                'type': segment.type.name,
+                'type': segment.segment_type.name,
             })
         
         # Build metadata
