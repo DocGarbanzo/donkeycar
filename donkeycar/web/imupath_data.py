@@ -251,6 +251,26 @@ class IMUPathDataBuilder:
                 'label': f"Seg {i}",
                 'type': segment.segment_type.name,
             })
+
+        # Build segment boundaries (for drawing normal lines)
+        segment_boundaries = []
+        for boundary in self.segmentation.segment_boundaries:
+            point = boundary['point']
+            normal = boundary['normal']
+            # Create line endpoints (extend normal in both directions)
+            line_length = 0.3  # meters
+            x1 = float(point[0] - normal[0] * line_length)
+            y1 = float(point[1] - normal[1] * line_length)
+            x2 = float(point[0] + normal[0] * line_length)
+            y2 = float(point[1] + normal[1] * line_length)
+
+            segment_boundaries.append({
+                'point': {'x': float(point[0]), 'y': float(point[1])},
+                'normal': {'x': float(normal[0]), 'y': float(normal[1])},
+                'line': {'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2},
+                'segment_from': int(boundary['segment_from']),
+                'segment_to': int(boundary['segment_to']),
+            })
         
         # Build metadata
         metadata = {
@@ -284,6 +304,7 @@ class IMUPathDataBuilder:
             'path_points': path_points,
             'mean_course': mean_course_points,
             'segments': segments,
+            'segment_boundaries': segment_boundaries,
             'metadata': metadata,
             'rankings': rankings,
         }

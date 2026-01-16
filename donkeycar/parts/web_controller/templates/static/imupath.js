@@ -16,6 +16,15 @@ let appState = {
   plotInitialized: false,
 };
 
+/**
+ * Format time in seconds as MM:SS.S
+ */
+function formatTime(seconds) {
+  const mins = Math.floor(seconds / 60);
+  const secs = (seconds % 60).toFixed(1);
+  return `${mins}:${secs.padStart(4, '0')}`;
+}
+
 // Initialize when page loads
 $(document).ready(function() {
   console.log('IMU Path Visualizer loading...');
@@ -78,7 +87,7 @@ function initializeUI() {
   const minTime = Math.min(...times);
   const maxTime = Math.max(...times);
   $('#time-slider').attr('min', minTime).attr('max', maxTime).val(minTime);
-  $('#time-value').text(minTime.toFixed(1) + 's');
+  $('#time-value').text(formatTime(minTime));
   
   // Setup stats field selector if available
   if (metadata.available_stats && metadata.available_stats.length > 0) {
@@ -214,7 +223,7 @@ function renderPlot() {
     hoverinfo: 'skip',
   });
   
-  // Add segment boundary markers
+  // Add segment boundary markers and normal lines
   segments.forEach(seg => {
     const idx = seg.start_idx;
     if (idx < meanX.length) {
@@ -226,6 +235,10 @@ function renderPlot() {
         name: seg.label,
         text: [seg.label],
         textposition: 'top center',
+        textfont: {
+          color: '#808080',
+          size: 10,
+        },
         marker: {
           size: 8,
           color: '#808080',
@@ -235,6 +248,25 @@ function renderPlot() {
         hovertemplate: `${seg.label}<br>Type: ${seg.type}<extra></extra>`,
       });
     }
+  });
+
+  // Add segment boundary normal lines
+  const segmentBoundaries = data.segment_boundaries || [];
+  segmentBoundaries.forEach(boundary => {
+    traces.push({
+      x: [boundary.line.x1, boundary.line.x2],
+      y: [boundary.line.y1, boundary.line.y2],
+      mode: 'lines',
+      type: 'scatter',
+      name: 'Boundary',
+      line: {
+        color: '#808080',
+        width: 1,
+        dash: 'dot',
+      },
+      showlegend: false,
+      hoverinfo: 'skip',
+    });
   });
   
   // Layout
@@ -330,7 +362,7 @@ function updateTimePosition(time) {
   }
   
   // Update info display
-  $('#time-value').text(point.t.toFixed(1) + 's');
+  $('#time-value').text(formatTime(point.t));
   $('#current-time').text(point.t.toFixed(2));
   $('#current-lap').text(point.lap !== null ? point.lap + 1 : 'N/A');
   $('#current-segment').text(point.segment !== null ? point.segment : 'N/A');
@@ -345,10 +377,10 @@ function updateTimePosition(time) {
  */
 function updateInfoPanels() {
   const metadata = appState.data.metadata;
-  
+
   $('#info-laps').text(metadata.total_laps);
   $('#info-points').text(metadata.total_points);
-  $('#info-duration').text(metadata.duration.toFixed(1));
+  $('#info-duration').text(formatTime(metadata.duration));
   $('#info-distance').text(metadata.total_distance.toFixed(1));
   $('#info-segments').text(metadata.num_segments);
   $('#info-mean-length').text(metadata.mean_course_length.toFixed(1));
@@ -416,10 +448,13 @@ function togglePathVisibility() {
 function toggleMeanCourseVisibility() {
   const visible = $('#show-mean-course').is(':checked');
   if (appState.plotInitialized && appState.data && appState.data.segments) {
+    // Toggle mean course line (trace 1)
     Plotly.restyle('plot-container', { visible: visible }, 1);
-    // Also toggle segment markers (indices 3+)
-    const numTraces = appState.data.segments.length;
-    for (let i = 0; i < numTraces; i++) {
+    // Toggle segment markers and boundary lines (indices 3+)
+    const numSegments = appState.data.segments.length;
+    const numBoundaries = (appState.data.segment_boundaries || []).length;
+    const totalMeanCourseTraces = numSegments + numBoundaries;
+    for (let i = 0; i < totalMeanCourseTraces; i++) {
       Plotly.restyle('plot-container', { visible: visible }, 3 + i);
     }
   }

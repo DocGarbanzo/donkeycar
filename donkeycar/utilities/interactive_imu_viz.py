@@ -618,9 +618,17 @@ class InteractiveIMUVisualizer:
         self.display_toggles = CheckButtons(
             ax_toggle, toggle_labels, toggle_actives)
         # Make checkbox borders white and check marks cyan
-        for rect in self.display_toggles.rectangles:
-            rect.set_edgecolor('white')
-            rect.set_linewidth(1.5)
+        # Compatible with both old and new matplotlib versions
+        if hasattr(self.display_toggles, 'rectangles'):
+            # Old matplotlib API
+            for rect in self.display_toggles.rectangles:
+                rect.set_edgecolor('white')
+                rect.set_linewidth(1.5)
+        else:
+            # New matplotlib API - access rectangles through ax.patches
+            for patch in ax_toggle.patches:
+                patch.set_edgecolor('white')
+                patch.set_linewidth(1.5)
         all_lines = itertools.chain.from_iterable(self.display_toggles.lines)
         for line in all_lines:
             line.set_color('cyan')

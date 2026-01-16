@@ -420,7 +420,7 @@ class IMUPathDataAPI(RequestHandler):
         num_laps = self.get_argument('num_laps', default=None)
         segment_method = self.get_argument('segment_method', default=None)
         max_display_points = self.get_argument('max_display_points',
-                                               default='1000')
+                                               default='10000')
         
         # Validate segment_method parameter
         valid_methods = ['threshold', 'extrema', 'gradient', 'hybrid']
