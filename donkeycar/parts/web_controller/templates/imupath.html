@@ -29,13 +29,30 @@
       align-items: stretch;
     }
 
-    #plot-container {
+    .plot-wrapper {
       flex: 1 1 auto;
+      position: relative;
+      min-width: 0;
+    }
+
+    #plot-container {
       height: 580px;
       background-color: #000;
       border: 1px solid #333;
-      min-width: 0;
       width: 100%;
+    }
+
+    #fast-marker {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background-color: #FF6B6B;
+      border: 2px solid white;
+      pointer-events: none;
+      z-index: 1000;
+      transform: translate(-50%, -50%);
+      display: none;
     }
 
     .position-panel {
@@ -192,7 +209,10 @@
 <div id="main-content" style="display: none;">
   <!-- Main layout: Plot + Position Panel -->
   <div class="main-layout">
-    <div id="plot-container"></div>
+    <div class="plot-wrapper">
+      <div id="plot-container"></div>
+      <div id="fast-marker"></div>
+    </div>
 
     <div class="position-panel">
       <div class="info-title">Current Position</div>

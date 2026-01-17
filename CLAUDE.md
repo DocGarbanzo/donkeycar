@@ -471,6 +471,43 @@ Segment stats ignore trailing partial laps beyond the last boundary.
 Segment stats collapse multiple instances per lap to keep ranks unique.
 Lap labels show the trailing partial lap as N+1.
 
+### Running the Web-Based IMU Path Visualizer
+
+**CRITICAL**: The web server must be run from within a car directory (e.g.,
+`~/cars/hyper`) and must point to the `data/` subdirectory containing the tub.
+
+**Command:**
+```bash
+cd ~/cars/hyper  # Navigate to car directory first
+conda activate donkey  # Ensure donkey environment is active
+donkey imupath --web data  # Point to data/ directory, not parent
+```
+
+**Common mistakes to avoid:**
+- ❌ Running from repo root: `donkey imupath --web ~/cars/hyper`
+  (Will fail: FileNotFoundError for catalog_manifest)
+- ❌ Running without specifying data directory: `donkey imupath --web .`
+  (Will fail: tries to use parent directory as tub)
+- ✅ Correct: `cd ~/cars/hyper && donkey imupath --web data`
+
+**Server details:**
+- Default port: `8887` (configurable via `WEB_CONTROL_PORT` in config.py)
+- Access at: `http://localhost:8887/imupath`
+- Or: `http://<hostname>.local:8887/imupath`
+
+**To stop the server:**
+```bash
+# Find and kill the process
+lsof -i :8887 | grep LISTEN | awk '{print $2}' | xargs -r kill
+```
+
+**Features:**
+- Dense point cloud visualization (10,000 points default)
+- Segment boundary normal lines
+- Time formatting (MM:SS.S)
+- Fast keyboard navigation with arrow keys (← →)
+- Live segment statistics with configurable field aggregations
+
 ### Key Files
 
 - `donkeycar/utilities/imu_visualization.py` - Main UI (matplotlib)

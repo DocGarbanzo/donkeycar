@@ -21,6 +21,8 @@ let appState = {
   // Currently selected stats field for segment ranking
   currentStatsField: null,
   resizeTimer: null,
+  plotUpdateTimer: null,  // Debounce timer for plot updates
+  pendingPlotUpdate: false,  // Flag for pending plot update
 };
 
 /**
@@ -267,6 +269,24 @@ function setupEventHandlers() {
       Plotly.Plots.resize('plot-container');
     }, 100);
   });
+
+  // Keyboard controls for left/right arrow keys
+  $(document).on('keydown', function(e) {
+    if (!appState.data) return;
+
+    const pathPoints = appState.data.path_points;
+    const currentIdx = appState.currentTimeIndex;
+
+    if (e.key === 'ArrowLeft' && currentIdx > 0) {
+      // Move backward one point
+      e.preventDefault();
+      updateByIndex(currentIdx - 1);
+    } else if (e.key === 'ArrowRight' && currentIdx < pathPoints.length - 1) {
+      // Move forward one point
+      e.preventDefault();
+      updateByIndex(currentIdx + 1);
+    }
+  });
 }
 
 /**
@@ -302,9 +322,19 @@ function renderPlot() {
       colorscale: 'Viridis',
       showscale: true,
       colorbar: {
-        title: 'Speed (m/s)',
+        title: {
+          text: 'Speed (m/s)',
+          font: {
+            family: 'Courier New, monospace',
+            size: 11,
+          },
+        },
         x: 0.98,
         xanchor: 'right',
+        tickfont: {
+          family: 'Courier New, monospace',
+          size: 11,
+        },
       },
     },
     hovertemplate: (
@@ -388,19 +418,43 @@ function renderPlot() {
   const layout = {
     title: {
       text: 'IMU Path Visualization',
-      font: { color: '#e0e0e0' },
+      font: {
+        family: 'Courier New, monospace',
+        size: 11,
+        color: '#e0e0e0',
+      },
     },
     xaxis: {
-      title: 'X Position (m)',
+      title: {
+        text: 'X Position (m)',
+        font: {
+          family: 'Courier New, monospace',
+          size: 11,
+        },
+      },
       gridcolor: '#333',
       color: '#e0e0e0',
       scaleanchor: 'y',
       scaleratio: 1,
+      tickfont: {
+        family: 'Courier New, monospace',
+        size: 11,
+      },
     },
     yaxis: {
-      title: 'Y Position (m)',
+      title: {
+        text: 'Y Position (m)',
+        font: {
+          family: 'Courier New, monospace',
+          size: 11,
+        },
+      },
       gridcolor: '#333',
       color: '#e0e0e0',
+      tickfont: {
+        family: 'Courier New, monospace',
+        size: 11,
+      },
     },
     plot_bgcolor: '#000',
     paper_bgcolor: '#1a1a1a',
@@ -410,10 +464,18 @@ function renderPlot() {
       x: 0,
       y: 1,
       bgcolor: 'rgba(0,0,0,0.5)',
-      font: { color: '#e0e0e0' },
+      font: {
+        family: 'Courier New, monospace',
+        size: 11,
+        color: '#e0e0e0',
+      },
     },
     margin: { l: 50, r: 24, t: 50, b: 50 },
     annotations: annotations,
+    font: {
+      family: 'Courier New, monospace',
+      size: 11,
+    },
   };
   
   const config = {
@@ -428,8 +490,64 @@ function renderPlot() {
 }
 
 /**
+ * Update display by index (fast path for keyboard navigation)
+ */
+function updateByIndex(idx) {
+  const pathPoints = appState.data.path_points;
+  appState.currentTimeIndex = idx;
+  const point = pathPoints[idx];
+
+  // Update slider to match
+  $('#time-slider').val(point.t);
+
+  // Fast update - only marker, skip expensive operations
+  updateDisplayFast(idx, point);
+}
+
+/**
+ * Fast update for keyboard navigation - uses CSS overlay marker
+ */
+function updateDisplayFast(closestIdx, point) {
+  // Update slider index display (instant)
+  const totalPoints = appState.data.path_points.length;
+  $('#idx-value').text(`${closestIdx}/${totalPoints - 1}`);
+
+  // Update position panel (instant - no expensive calculations)
+  $('#current-date').text(formatDate(point.t));
+  $('#current-time').text(formatTime(point.t));
+  $('#current-idx').text(closestIdx);
+  $('#current-lap').text(point.lap !== null ? point.lap + 1 : '--');
+  $('#current-segment').text(point.segment !== null ? point.segment : '--');
+  $('#current-speed').text(point.v.toFixed(2));
+  $('#current-heading').text((point.h * 180 / Math.PI).toFixed(1) + '°');
+  $('#current-x').text(point.x.toFixed(2));
+  $('#current-y').text(point.y.toFixed(2));
+
+  // Update fast CSS overlay marker (instant - no Plotly call!)
+  if (appState.plotInitialized) {
+    const plotDiv = document.getElementById('plot-container');
+    const xaxis = plotDiv._fullLayout.xaxis;
+    const yaxis = plotDiv._fullLayout.yaxis;
+
+    // Convert data coordinates to pixel coordinates
+    const px = xaxis.l2p(point.x) + xaxis._offset;
+    const py = yaxis.l2p(point.y) + yaxis._offset;
+
+    // Position the CSS marker
+    const marker = $('#fast-marker');
+    marker.css({
+      left: px + 'px',
+      top: py + 'px',
+      display: 'block'
+    });
+  }
+
+  // Skip distance calculations and Plotly updates for maximum speed
+}
+
+/**
  * Update time position
- * 
+ *
  * Note: This function assumes path_points are sorted by monotonically
  * increasing 't' (timestamp). This is guaranteed by the data source
  * (PathData from course_analysis) which maintains temporal ordering.
@@ -437,7 +555,7 @@ function renderPlot() {
 function updateTimePosition(time) {
   const data = appState.data;
   const pathPoints = data.path_points;
-  
+
   // Find closest point to this time using binary search
   // Binary search is efficient (O(log n)) because timestamps are sorted
   let closestIdx = 0;
@@ -465,9 +583,19 @@ function updateTimePosition(time) {
 
     closestIdx = diffBefore <= diffAfter ? idxBefore : idxAfter;
   }
-  
+
   appState.currentTimeIndex = closestIdx;
   const point = pathPoints[closestIdx];
+
+  // Update display
+  updateDisplayForPoint(closestIdx, point);
+}
+
+/**
+ * Update all display elements for a given point
+ */
+function updateDisplayForPoint(closestIdx, point) {
+  const pathPoints = appState.data.path_points;
 
   // Update current path line and marker position on plot
   if (appState.plotInitialized) {
@@ -475,17 +603,11 @@ function updateTimePosition(time) {
     const pathX = pathPoints.slice(0, closestIdx + 1).map(p => p.x);
     const pathY = pathPoints.slice(0, closestIdx + 1).map(p => p.y);
 
-    // Update current path line (trace index 2)
+    // Batch update both traces at once for better performance
     Plotly.restyle('plot-container', {
-      x: [pathX],
-      y: [pathY],
-    }, 2);
-
-    // Update current position marker (trace index 3)
-    Plotly.restyle('plot-container', {
-      x: [[point.x]],
-      y: [[point.y]],
-    }, 3);
+      x: [pathX, [point.x]],
+      y: [pathY, [point.y]],
+    }, [2, 3]);
   }
 
   // Update slider index display
@@ -600,7 +722,11 @@ function createSegmentAnnotations(visible) {
       y: meanCourse[midIdx]?.y || 0,
       text: String(seg.id),
       showarrow: false,
-      font: { size: 12, color: 'black' },
+      font: {
+        family: 'Courier New, monospace',
+        size: 11,
+        color: 'black',
+      },
       bgcolor: 'white',
       bordercolor: 'darkred',
       borderwidth: 2,
