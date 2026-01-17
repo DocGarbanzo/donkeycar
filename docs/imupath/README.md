@@ -1,10 +1,14 @@
 # Web-Based IMU Path Visualizer
 
-This document describes the web-based IMU path visualization feature for Donkeycar.
+This document describes the web-based IMU path visualization feature for
+Donkeycar.
 
 ## Overview
 
-The web-based IMU path visualizer provides an alternative to the matplotlib-based UI, offering browser-based interactive visualization of vehicle trajectories. It reuses the existing Donkey tornado web server infrastructure and the same course analysis stack as the matplotlib UI.
+The web-based IMU path visualizer provides an alternative to the
+matplotlib-based UI, offering browser-based interactive visualization of
+vehicle trajectories. It reuses the existing Donkey tornado web server
+infrastructure and the same course analysis stack as the matplotlib UI.
 
 ## Features
 
@@ -17,9 +21,14 @@ The web-based IMU path visualizer provides an alternative to the matplotlib-base
   - Segment method selector
   - Display toggles (driven path, mean course)
 - **Info panels**:
-  - Current position (time, lap, segment, speed, heading, coordinates)
+  - Current position (date/time, lap, segment, lap distance, segment rank,
+    speed, heading, coordinates)
   - Dataset metadata (laps, points, duration, distance, segments)
-- **Segment statistics** (for Tub data with configured fields)
+- **Responsive layout** keeps the current position panel visible while the
+  plot resizes with the browser window and values stay right-aligned
+- **Segment statistics** (for Tub data with configurable aggregations)
+  - Stats dropdown includes all supported aggregations for configured
+    stats fields
 
 ## Usage
 
@@ -50,7 +59,8 @@ donkey imupath --web --config ./mycar/config.py ./tub_directory
 
 ### Accessing the Web UI
 
-When using `--web`, the server starts on port 8887 (or configured `WEB_CONTROL_PORT`):
+When using `--web`, the server starts on port 8887 (or configured
+`WEB_CONTROL_PORT`):
 
 ```
 Web UI available at:
@@ -124,7 +134,8 @@ CSV/Tub → PathData → IMUPathDataBuilder → JSON → Browser
     ...
   ],
   "segments": [
-    {"id": 0, "start_idx": 0, "end_idx": 50, "label": "Seg 0", "type": "STRAIGHT"},
+    {"id": 0, "start_idx": 0, "end_idx": 50,
+     "label": "Seg 0", "type": "STRAIGHT"},
     ...
   ],
   "metadata": {
@@ -162,7 +173,8 @@ IMU_VISUALIZATION_PARAMS = {
 }
 ```
 
-Points are uniformly downsampled for display while full data is maintained for statistics.
+Points are uniformly downsampled for display while full data is maintained
+for statistics.
 
 ### Segment Statistics
 

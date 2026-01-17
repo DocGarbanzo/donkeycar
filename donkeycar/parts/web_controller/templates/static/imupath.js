@@ -5,7 +5,8 @@
 
 // Configuration constants
 const PLAYBACK_INTERVAL_MS = 50;  // 50ms interval for playback
-const PLAYBACK_TIME_INCREMENT = PLAYBACK_INTERVAL_MS / 1000.0;  // Convert to seconds
+// Convert to seconds
+const PLAYBACK_TIME_INCREMENT = PLAYBACK_INTERVAL_MS / 1000.0;
 
 // Global state
 let appState = {
@@ -14,15 +15,108 @@ let appState = {
   isPlaying: false,
   playInterval: null,
   plotInitialized: false,
+  currentPathTraceIndex: null,  // Index of current path trace for updates
+  showDrivenPath: true,  // Preserve visibility state across reloads
+  showMeanCourse: true,  // Preserve visibility state across reloads
+  // Currently selected stats field for segment ranking
+  currentStatsField: null,
+  resizeTimer: null,
 };
 
 /**
- * Format time in seconds as MM:SS.S
+ * Format duration in seconds as MM:SS.S
  */
-function formatTime(seconds) {
+function formatDuration(seconds) {
   const mins = Math.floor(seconds / 60);
   const secs = (seconds % 60).toFixed(1);
   return `${mins}:${secs.padStart(4, '0')}`;
+}
+
+/**
+ * Format unix timestamp as date string (YYYY-MM-DD)
+ */
+function formatDate(unixTimestamp) {
+  const date = new Date(unixTimestamp * 1000);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Format unix timestamp as time string with milliseconds (HH:MM:SS.mmm)
+ */
+function formatTime(unixTimestamp) {
+  const date = new Date(unixTimestamp * 1000);
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  const ms = String(date.getMilliseconds()).padStart(3, '0');
+  return `${hours}:${minutes}:${seconds}.${ms}`;
+}
+
+/**
+ * Find the start index for a given lap
+ */
+function findLapStartIndex(lapNum) {
+  if (!appState.data || lapNum <= 0) return 0;
+  const pathPoints = appState.data.path_points;
+  for (let i = 0; i < pathPoints.length; i++) {
+    if (pathPoints[i].lap === lapNum) return i;
+  }
+  return 0;
+}
+
+/**
+ * Calculate cumulative distance from start index to end index
+ */
+function calculateCumulativeDistance(toIndex, fromIndex = 0) {
+  if (!appState.data || toIndex <= fromIndex) return 0;
+  const pathPoints = appState.data.path_points;
+  let dist = 0;
+  for (let i = fromIndex + 1; i <= toIndex && i < pathPoints.length; i++) {
+    const p1 = pathPoints[i - 1];
+    const p2 = pathPoints[i];
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    dist += Math.sqrt(dx * dx + dy * dy);
+  }
+  return dist;
+}
+
+/**
+ * Update the current path line trace on the plot
+ */
+function updateCurrentPathLine(closestIdx) {
+  const pathPoints = appState.data.path_points;
+  const pathX = pathPoints.slice(0, closestIdx + 1).map(p => p.x);
+  const pathY = pathPoints.slice(0, closestIdx + 1).map(p => p.y);
+  Plotly.restyle('plot-container', { x: [pathX], y: [pathY] }, 2);
+}
+
+/**
+ * Update the current position marker on the plot
+ */
+function updateCurrentPositionMarker(point) {
+  Plotly.restyle('plot-container', { x: [[point.x]], y: [[point.y]] }, 3);
+}
+
+/**
+ * Get segment ranking for the current point and selected stats field.
+ */
+function getSegmentRanking(point) {
+  if (!appState.data || !appState.data.rankings) return null;
+  const rankings = appState.data.rankings.segments;
+  if (!rankings) return null;
+  if (point.lap === null || point.segment === null) return null;
+  if (!appState.currentStatsField) return null;
+  const lapRanks = rankings[String(point.lap)];
+  if (!lapRanks) return null;
+  const segRanks = lapRanks[String(point.segment)];
+  if (!segRanks) return null;
+  const value = segRanks[appState.currentStatsField];
+  if (value === undefined || value === null) return null;
+  return value;
 }
 
 // Initialize when page loads
@@ -50,10 +144,11 @@ function loadData(numLaps = null, segmentMethod = null) {
       console.log('Data loaded:', data);
       appState.data = data;
       initializeUI();
-      renderPlot();
-      updateInfoPanels();
       $('#loading').hide();
       $('#main-content').show();
+      renderPlot();
+      applyVisibilityState();  // Restore visibility after render
+      updateInfoPanels();
     },
     error: function(xhr, status, error) {
       console.error('Error loading data:', error);
@@ -69,34 +164,40 @@ function loadData(numLaps = null, segmentMethod = null) {
 function initializeUI() {
   const data = appState.data;
   const metadata = data.metadata;
-  
+
   // Populate lap selector
   const lapSelect = $('#lap-selector');
   lapSelect.empty();
   for (let i = 1; i <= metadata.total_laps; i++) {
-    lapSelect.append(`<option value="${i}" ${i === metadata.num_laps ? 'selected' : ''}>
-      ${i} lap${i > 1 ? 's' : ''}
-    </option>`);
+    const label = i === 1 ? '1 lap' : `${i} laps`;
+    const selected = i === metadata.num_laps ? 'selected' : '';
+    lapSelect.append(`<option value="${i}" ${selected}>${label}</option>`);
   }
-  
+
   // Set segment method
   $('#segment-method').val(metadata.segment_method);
-  
+
   // Setup time slider
   const times = data.path_points.map(p => p.t);
   const minTime = Math.min(...times);
   const maxTime = Math.max(...times);
   $('#time-slider').attr('min', minTime).attr('max', maxTime).val(minTime);
-  $('#time-value').text(formatTime(minTime));
-  
+
   // Setup stats field selector if available
   if (metadata.available_stats && metadata.available_stats.length > 0) {
     const statsSelect = $('#stats-field');
     statsSelect.empty();
     metadata.available_stats.forEach(stat => {
-      statsSelect.append(`<option value="${stat}">${stat}</option>`);
+      // Format display name (replace underscores, title case)
+      const displayName = stat.replace(/_/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase());
+      statsSelect.append(`<option value="${stat}">${displayName}</option>`);
     });
+    appState.currentStatsField = metadata.available_stats[0];
     $('#stats-control').show();
+  } else {
+    appState.currentStatsField = null;
+    $('#stats-control').hide();
   }
 }
 
@@ -142,9 +243,29 @@ function setupEventHandlers() {
     if (!appState.data) return;
     togglePathVisibility();
   });
-  
+
   $('#show-mean-course').change(function() {
     toggleMeanCourseVisibility();
+  });
+
+  // Stats field selector
+  $('#stats-field').change(function() {
+    appState.currentStatsField = $(this).val();
+    // Refresh display if we have ranking data
+    if (appState.data && appState.data.rankings) {
+      const time = parseFloat($('#time-slider').val());
+      updateTimePosition(time);
+    }
+  });
+
+  $(window).on('resize', function() {
+    if (!appState.plotInitialized) return;
+    if (appState.resizeTimer) {
+      clearTimeout(appState.resizeTimer);
+    }
+    appState.resizeTimer = setTimeout(function() {
+      Plotly.Plots.resize('plot-container');
+    }, 100);
   });
 }
 
@@ -182,10 +303,14 @@ function renderPlot() {
       showscale: true,
       colorbar: {
         title: 'Speed (m/s)',
-        x: 1.02,
+        x: 0.98,
+        xanchor: 'right',
       },
     },
-    hovertemplate: 'X: %{x:.2f}m<br>Y: %{y:.2f}m<br>Speed: %{marker.color:.2f}m/s<extra></extra>',
+    hovertemplate: (
+      'X: %{x:.2f}m<br>Y: %{y:.2f}m<br>' +
+      'Speed: %{marker.color:.2f}m/s<extra></extra>'
+    ),
     visible: true,
   });
   
@@ -198,12 +323,27 @@ function renderPlot() {
     name: 'Mean Course',
     line: {
       color: '#808080',
-      width: 2,
+      width: 3.5,
     },
     hovertemplate: 'X: %{x:.2f}m<br>Y: %{y:.2f}m<extra></extra>',
     visible: true,
   });
   
+  // Current path line (from start to current position) - red line
+  traces.push({
+    x: [pathX[0]],
+    y: [pathY[0]],
+    mode: 'lines',
+    type: 'scatter',
+    name: 'Current Path',
+    line: {
+      color: '#FF6B6B',
+      width: 1.5,
+    },
+    hoverinfo: 'skip',
+  });
+  appState.currentPathTraceIndex = traces.length - 1;
+
   // Current position marker
   traces.push({
     x: [pathX[0]],
@@ -222,35 +362,8 @@ function renderPlot() {
     },
     hoverinfo: 'skip',
   });
-  
-  // Add segment boundary markers and normal lines
-  segments.forEach(seg => {
-    const idx = seg.start_idx;
-    if (idx < meanX.length) {
-      traces.push({
-        x: [meanX[idx]],
-        y: [meanY[idx]],
-        mode: 'markers+text',
-        type: 'scatter',
-        name: seg.label,
-        text: [seg.label],
-        textposition: 'top center',
-        textfont: {
-          color: '#808080',
-          size: 10,
-        },
-        marker: {
-          size: 8,
-          color: '#808080',
-          symbol: 'diamond',
-        },
-        showlegend: false,
-        hovertemplate: `${seg.label}<br>Type: ${seg.type}<extra></extra>`,
-      });
-    }
-  });
 
-  // Add segment boundary normal lines
+  // Add segment boundary normal lines (solid lines, not dashed)
   const segmentBoundaries = data.segment_boundaries || [];
   segmentBoundaries.forEach(boundary => {
     traces.push({
@@ -261,14 +374,16 @@ function renderPlot() {
       name: 'Boundary',
       line: {
         color: '#808080',
-        width: 1,
-        dash: 'dot',
+        width: 2.5,
       },
       showlegend: false,
       hoverinfo: 'skip',
     });
   });
   
+  // Build segment label annotations (round circles like matplotlib version)
+  const annotations = createSegmentAnnotations(true);
+
   // Layout
   const layout = {
     title: {
@@ -297,7 +412,8 @@ function renderPlot() {
       bgcolor: 'rgba(0,0,0,0.5)',
       font: { color: '#e0e0e0' },
     },
-    margin: { l: 50, r: 50, t: 50, b: 50 },
+    margin: { l: 50, r: 24, t: 50, b: 50 },
+    annotations: annotations,
   };
   
   const config = {
@@ -352,24 +468,59 @@ function updateTimePosition(time) {
   
   appState.currentTimeIndex = closestIdx;
   const point = pathPoints[closestIdx];
-  
-  // Update marker position on plot
+
+  // Update current path line and marker position on plot
   if (appState.plotInitialized) {
+    // Get path up to current position
+    const pathX = pathPoints.slice(0, closestIdx + 1).map(p => p.x);
+    const pathY = pathPoints.slice(0, closestIdx + 1).map(p => p.y);
+
+    // Update current path line (trace index 2)
+    Plotly.restyle('plot-container', {
+      x: [pathX],
+      y: [pathY],
+    }, 2);
+
+    // Update current position marker (trace index 3)
     Plotly.restyle('plot-container', {
       x: [[point.x]],
       y: [[point.y]],
-    }, 2);  // Index 2 is current position marker
+    }, 3);
   }
-  
-  // Update info display
-  $('#time-value').text(formatTime(point.t));
-  $('#current-time').text(point.t.toFixed(2));
-  $('#current-lap').text(point.lap !== null ? point.lap + 1 : 'N/A');
-  $('#current-segment').text(point.segment !== null ? point.segment : 'N/A');
+
+  // Update slider index display
+  const totalPoints = appState.data.path_points.length;
+  $('#idx-value').text(`${closestIdx}/${totalPoints - 1}`);
+
+  // Update position panel
+  $('#current-date').text(formatDate(point.t));
+  $('#current-time').text(formatTime(point.t));
+  $('#current-idx').text(closestIdx);
+  $('#current-lap').text(point.lap !== null ? point.lap + 1 : '--');
+  $('#current-segment').text(point.segment !== null ? point.segment : '--');
   $('#current-speed').text(point.v.toFixed(2));
-  $('#current-heading').text((point.h * 180 / Math.PI).toFixed(1));
+  $('#current-heading').text((point.h * 180 / Math.PI).toFixed(1) + '°');
   $('#current-x').text(point.x.toFixed(2));
   $('#current-y').text(point.y.toFixed(2));
+
+  // Calculate and display distances
+  const totalDist = calculateCumulativeDistance(closestIdx);
+  $('#current-total-dist').text(totalDist.toFixed(1) + 'm');
+
+  // Calculate lap distance
+  const lapNum = point.lap !== null ? point.lap : 0;
+  const lapStartIdx = findLapStartIndex(lapNum);
+  const lapDist = calculateCumulativeDistance(closestIdx, lapStartIdx);
+  $('#current-lap-dist').text(lapDist.toFixed(1) + 'm');
+
+  // Update segment rank if available
+  const segRank = getSegmentRanking(point);
+  if (segRank === null) {
+    $('#current-seg-rank').text('--');
+    return;
+  }
+  const pct = Math.round(segRank * 100);
+  $('#current-seg-rank').text(`${pct}%`);
 }
 
 /**
@@ -380,7 +531,7 @@ function updateInfoPanels() {
 
   $('#info-laps').text(metadata.total_laps);
   $('#info-points').text(metadata.total_points);
-  $('#info-duration').text(formatTime(metadata.duration));
+  $('#info-duration').text(formatDuration(metadata.duration));
   $('#info-distance').text(metadata.total_distance.toFixed(1));
   $('#info-segments').text(metadata.num_segments);
   $('#info-mean-length').text(metadata.mean_course_length.toFixed(1));
@@ -433,10 +584,53 @@ function stopPlayback() {
 }
 
 /**
+ * Create segment label annotations for the plot
+ * @param {boolean} visible - Whether annotations should be visible
+ * @returns {Array} Array of annotation objects
+ */
+function createSegmentAnnotations(visible) {
+  if (!appState.data || !appState.data.segments) {
+    return [];
+  }
+  return appState.data.segments.map((seg) => {
+    const meanCourse = appState.data.mean_course;
+    const midIdx = Math.floor((seg.start_idx + seg.end_idx) / 2);
+    return {
+      x: meanCourse[midIdx]?.x || 0,
+      y: meanCourse[midIdx]?.y || 0,
+      text: String(seg.id),
+      showarrow: false,
+      font: { size: 12, color: 'black' },
+      bgcolor: 'white',
+      bordercolor: 'darkred',
+      borderwidth: 2,
+      borderpad: 4,
+      opacity: 0.85,
+      visible: visible,
+    };
+  });
+}
+
+/**
+ * Toggle visibility of segment boundary lines
+ * Trace layout: 0=driven path, 1=mean course, 2=current path,
+ *               3=current marker, 4+=boundary lines
+ * @param {boolean} visible - Whether boundaries should be visible
+ */
+function toggleBoundaryLines(visible) {
+  if (!appState.data) return;
+  const numBoundaries = (appState.data.segment_boundaries || []).length;
+  for (let i = 0; i < numBoundaries; i++) {
+    Plotly.restyle('plot-container', { visible: visible }, 4 + i);
+  }
+}
+
+/**
  * Toggle path visibility
  */
 function togglePathVisibility() {
   const visible = $('#show-path').is(':checked');
+  appState.showDrivenPath = visible;
   if (appState.plotInitialized) {
     Plotly.restyle('plot-container', { visible: visible }, 0);
   }
@@ -447,15 +641,30 @@ function togglePathVisibility() {
  */
 function toggleMeanCourseVisibility() {
   const visible = $('#show-mean-course').is(':checked');
-  if (appState.plotInitialized && appState.data && appState.data.segments) {
-    // Toggle mean course line (trace 1)
+  appState.showMeanCourse = visible;
+  if (appState.plotInitialized && appState.data) {
     Plotly.restyle('plot-container', { visible: visible }, 1);
-    // Toggle segment markers and boundary lines (indices 3+)
-    const numSegments = appState.data.segments.length;
-    const numBoundaries = (appState.data.segment_boundaries || []).length;
-    const totalMeanCourseTraces = numSegments + numBoundaries;
-    for (let i = 0; i < totalMeanCourseTraces; i++) {
-      Plotly.restyle('plot-container', { visible: visible }, 3 + i);
-    }
+    toggleBoundaryLines(visible);
+    Plotly.relayout('plot-container', {
+      annotations: createSegmentAnnotations(visible)
+    });
   }
+}
+
+/**
+ * Apply saved visibility state after plot render
+ * Syncs checkboxes and applies visibility to traces
+ */
+function applyVisibilityState() {
+  $('#show-path').prop('checked', appState.showDrivenPath);
+  $('#show-mean-course').prop('checked', appState.showMeanCourse);
+
+  if (!appState.plotInitialized) return;
+
+  Plotly.restyle('plot-container', { visible: appState.showDrivenPath }, 0);
+  Plotly.restyle('plot-container', { visible: appState.showMeanCourse }, 1);
+  toggleBoundaryLines(appState.showMeanCourse);
+  Plotly.relayout('plot-container', {
+    annotations: createSegmentAnnotations(appState.showMeanCourse)
+  });
 }

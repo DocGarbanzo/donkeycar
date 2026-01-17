@@ -7,164 +7,265 @@
   <script src="/static/jquery-3.1.1.min.js"></script>
   <link href="/static/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
   <script src="/static/bootstrap/3.3.7/js/bootstrap.min.js"></script>
-  
+
   <!-- Plotly.js for interactive visualization -->
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"
           charset="utf-8"></script>
-  
+
   <style>
     body {
       background-color: #1a1a1a;
       color: #e0e0e0;
-      font-family: Arial, sans-serif;
+      font-family: 'Courier New', monospace;
       margin: 0;
-      padding: 0;
+      padding: 8px;
+      font-size: 11px;
     }
-    
-    .navbar {
-      margin-bottom: 0;
+
+    .main-layout {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+      align-items: stretch;
     }
-    
-    .container-fluid {
-      padding: 20px;
-    }
-    
+
     #plot-container {
-      width: 100%;
-      height: 600px;
+      flex: 1 1 auto;
+      height: 580px;
       background-color: #000;
       border: 1px solid #333;
-      margin-bottom: 20px;
+      min-width: 0;
+      width: 100%;
     }
-    
-    .control-panel {
+
+    .position-panel {
+      flex: 0 0 136px;
+      width: 136px;
       background-color: #2a2a2a;
-      padding: 20px;
-      border-radius: 5px;
-      margin-bottom: 20px;
+      padding: 6px;
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
     }
-    
-    .control-row {
-      margin-bottom: 15px;
-    }
-    
-    .control-label {
-      display: inline-block;
-      width: 150px;
+
+    .position-panel .info-title {
       font-weight: bold;
+      font-size: 11px;
+      margin-bottom: 6px;
+      color: #4CAF50;
+      border-bottom: 1px solid #444;
+      padding-bottom: 4px;
     }
-    
-    .info-panel {
-      background-color: #2a2a2a;
-      padding: 20px;
-      border-radius: 5px;
+
+    .position-panel .info-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      column-gap: 6px;
+      margin-bottom: 2px;
+      line-height: 1.3;
     }
-    
-    .info-section {
-      margin-bottom: 15px;
+
+    .position-panel .info-label {
+      color: #888;
+      white-space: nowrap;
     }
-    
-    .info-title {
-      font-weight: bold;
-      font-size: 16px;
-      margin-bottom: 10px;
+
+    .position-panel .info-val {
+      color: #e0e0e0;
+      text-align: right;
+      justify-self: end;
+      white-space: nowrap;
+    }
+
+    .position-panel .info-val.highlight {
       color: #4CAF50;
     }
-    
-    .info-value {
-      font-family: 'Courier New', monospace;
-      margin-left: 20px;
+
+    .control-panel {
+      background-color: #2a2a2a;
+      padding: 6px 10px;
+      border-radius: 4px;
+      margin-bottom: 8px;
     }
-    
-    .slider-container {
+
+    .slider-row {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 6px;
+      margin-bottom: 6px;
     }
-    
+
     #time-slider {
       flex-grow: 1;
     }
-    
-    .btn-control {
-      margin-right: 10px;
+
+    #idx-value {
+      min-width: 70px;
+      text-align: right;
     }
-    
-    select, input[type="range"] {
+
+    .btn-control {
+      padding: 1px 6px;
+      font-size: 11px;
+    }
+
+    .controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .control-group label {
+      margin: 0;
+      white-space: nowrap;
+    }
+
+    select {
       background-color: #3a3a3a;
       color: #e0e0e0;
       border: 1px solid #555;
-      padding: 5px;
+      padding: 2px 4px;
       border-radius: 3px;
+      font-size: 11px;
+      font-family: 'Courier New', monospace;
     }
-    
+
+    input[type="checkbox"] {
+      margin-right: 2px;
+    }
+
+    .dataset-panel {
+      background-color: #2a2a2a;
+      padding: 8px 10px;
+      border-radius: 4px;
+    }
+
+    .dataset-panel .info-title {
+      font-weight: bold;
+      font-size: 11px;
+      margin-bottom: 4px;
+      color: #4CAF50;
+    }
+
+    .dataset-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+    }
+
+    .dataset-item {
+      display: flex;
+      gap: 4px;
+    }
+
+    .dataset-item .lbl {
+      color: #888;
+    }
+
     .loading {
       text-align: center;
       padding: 50px;
-      font-size: 18px;
+      font-size: 16px;
     }
-    
+
     .error {
       color: #ff6b6b;
-      padding: 20px;
+      padding: 15px;
       background-color: #2a1a1a;
-      border-radius: 5px;
-      margin: 20px;
+      border-radius: 4px;
+      margin: 15px;
     }
   </style>
 </head>
 
 <body>
-<nav class="navbar navbar-default">
-  <div class="container-fluid">
-    <div class="navbar-header">
-      <a class="navbar-brand" href="/">Donkey</a>
-    </div>
-    <div class="collapse navbar-collapse">
-      <ul class="nav navbar-nav">
-        <li><a href="/drive">Drive</a></li>
-        <li class="active"><a href="/imupath">IMU Path</a></li>
-      </ul>
-    </div>
-  </div>
-</nav>
+<div id="loading" class="loading">Loading IMU path data...</div>
+<div id="error" class="error" style="display: none;"></div>
 
-<div class="container-fluid">
-  <h2>IMU Path Visualization</h2>
-  
-  <div id="loading" class="loading">
-    Loading IMU path data...
-  </div>
-  
-  <div id="error" class="error" style="display: none;"></div>
-  
-  <div id="main-content" style="display: none;">
-    <!-- Plot Container -->
+<div id="main-content" style="display: none;">
+  <!-- Main layout: Plot + Position Panel -->
+  <div class="main-layout">
     <div id="plot-container"></div>
-    
-    <!-- Control Panel -->
-    <div class="control-panel">
-      <h4>Controls</h4>
-      
-      <div class="control-row">
-        <span class="control-label">Time Position:</span>
-        <div class="slider-container">
-          <button id="play-btn" class="btn btn-sm btn-success btn-control">▶ Play</button>
-          <button id="pause-btn" class="btn btn-sm btn-warning btn-control" style="display:none;">⏸ Pause</button>
-          <input type="range" id="time-slider" min="0" max="100" value="0" step="0.1">
-          <span id="time-value">0.0s</span>
-        </div>
+
+    <div class="position-panel">
+      <div class="info-title">Current Position</div>
+      <div class="info-row">
+        <span class="info-label">Date:</span>
+        <span class="info-val" id="current-date">--</span>
       </div>
-      
-      <div class="control-row">
-        <span class="control-label">Number of Laps:</span>
-        <select id="lap-selector">
-          <!-- Populated dynamically -->
-        </select>
+      <div class="info-row">
+        <span class="info-label">Time:</span>
+        <span class="info-val" id="current-time">--</span>
       </div>
-      
-      <div class="control-row">
-        <span class="control-label">Segment Method:</span>
+      <div class="info-row">
+        <span class="info-label">Index:</span>
+        <span class="info-val" id="current-idx">0</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Lap:</span>
+        <span class="info-val highlight" id="current-lap">0</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Segment:</span>
+        <span class="info-val highlight" id="current-segment">0</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Speed:</span>
+        <span class="info-val" id="current-speed">0.00</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Heading:</span>
+        <span class="info-val" id="current-heading">0.0°</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">X:</span>
+        <span class="info-val" id="current-x">0.00</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Y:</span>
+        <span class="info-val" id="current-y">0.00</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Total Dist:</span>
+        <span class="info-val" id="current-total-dist">0.0m</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Lap Dist:</span>
+        <span class="info-val" id="current-lap-dist">0.0m</span>
+      </div>
+      <div class="info-row" id="seg-rank-row">
+        <span class="info-label">Seg Rank:</span>
+        <span class="info-val" id="current-seg-rank">--</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Control Panel -->
+  <div class="control-panel">
+    <div class="slider-row">
+      <button id="play-btn"
+              class="btn btn-sm btn-success btn-control">▶</button>
+      <button id="pause-btn" class="btn btn-sm btn-warning btn-control"
+              style="display:none;">⏸</button>
+      <input type="range" id="time-slider" min="0" max="100" value="0"
+             step="0.001">
+      <span id="idx-value">0/0</span>
+    </div>
+
+    <div class="controls-row">
+      <div class="control-group">
+        <label>Laps:</label>
+        <select id="lap-selector"></select>
+      </div>
+      <div class="control-group">
+        <label>Segments:</label>
         <select id="segment-method">
           <option value="threshold">Threshold</option>
           <option value="extrema">Extrema</option>
@@ -172,53 +273,40 @@
           <option value="hybrid">Hybrid</option>
         </select>
       </div>
-      
-      <div class="control-row" id="stats-control" style="display: none;">
-        <span class="control-label">Stats Field:</span>
-        <select id="stats-field">
-          <!-- Populated dynamically if tub data -->
-        </select>
+      <div class="control-group" id="stats-control" style="display: none;">
+        <label>Stats:</label>
+        <select id="stats-field"></select>
       </div>
-      
-      <div class="control-row">
-        <label>
-          <input type="checkbox" id="show-path" checked> Show Driven Path
-        </label>
-        &nbsp;&nbsp;
-        <label>
-          <input type="checkbox" id="show-mean-course" checked> Show Mean Course
-        </label>
+      <div class="control-group">
+        <label><input type="checkbox" id="show-path" checked>Path</label>
+      </div>
+      <div class="control-group">
+        <label><input type="checkbox" id="show-mean-course" checked>Mean</label>
       </div>
     </div>
-    
-    <!-- Info Panels -->
-    <div class="row">
-      <div class="col-md-6">
-        <div class="info-panel">
-          <div class="info-title">Current Position</div>
-          <div class="info-section">
-            <div class="info-value">Time: <span id="current-time">0.0</span>s</div>
-            <div class="info-value">Lap: <span id="current-lap">0</span></div>
-            <div class="info-value">Segment: <span id="current-segment">0</span></div>
-            <div class="info-value">Speed: <span id="current-speed">0.0</span> m/s</div>
-            <div class="info-value">Heading: <span id="current-heading">0.0</span>°</div>
-            <div class="info-value">Position: (<span id="current-x">0.0</span>, <span id="current-y">0.0</span>)</div>
-          </div>
-        </div>
+  </div>
+
+  <!-- Dataset Info (static, can scroll) -->
+  <div class="dataset-panel">
+    <div class="info-title">Dataset Info</div>
+    <div class="dataset-row">
+      <div class="dataset-item">
+        <span class="lbl">Laps:</span><span id="info-laps">0</span>
       </div>
-      
-      <div class="col-md-6">
-        <div class="info-panel">
-          <div class="info-title">Dataset Info</div>
-          <div class="info-section">
-            <div class="info-value">Total Laps: <span id="info-laps">0</span></div>
-            <div class="info-value">Total Points: <span id="info-points">0</span></div>
-            <div class="info-value">Duration: <span id="info-duration">0:00.0</span></div>
-            <div class="info-value">Distance: <span id="info-distance">0.0</span>m</div>
-            <div class="info-value">Segments: <span id="info-segments">0</span></div>
-            <div class="info-value">Mean Course: <span id="info-mean-length">0.0</span>m</div>
-          </div>
-        </div>
+      <div class="dataset-item">
+        <span class="lbl">Points:</span><span id="info-points">0</span>
+      </div>
+      <div class="dataset-item">
+        <span class="lbl">Duration:</span><span id="info-duration">0:00</span>
+      </div>
+      <div class="dataset-item">
+        <span class="lbl">Distance:</span><span id="info-distance">0.0m</span>
+      </div>
+      <div class="dataset-item">
+        <span class="lbl">Segments:</span><span id="info-segments">0</span>
+      </div>
+      <div class="dataset-item">
+        <span class="lbl">Mean:</span><span id="info-mean-length">0.0m</span>
       </div>
     </div>
   </div>

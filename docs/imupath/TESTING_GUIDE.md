@@ -2,7 +2,9 @@
 
 ## Implementation Summary
 
-This implementation adds a web-based IMU path visualizer to Donkeycar as an opt-in alternative to the matplotlib UI. The feature is accessed via the `--web` flag on the `donkey imupath` command.
+This implementation adds a web-based IMU path visualizer to Donkeycar as
+an opt-in alternative to the matplotlib UI. The feature is accessed via
+the `--web` flag on the `donkey imupath` command.
 
 ## Quick Start
 
@@ -55,6 +57,8 @@ Then open browser to: http://localhost:8887/imupath
 ### 5. Web UI - Info Panels
 - [ ] Current position panel updates with slider
 - [ ] Time, lap, segment display correctly
+- [ ] Lap distance updates with slider
+- [ ] Segment rank updates for Tub data (if available)
 - [ ] Speed and heading update
 - [ ] X, Y coordinates shown
 - [ ] Dataset info panel shows correct metadata
@@ -65,7 +69,7 @@ Then open browser to: http://localhost:8887/imupath
 - [ ] Works with Tub directories
 - [ ] Handles single-lap data
 - [ ] Handles multi-lap data
-- [ ] Stats field dropdown appears for Tub data (if configured)
+- [ ] Stats field dropdown lists available aggregations and fields
 
 ### 7. Web UI - Configuration
 - [ ] `--config` option loads custom config

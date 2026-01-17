@@ -9,7 +9,11 @@ import numpy as np
 import logging
 
 from donkeycar.parts.tub_v2 import Tub
-from donkeycar.parts.tub_statistics import TubStatistics
+from donkeycar.parts.tub_statistics import (
+    FieldAggregationSpec,
+    TubStatistics,
+)
+from donkeycar.pipeline.transformations import SortingStrategy
 from donkeycar.course_analysis import (
     YCrossingLapDetector,
     DriftLapDetector,
@@ -24,6 +28,8 @@ from donkeycar.course_analysis import (
 )
 
 logger = logging.getLogger(__name__)
+
+SUPPORTED_AGGREGATIONS = ('avg', 'sum', 'min', 'max', 'median')
 
 
 class IMUPathDataBuilder:
@@ -151,22 +157,83 @@ class IMUPathDataBuilder:
         
         try:
             logger.info("Computing segment statistics...")
-            # Use TubStatistics to compute rankings
             tub = Tub(self.tub_path, read_only=True)
             try:
                 stats = TubStatistics(tub, config=self.cfg)
-                # Get available ranking keys from field aggregations
+                expanded_specs = self._expand_field_aggregations(
+                    stats.field_aggregations)
+                ranking_strategy = self._build_ranking_strategy(
+                    stats.sorting_strategy, expanded_specs)
+                expanded_stats = TubStatistics(
+                    tub,
+                    config=self.cfg,
+                    field_aggregations=expanded_specs,
+                    sorting_strategy=ranking_strategy,
+                )
+                self.segment_rankings = self._select_session_rankings(
+                    expanded_stats.calculate_segment_performance(),
+                    tub.manifest.session_id[1],
+                )
                 self.available_ranking_keys = [
-                    spec.output_key for spec in stats.field_aggregations
+                    criterion['key'] for criterion
+                    in ranking_strategy.criteria
                 ]
-                logger.info(f"Available ranking keys: "
-                          f"{', '.join(self.available_ranking_keys)}")
+                logger.info("Available ranking keys: %s",
+                           ", ".join(self.available_ranking_keys))
             finally:
                 tub.close()
         except Exception as e:
             logger.error(f"Failed to load segment statistics: {e}")
             self.segment_rankings = {}
             self.available_ranking_keys = []
+
+    def _expand_field_aggregations(self, field_specs):
+        """Expand configured field specs to all supported aggregations."""
+        expanded = []
+        seen_keys = set()
+        for spec in field_specs:
+            for aggregation in SUPPORTED_AGGREGATIONS:
+                output_key = spec.output_key
+                if aggregation != spec.aggregation:
+                    output_key = f"{spec.output_key}_{aggregation}"
+                if output_key in seen_keys:
+                    continue
+                expanded.append(FieldAggregationSpec(
+                    field=spec.field,
+                    output_key=output_key,
+                    index=spec.index,
+                    transform=spec.transform,
+                    aggregation=aggregation,
+                ))
+                seen_keys.add(output_key)
+        return expanded
+
+    def _build_ranking_strategy(self, sorting_strategy, field_specs):
+        """Build ranking strategy with all available field aggregations."""
+        criteria = []
+        known_keys = set()
+        for criterion in sorting_strategy.criteria:
+            criteria.append({
+                'key': criterion['key'],
+                'transform': criterion.get('transform'),
+                'reverse': criterion.get('reverse', False),
+            })
+            known_keys.add(criterion['key'])
+        for spec in field_specs:
+            if spec.output_key in known_keys:
+                continue
+            criteria.append({'key': spec.output_key})
+            known_keys.add(spec.output_key)
+        return SortingStrategy(criteria)
+
+    def _select_session_rankings(self, rankings_by_session, session_id):
+        """Select rankings for the active session, fallback to first."""
+        if not rankings_by_session:
+            return {}
+        if not session_id:
+            return next(iter(rankings_by_session.values()))
+        return rankings_by_session.get(
+            session_id, next(iter(rankings_by_session.values())))
     
     def _downsample_points(self, indices, max_points=1000):
         """
@@ -185,7 +252,8 @@ class IMUPathDataBuilder:
         
         # Uniform downsampling using linspace to avoid out-of-bounds indices
         # linspace with integer dtype produces unique indices (no duplicates)
-        downsampled = np.linspace(0, len(indices) - 1, num=max_points, dtype=int)
+        downsampled = np.linspace(
+            0, len(indices) - 1, num=max_points, dtype=int)
         return downsampled
     
     def build_json_payload(self, num_laps=None, segment_method=None,
@@ -291,13 +359,10 @@ class IMUPathDataBuilder:
         # Build rankings (if available)
         rankings = {}
         if self.is_tub_data:
-            # Note: This is a simplified version - full implementation
-            # would require computing segment rankings on-the-fly.
-            # For now, just indicate which stats are available and whether
-            # any rankings data is actually present.
             rankings = {
                 'available': bool(self.segment_rankings),
                 'fields': self.available_ranking_keys,
+                'segments': self.segment_rankings,
             }
         
         return {
