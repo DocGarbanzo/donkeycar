@@ -223,7 +223,25 @@ function setupEventHandlers() {
   $('#pause-btn').click(function() {
     stopPlayback();
   });
-  
+
+  // Shutdown button
+  $('#shutdown-btn').click(function() {
+    if (confirm('Shutdown the server?')) {
+      $.ajax({
+        url: '/api/imupath/shutdown',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({confirm: 'shutdown'}),
+        success: function() {
+          $('#shutdown-btn').text('Stopped').prop('disabled', true);
+        },
+        error: function() {
+          alert('Failed to shutdown server');
+        }
+      });
+    }
+  });
+
   // Lap selector
   $('#lap-selector').change(function() {
     if (!appState.data) return;
@@ -523,26 +541,19 @@ function updateDisplayFast(closestIdx, point) {
   $('#current-x').text(point.x.toFixed(2));
   $('#current-y').text(point.y.toFixed(2));
 
-  // Update fast CSS overlay marker (instant - no Plotly call!)
+  // Update driven path and marker on plot
   if (appState.plotInitialized) {
-    const plotDiv = document.getElementById('plot-container');
-    const xaxis = plotDiv._fullLayout.xaxis;
-    const yaxis = plotDiv._fullLayout.yaxis;
+    const pathPoints = appState.data.path_points;
+    const pathX = pathPoints.slice(0, closestIdx + 1).map(p => p.x);
+    const pathY = pathPoints.slice(0, closestIdx + 1).map(p => p.y);
 
-    // Convert data coordinates to pixel coordinates
-    const px = xaxis.l2p(point.x) + xaxis._offset;
-    const py = yaxis.l2p(point.y) + yaxis._offset;
-
-    // Position the CSS marker
-    const marker = $('#fast-marker');
-    marker.css({
-      left: px + 'px',
-      top: py + 'px',
-      display: 'block'
-    });
+    Plotly.restyle('plot-container', {
+      x: [pathX, [point.x]],
+      y: [pathY, [point.y]],
+    }, [2, 3]);
   }
 
-  // Skip distance calculations and Plotly updates for maximum speed
+  // Skip distance calculations for speed
 }
 
 /**
