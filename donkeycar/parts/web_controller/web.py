@@ -137,6 +137,7 @@ class LocalWebController(tornado.web.Application):
             (r"/wsTest", WsTest),
             (r"/imupath", IMUPathHandler),
             (r"/api/imupath/data", IMUPathDataAPI),
+            (r"/api/imupath/shutdown", IMUPathShutdownAPI),
 
             (r"/static/(.*)", StaticFileHandler,
              {"path": self.static_file_path}),
@@ -403,10 +404,47 @@ class VideoAPI(RequestHandler):
 
 class IMUPathHandler(RequestHandler):
     """Serves the IMU path visualization page."""
-    
+
     async def get(self):
         data = {}
         await self.render("templates/imupath.html", **data)
+
+
+class IMUPathShutdownAPI(RequestHandler):
+    """
+    API endpoint to shutdown the server.
+    Uses Origin header validation to prevent cross-origin requests.
+    Intended for local development use only.
+    """
+
+    async def post(self):
+        origin = self.request.headers.get('Origin')
+        host = self.request.headers.get('Host')
+        if origin:
+            origin_host = origin.split('://')[-1]
+            if origin_host != host:
+                logger.warning(f"Shutdown blocked: origin={origin} host={host}")
+                self.set_status(403)
+                self.write({'error': 'Forbidden'})
+                return
+        try:
+            data = tornado.escape.json_decode(self.request.body)
+        except (ValueError, TypeError, UnicodeDecodeError) as e:
+            logger.warning(f"Invalid JSON in shutdown request: {e}")
+            self.set_status(400)
+            self.write({'error': 'Invalid JSON'})
+            return
+        if data.get('confirm') != 'shutdown':
+            self.set_status(400)
+            self.write({'error': 'Missing confirmation'})
+            return
+        self.write({'status': 'shutting_down'})
+        await self.finish()
+        IOLoop.current().call_later(0.5, self._shutdown)
+
+    def _shutdown(self):
+        logger.info("Shutdown requested via web UI")
+        IOLoop.current().stop()
 
 
 class IMUPathDataAPI(RequestHandler):

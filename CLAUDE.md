@@ -8,10 +8,21 @@ Donkey Car is a minimalist and modular self-driving car library for Python, desi
 
 ## Environment Setup
 
-**CRITICAL**: Always ensure the 'donkey' conda environment is activated before running any Python code, tests, or installations. If the environment is not active, ask the user before proceeding.
+**CRITICAL**: Always ensure the 'donkey' conda environment is activated before
+running any Python code, tests, or installations. If the environment is not
+active, ask the user before proceeding.
 
 Check current environment with: `conda info --envs | grep \*`
-Activate with: `conda activate donkey`
+
+**From terminal:** `conda activate donkey`
+
+**From Claude Code:** The `conda activate` command doesn't work in Claude Code's
+bash sessions because they lack conda shell initialization. Use this instead:
+```zsh
+source /opt/miniconda3/etc/profile.d/conda.sh && conda activate donkey
+```
+Note: The conda path may vary by system. Find it with:
+`find /opt /usr/local ~/ -name "conda.sh" 2>/dev/null | grep profile.d`
 
 ## Key Commands
 
@@ -476,11 +487,15 @@ Lap labels show the trailing partial lap as N+1.
 **CRITICAL**: The web server must be run from within a car directory (e.g.,
 `~/cars/hyper`) and must point to the `data/` subdirectory containing the tub.
 
-**Command:**
-```bash
-cd ~/cars/hyper  # Navigate to car directory first
-conda activate donkey  # Ensure donkey environment is active
-donkey imupath --web data  # Point to data/ directory, not parent
+**Command (from terminal):**
+```zsh
+cd ~/cars/hyper && conda activate donkey && donkey imupath --web data
+```
+
+**Command (from Claude Code):**
+```zsh
+cd ~/cars/hyper && source /opt/miniconda3/etc/profile.d/conda.sh && \
+  conda activate donkey && donkey imupath --web data
 ```
 
 **Common mistakes to avoid:**
@@ -488,7 +503,9 @@ donkey imupath --web data  # Point to data/ directory, not parent
   (Will fail: FileNotFoundError for catalog_manifest)
 - ❌ Running without specifying data directory: `donkey imupath --web .`
   (Will fail: tries to use parent directory as tub)
-- ✅ Correct: `cd ~/cars/hyper && donkey imupath --web data`
+- ❌ Using `conda activate` directly in Claude Code
+  (Will fail: conda shell not initialized)
+- ✅ Correct: `cd ~/cars/hyper && donkey imupath --web data` (with env active)
 
 **Server details:**
 - Default port: `8887` (configurable via `WEB_CONTROL_PORT` in config.py)

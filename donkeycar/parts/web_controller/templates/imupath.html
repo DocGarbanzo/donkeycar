@@ -55,9 +55,39 @@
       display: none;
     }
 
-    .position-panel {
+    .right-panel {
       flex: 0 0 136px;
       width: 136px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .shutdown-box {
+      background-color: #2a2a2a;
+      padding: 6px;
+      border-radius: 4px;
+      text-align: center;
+    }
+
+    .shutdown-btn {
+      background-color: #c0392b;
+      color: white;
+      border: none;
+      padding: 4px 12px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 11px;
+      font-family: 'Courier New', monospace;
+      width: 100%;
+    }
+
+    .shutdown-btn:hover {
+      background-color: #e74c3c;
+    }
+
+    .position-panel {
+      flex: 1;
       background-color: #2a2a2a;
       padding: 6px;
       border-radius: 4px;
@@ -214,55 +244,60 @@
       <div id="fast-marker"></div>
     </div>
 
-    <div class="position-panel">
-      <div class="info-title">Current Position</div>
-      <div class="info-row">
-        <span class="info-label">Date:</span>
-        <span class="info-val" id="current-date">--</span>
+    <div class="right-panel">
+      <div class="shutdown-box">
+        <button class="shutdown-btn" id="shutdown-btn">Shutdown</button>
       </div>
-      <div class="info-row">
-        <span class="info-label">Time:</span>
-        <span class="info-val" id="current-time">--</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Index:</span>
-        <span class="info-val" id="current-idx">0</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Lap:</span>
-        <span class="info-val highlight" id="current-lap">0</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Segment:</span>
-        <span class="info-val highlight" id="current-segment">0</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Speed:</span>
-        <span class="info-val" id="current-speed">0.00</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Heading:</span>
-        <span class="info-val" id="current-heading">0.0°</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">X:</span>
-        <span class="info-val" id="current-x">0.00</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Y:</span>
-        <span class="info-val" id="current-y">0.00</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Total Dist:</span>
-        <span class="info-val" id="current-total-dist">0.0m</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Lap Dist:</span>
-        <span class="info-val" id="current-lap-dist">0.0m</span>
-      </div>
-      <div class="info-row" id="seg-rank-row">
-        <span class="info-label">Seg Rank:</span>
-        <span class="info-val" id="current-seg-rank">--</span>
+      <div class="position-panel">
+        <div class="info-title">Current Position</div>
+        <div class="info-row">
+          <span class="info-label">Date:</span>
+          <span class="info-val" id="current-date">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Time:</span>
+          <span class="info-val" id="current-time">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Index:</span>
+          <span class="info-val" id="current-idx">0</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Lap:</span>
+          <span class="info-val highlight" id="current-lap">0</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Segment:</span>
+          <span class="info-val highlight" id="current-segment">0</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Speed:</span>
+          <span class="info-val" id="current-speed">0.00</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Heading:</span>
+          <span class="info-val" id="current-heading">0.0°</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">X:</span>
+          <span class="info-val" id="current-x">0.00</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Y:</span>
+          <span class="info-val" id="current-y">0.00</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Total Dist:</span>
+          <span class="info-val" id="current-total-dist">0.0m</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Lap Dist:</span>
+          <span class="info-val" id="current-lap-dist">0.0m</span>
+        </div>
+        <div class="info-row" id="seg-rank-row">
+          <span class="info-label">Seg Rank:</span>
+          <span class="info-val" id="current-seg-rank">--</span>
+        </div>
       </div>
     </div>
   </div>
