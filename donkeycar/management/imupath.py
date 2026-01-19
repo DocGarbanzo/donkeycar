@@ -26,6 +26,9 @@ visualization. Access at http://localhost:8887/imupath
 
 import argparse
 import os
+import webbrowser
+import threading
+import time
 
 from donkeycar.config import load_config
 from donkeycar.course_analysis import (
@@ -209,14 +212,29 @@ class ImuPathCommand:
             web = LocalWebController(port=port)
             web.imupath_builder = builder
             
+            # Build URL
+            url = f"http://localhost:{port}/imupath"
+
             print("\n" + "=" * 70)
             print(f"Web UI available at:")
-            print(f"  http://localhost:{port}/imupath")
+            print(f"  {url}")
             from socket import gethostname
             print(f"  http://{gethostname()}.local:{port}/imupath")
             print("\nPress Ctrl+C to stop the server")
             print("=" * 70)
-            
+
+            # Auto-open browser in background thread (like Jupyter)
+            def open_browser():
+                time.sleep(1.5)  # Wait for server to start
+                try:
+                    print(f"\nOpening browser at {url}...")
+                    webbrowser.open(url)
+                except Exception as e:
+                    print(f"Could not auto-open browser: {e}")
+
+            browser_thread = threading.Thread(target=open_browser, daemon=True)
+            browser_thread.start()
+
             # Start server (blocking)
             web.update()
             
