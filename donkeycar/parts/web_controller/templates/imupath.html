@@ -229,6 +229,26 @@
       border-radius: 4px;
       margin: 15px;
     }
+
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: #4CAF50;
+      animation: spin 0.8s linear infinite;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    #stats-spinner {
+      display: none;
+    }
   </style>
 </head>
 
@@ -328,9 +348,26 @@
           <option value="hybrid">Hybrid</option>
         </select>
       </div>
-      <div class="control-group" id="stats-control" style="display: none;">
-        <label>Stats:</label>
-        <select id="stats-field"></select>
+      <div class="control-group" id="stats-field-control" style="display: none;">
+        <label>Field:</label>
+        <select id="stats-field">
+          <option value="">Select field...</option>
+        </select>
+      </div>
+      <div class="control-group" id="stats-method-control" style="display: none;">
+        <label>Method:</label>
+        <select id="stats-method">
+          <option value="">Select method...</option>
+        </select>
+      </div>
+      <div class="control-group" id="stats-dimension-control" style="display: none;">
+        <label>Dim:</label>
+        <select id="stats-dimension">
+          <option value="">Select...</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <span id="stats-spinner" class="spinner"></span>
       </div>
       <div class="control-group">
         <label><input type="checkbox" id="show-path" checked>Path</label>
@@ -367,6 +404,6 @@
   </div>
 </div>
 
-<script src="/static/imupath.js"></script>
+<script src="/static/imupath.js?v=20260120"></script>
 </body>
 </html>

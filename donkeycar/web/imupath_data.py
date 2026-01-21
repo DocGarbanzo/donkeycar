@@ -29,8 +29,6 @@ from donkeycar.course_analysis import (
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_AGGREGATIONS = ('avg', 'sum', 'min', 'max', 'median')
-
 
 class IMUPathDataBuilder:
     """
@@ -151,80 +149,167 @@ class IMUPathDataBuilder:
         logger.info("Assigned segments to driven path")
     
     def _load_segment_statistics(self):
-        """Load segment rankings if Tub data available."""
+        """
+        Deprecated: segment statistics are now computed on-demand.
+        This method is kept for backward compatibility but does nothing.
+        """
+        # No longer pre-compute segment statistics
+        self.segment_rankings = {}
+        self.available_ranking_keys = []
+
+    def get_available_fields(self):
+        """
+        Detect all numeric/vector fields available in the tub.
+
+        Returns:
+            List of field metadata dictionaries with keys:
+            - name: Field name (e.g., 'imu/gyr')
+            - type: Type string from tub (e.g., 'vector', 'float')
+            - is_vector: Boolean indicating if field is a vector
+            - dimensions: Number of dimensions (None for scalars)
+        """
         if not self.is_tub_data or not self.tub_path:
-            return
-        
+            return []
+
         try:
-            logger.info("Computing segment statistics...")
             tub = Tub(self.tub_path, read_only=True)
             try:
-                stats = TubStatistics(tub, config=self.cfg)
-                expanded_specs = self._expand_field_aggregations(
-                    stats.field_aggregations)
-                ranking_strategy = self._build_ranking_strategy(
-                    stats.sorting_strategy, expanded_specs)
-                expanded_stats = TubStatistics(
-                    tub,
-                    config=self.cfg,
-                    field_aggregations=expanded_specs,
-                    sorting_strategy=ranking_strategy,
-                )
-                self.segment_rankings = self._select_session_rankings(
-                    expanded_stats.calculate_segment_performance(),
-                    tub.manifest.session_id[1],
-                )
-                self.available_ranking_keys = [
-                    criterion['key'] for criterion
-                    in ranking_strategy.criteria
-                ]
-                logger.info("Available ranking keys: %s",
-                           ", ".join(self.available_ranking_keys))
+                fields = []
+                # Iterate through input_types to get field metadata
+                for field_name, field_type in tub.input_types.items():
+                    # Only include numeric scalars and vectors
+                    if field_type in ('float', 'int', 'vector', 'list'):
+                        is_vector = field_type in ('vector', 'list')
+                        dimensions = None
+
+                        # For vectors, try to determine dimensionality
+                        if is_vector:
+                            # Read first record to get actual dimensions
+                            for record in tub:
+                                if (field_name in record and
+                                    record[field_name] is not None):
+                                    value = record[field_name]
+                                    if hasattr(value, '__len__'):
+                                        dimensions = len(value)
+                                    break
+
+                        fields.append({
+                            'name': field_name,
+                            'type': field_type,
+                            'is_vector': is_vector,
+                            'dimensions': dimensions,
+                        })
+
+                return fields
             finally:
                 tub.close()
         except Exception as e:
-            logger.error(f"Failed to load segment statistics: {e}")
-            self.segment_rankings = {}
-            self.available_ranking_keys = []
+            logger.error(f"Failed to detect available fields: {e}")
+            return []
 
-    def _expand_field_aggregations(self, field_specs):
-        """Expand configured field specs to all supported aggregations."""
-        expanded = []
-        seen_keys = set()
-        for spec in field_specs:
-            for aggregation in SUPPORTED_AGGREGATIONS:
-                output_key = spec.output_key
-                if aggregation != spec.aggregation:
-                    output_key = f"{spec.output_key}_{aggregation}"
-                if output_key in seen_keys:
-                    continue
-                expanded.append(FieldAggregationSpec(
-                    field=spec.field,
-                    output_key=output_key,
-                    index=spec.index,
-                    transform=spec.transform,
-                    aggregation=aggregation,
-                ))
-                seen_keys.add(output_key)
-        return expanded
+    def compute_segment_statistics(self, field_name, method, dimension=None):
+        """
+        Compute segment statistics on-demand for a specific field/method.
 
-    def _build_ranking_strategy(self, sorting_strategy, field_specs):
-        """Build ranking strategy with all available field aggregations."""
-        criteria = []
-        known_keys = set()
-        for criterion in sorting_strategy.criteria:
-            criteria.append({
-                'key': criterion['key'],
-                'transform': criterion.get('transform'),
-                'reverse': criterion.get('reverse', False),
-            })
-            known_keys.add(criterion['key'])
-        for spec in field_specs:
-            if spec.output_key in known_keys:
-                continue
-            criteria.append({'key': spec.output_key})
-            known_keys.add(spec.output_key)
-        return SortingStrategy(criteria)
+        Uses TubStatistics session rankings for consistency with training.
+
+        Args:
+            field_name: Name of the field to aggregate
+            method: Aggregation method ('delta', 'mean_abs', 'sum_abs',
+                   'max', 'min', 'norm')
+            dimension: For vector fields, which component (0=X, 1=Y, 2=Z,
+                      None=compute norm)
+
+        Returns:
+            Dictionary mapping lap -> segment -> percentile ranking
+        """
+        if not self.is_tub_data or not self.tub_path:
+            return {}
+
+        spec = self._build_field_aggregation_spec(field_name, method, dimension)
+        if spec is None:
+            logger.error(f"Unknown aggregation method: {method}")
+            return {}
+
+        try:
+            tub = Tub(self.tub_path, read_only=True)
+            try:
+                sorting_strategy = SortingStrategy(
+                    [{'key': spec.output_key}])
+                stats = TubStatistics(
+                    tub,
+                    config=self.cfg,
+                    sorting_strategy=sorting_strategy,
+                    field_aggregations=[spec],
+                )
+                rankings_by_session = (
+                    stats.calculate_segment_performance())
+                session_rankings = self._select_session_rankings(
+                    rankings_by_session, None)
+                return session_rankings
+            finally:
+                tub.close()
+        except Exception as e:
+            logger.error(f"Failed to compute segment statistics: {e}",
+                         exc_info=True)
+            return {}
+
+    def _build_field_aggregation_spec(self, field_name, method, dimension):
+        """Build FieldAggregationSpec for the selected method."""
+        output_key = 'computed_stat'
+        index = dimension if dimension is not None else None
+
+        if method == 'delta':
+            return FieldAggregationSpec(
+                field=field_name,
+                output_key=output_key,
+                index=index,
+                aggregation='delta'
+            )
+
+        if method == 'mean_abs':
+            return FieldAggregationSpec(
+                field=field_name,
+                output_key=output_key,
+                index=index,
+                transform=abs,
+                aggregation='avg'
+            )
+
+        if method == 'sum_abs':
+            return FieldAggregationSpec(
+                field=field_name,
+                output_key=output_key,
+                index=index,
+                transform=abs,
+                aggregation='sum'
+            )
+
+        if method == 'max':
+            return FieldAggregationSpec(
+                field=field_name,
+                output_key=output_key,
+                index=index,
+                aggregation='max'
+            )
+
+        if method == 'min':
+            return FieldAggregationSpec(
+                field=field_name,
+                output_key=output_key,
+                index=index,
+                aggregation='min'
+            )
+
+        if method == 'norm':
+            return FieldAggregationSpec(
+                field=field_name,
+                output_key=output_key,
+                transform=np.linalg.norm,
+                aggregation='avg'
+            )
+
+        return None
 
     def _select_session_rankings(self, rankings_by_session, session_id):
         """Select rankings for the active session, fallback to first."""

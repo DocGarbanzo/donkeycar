@@ -18,8 +18,14 @@ let appState = {
   currentPathTraceIndex: null,  // Index of current path trace for updates
   showDrivenPath: true,  // Preserve visibility state across reloads
   showMeanCourse: true,  // Preserve visibility state across reloads
-  // Currently selected stats field for segment ranking
-  currentStatsField: null,
+  // Available fields from tub
+  availableFields: [],
+  // Currently selected field, method, dimension for segment stats
+  selectedField: null,
+  selectedMethod: null,
+  selectedDimension: null,
+  // Computed segment rankings
+  segmentRankings: null,
   resizeTimer: null,
   plotUpdateTimer: null,  // Debounce timer for plot updates
   pendingPlotUpdate: false,  // Flag for pending plot update
@@ -104,21 +110,181 @@ function updateCurrentPositionMarker(point) {
 }
 
 /**
- * Get segment ranking for the current point and selected stats field.
+ * Get segment ranking for the current point using computed rankings.
  */
 function getSegmentRanking(point) {
-  if (!appState.data || !appState.data.rankings) return null;
-  const rankings = appState.data.rankings.segments;
-  if (!rankings) return null;
+  if (!appState.segmentRankings) return null;
   if (point.lap === null || point.segment === null) return null;
-  if (!appState.currentStatsField) return null;
-  const lapRanks = rankings[String(point.lap)];
+
+  const lapRanks = appState.segmentRankings[String(point.lap)];
   if (!lapRanks) return null;
+
   const segRanks = lapRanks[String(point.segment)];
   if (!segRanks) return null;
-  const value = segRanks[appState.currentStatsField];
+
+  // The computed ranking has the key 'computed_stat'
+  const value = segRanks['computed_stat'];
   if (value === undefined || value === null) return null;
+
   return value;
+}
+
+/**
+ * Load available fields from API
+ */
+function loadAvailableFields() {
+  $.ajax({
+    url: '/api/imupath/fields',
+    method: 'GET',
+    dataType: 'json',
+    success: function(response) {
+      appState.availableFields = response.fields || [];
+      populateFieldDropdown();
+    },
+    error: function(xhr, status, error) {
+      console.log('No tub fields available (CSV data source or error)');
+      appState.availableFields = [];
+    }
+  });
+}
+
+/**
+ * Populate field dropdown with available fields
+ */
+function populateFieldDropdown() {
+  const fieldSelect = $('#stats-field');
+  fieldSelect.empty();
+  fieldSelect.append('<option value="">Select field...</option>');
+
+  appState.availableFields.forEach(field => {
+    fieldSelect.append(`<option value="${field.name}">${field.name}</option>`);
+  });
+
+  // Show field dropdown if fields available
+  if (appState.availableFields.length > 0) {
+    $('#stats-field-control').show();
+  } else {
+    $('#stats-field-control').hide();
+  }
+}
+
+/**
+ * Get applicable methods for a field
+ */
+function getApplicableMethods(field, dimension) {
+  const allMethods = [
+    { value: 'delta', label: 'Delta (last - first)' },
+    { value: 'mean_abs', label: 'Mean (absolute)' },
+    { value: 'sum_abs', label: 'Sum (absolute)' },
+    { value: 'max', label: 'Maximum' },
+    { value: 'min', label: 'Minimum' },
+  ];
+
+  // Add norm option for vector fields when no specific dimension selected
+  if (field.is_vector && (dimension === null || dimension === '')) {
+    allMethods.push({ value: 'norm', label: 'Euclidean Norm' });
+  }
+
+  return allMethods;
+}
+
+/**
+ * Populate method dropdown based on selected field
+ */
+function populateMethodDropdown() {
+  const fieldName = $('#stats-field').val();
+  if (!fieldName) {
+    $('#stats-method-control').hide();
+    $('#stats-dimension-control').hide();
+    return;
+  }
+
+  const field = appState.availableFields.find(f => f.name === fieldName);
+  if (!field) return;
+
+  const methodSelect = $('#stats-method');
+  methodSelect.empty();
+  methodSelect.append('<option value="">Select method...</option>');
+
+  const methods = getApplicableMethods(field, appState.selectedDimension);
+  methods.forEach(method => {
+    methodSelect.append(
+      `<option value="${method.value}">${method.label}</option>`
+    );
+  });
+
+  $('#stats-method-control').show();
+
+  // Show dimension dropdown for vector fields
+  if (field.is_vector && field.dimensions) {
+    populateDimensionDropdown(field.dimensions);
+    $('#stats-dimension-control').show();
+  } else {
+    $('#stats-dimension-control').hide();
+  }
+}
+
+/**
+ * Populate dimension dropdown for vector fields
+ */
+function populateDimensionDropdown(numDimensions) {
+  const dimSelect = $('#stats-dimension');
+  dimSelect.empty();
+  dimSelect.append('<option value="">Norm (||v||)</option>');
+
+  const labels = ['X', 'Y', 'Z', 'W'];
+  for (let i = 0; i < numDimensions && i < labels.length; i++) {
+    dimSelect.append(`<option value="${i}">${labels[i]}</option>`);
+  }
+}
+
+/**
+ * Compute segment statistics on-demand
+ */
+function computeSegmentStatistics() {
+  const fieldName = $('#stats-field').val();
+  const method = $('#stats-method').val();
+  const dimension = $('#stats-dimension').val();
+
+  if (!fieldName || !method) {
+    // Not ready to compute
+    appState.segmentRankings = null;
+    return;
+  }
+
+  // Show spinner
+  $('#stats-spinner').show();
+
+  // Build query parameters
+  const params = {
+    field: fieldName,
+    method: method,
+  };
+
+  if (dimension !== '' && dimension !== null) {
+    params.dimension = dimension;
+  }
+
+  $.ajax({
+    url: '/api/imupath/stats',
+    method: 'GET',
+    data: params,
+    dataType: 'json',
+    success: function(response) {
+      appState.segmentRankings = response.rankings || null;
+      $('#stats-spinner').hide();
+
+      // Refresh display
+      const time = parseFloat($('#time-slider').val());
+      updateTimePosition(time);
+    },
+    error: function(xhr, status, error) {
+      console.error('Error computing segment statistics:', error);
+      appState.segmentRankings = null;
+      $('#stats-spinner').hide();
+      $('#current-seg-rank').text('--');
+    }
+  });
 }
 
 // Initialize when page loads
@@ -185,22 +351,8 @@ function initializeUI() {
   const maxTime = Math.max(...times);
   $('#time-slider').attr('min', minTime).attr('max', maxTime).val(minTime);
 
-  // Setup stats field selector if available
-  if (metadata.available_stats && metadata.available_stats.length > 0) {
-    const statsSelect = $('#stats-field');
-    statsSelect.empty();
-    metadata.available_stats.forEach(stat => {
-      // Format display name (replace underscores, title case)
-      const displayName = stat.replace(/_/g, ' ')
-        .replace(/\b\w/g, c => c.toUpperCase());
-      statsSelect.append(`<option value="${stat}">${displayName}</option>`);
-    });
-    appState.currentStatsField = metadata.available_stats[0];
-    $('#stats-control').show();
-  } else {
-    appState.currentStatsField = null;
-    $('#stats-control').hide();
-  }
+  // Load available fields for segment statistics
+  loadAvailableFields();
 }
 
 /**
@@ -270,11 +422,26 @@ function setupEventHandlers() {
 
   // Stats field selector
   $('#stats-field').change(function() {
-    appState.currentStatsField = $(this).val();
-    // Refresh display if we have ranking data
-    if (appState.data && appState.data.rankings) {
-      const time = parseFloat($('#time-slider').val());
-      updateTimePosition(time);
+    appState.selectedField = $(this).val();
+    appState.selectedMethod = null;
+    appState.selectedDimension = null;
+    appState.segmentRankings = null;
+    populateMethodDropdown();
+    $('#current-seg-rank').text('--');
+  });
+
+  // Stats method selector
+  $('#stats-method').change(function() {
+    appState.selectedMethod = $(this).val();
+    computeSegmentStatistics();
+  });
+
+  // Stats dimension selector
+  $('#stats-dimension').change(function() {
+    appState.selectedDimension = $(this).val();
+    // Recompute if method already selected
+    if (appState.selectedMethod) {
+      computeSegmentStatistics();
     }
   });
 
@@ -534,7 +701,7 @@ function updateDisplayFast(closestIdx, point) {
   $('#current-date').text(formatDate(point.t));
   $('#current-time').text(formatTime(point.t));
   $('#current-idx').text(closestIdx);
-  $('#current-lap').text(point.lap !== null ? point.lap + 1 : '--');
+  $('#current-lap').text(point.lap !== null ? point.lap : '--');
   $('#current-segment').text(point.segment !== null ? point.segment : '--');
   $('#current-speed').text(point.v.toFixed(2));
   $('#current-heading').text((point.h * 180 / Math.PI).toFixed(1) + '°');
@@ -629,7 +796,7 @@ function updateDisplayForPoint(closestIdx, point) {
   $('#current-date').text(formatDate(point.t));
   $('#current-time').text(formatTime(point.t));
   $('#current-idx').text(closestIdx);
-  $('#current-lap').text(point.lap !== null ? point.lap + 1 : '--');
+  $('#current-lap').text(point.lap !== null ? point.lap : '--');
   $('#current-segment').text(point.segment !== null ? point.segment : '--');
   $('#current-speed').text(point.v.toFixed(2));
   $('#current-heading').text((point.h * 180 / Math.PI).toFixed(1) + '°');

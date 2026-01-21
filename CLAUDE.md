@@ -164,6 +164,7 @@ def test_segment_assignment_with_2_lap_mean_course():
 
 **CRITICAL Repository Remote Management:**
 - The project has TWO remotes: `autorope` (upstream) and `docgarbanzo` (fork)
+- **Always push to docgarbanzo** as long as there is no explicit as from the user to do differently
 - **NEVER push anything to the autorope main branch without explicit user permission**
 - **Pushing to docgarbanzo main branch is ALLOWED** for testing and development
 - Always confirm which remote you're pushing to before executing git push
@@ -476,11 +477,14 @@ courses, and segments courses into geometric features.
 fly using `FIELD_AGGREGATIONS` and `LAP_SORTING_CRITERIA`. It loads
 `./config.py` by default; pass `--config` to use another config and include
 custom tub fields in the Segment Stats selector.
+Web UI segment stats use TubStatistics session rankings from manifest
+metadata, so `donkey segment` must have stored segmentation data for the
+session.
 Changing lap count or segmentation method in the UI recomputes the stats.
 The UI prints "Computing segment statistics..." on startup for tub sources.
 Segment stats ignore trailing partial laps beyond the last boundary.
 Segment stats collapse multiple instances per lap to keep ranks unique.
-Lap labels show the trailing partial lap as N+1.
+Lap labels are 0-based to match record indices.
 
 ### Running the Web-Based IMU Path Visualizer
 

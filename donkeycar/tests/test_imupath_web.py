@@ -5,8 +5,9 @@ Test web-based IMU path visualizer components
 import json
 import os
 import tempfile
-from donkeycar.course_analysis import CSVPathDataSource
+from donkeycar.course_analysis import CSVPathDataSource, TubPathDataSource
 from donkeycar.web.imupath_data import IMUPathDataBuilder, prepare_imupath_data
+from donkeycar.parts.tub_v2 import Tub
 
 
 def test_imupath_data_builder_csv():
@@ -29,7 +30,8 @@ def test_imupath_data_builder_csv():
 1.3,0.0,0.1,1.57,0.5
 """
     
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+    with tempfile.NamedTemporaryFile(
+        mode='w', suffix='.csv', delete=False) as f:
         f.write(csv_data)
         csv_path = f.name
     
@@ -72,7 +74,8 @@ def test_imupath_json_payload():
 0.4,0.4,0.3,0.3,0.7
 """
     
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+    with tempfile.NamedTemporaryFile(
+        mode='w', suffix='.csv', delete=False) as f:
         f.write(csv_data)
         csv_path = f.name
     
@@ -149,7 +152,8 @@ def test_imupath_downsampling():
     
     csv_data = "\n".join(csv_lines)
     
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as f:
+    with tempfile.NamedTemporaryFile(
+        mode='w', suffix='.csv', delete=False) as f:
         f.write(csv_data)
         csv_path = f.name
     
@@ -175,6 +179,76 @@ def test_imupath_downsampling():
         
     finally:
         os.unlink(csv_path)
+
+
+def test_imupath_stats_use_tub_session_ranks():
+    """Ensure web stats align with TubStatistics session rankings."""
+    temp_dir = tempfile.mkdtemp()
+    tub_path = os.path.join(temp_dir, 'stats_tub')
+
+    tub = Tub(
+        tub_path,
+        inputs=[
+            'car/pos',
+            'car/euler',
+            'car/speed',
+            'car/lap',
+            'car/segment',
+            'car/distance',
+        ],
+        types=[
+            'vector',
+            'vector',
+            'float',
+            'int',
+            'int',
+            'float',
+        ],
+    )
+
+    try:
+        timestamp_ms = 0
+        distance = 0.0
+        for i in range(120):
+            y_pos = -1.0 if i < 60 else 1.0
+            lap_num = 0 if i < 60 else 1
+            record = {
+                'car/pos': [float(i) * 0.1, y_pos, 0.0],
+                'car/euler': [0.0, 0.0, 0.0],
+                'car/speed': 1.0 + i * 0.01,
+                'car/lap': lap_num,
+                'car/segment': 0,
+                'car/distance': distance,
+                '_timestamp_ms': timestamp_ms,
+            }
+            tub.write_record(record)
+            timestamp_ms += 100
+            distance += 0.1
+        tub.close()
+
+        source = TubPathDataSource(tub_path)
+        path_data = source.load()
+        builder = IMUPathDataBuilder(
+            path_data=path_data,
+            cfg=None,
+            lap_method='y_crossing',
+            segment_method='gradient',
+            tub_path=tub_path,
+        )
+        rankings = builder.compute_segment_statistics(
+            'car/speed', 'mean_abs')
+
+        assert 1 in rankings
+        assert 0 not in rankings
+    finally:
+        if os.path.exists(temp_dir):
+            for root, _, files in os.walk(temp_dir, topdown=False):
+                for name in files:
+                    os.remove(os.path.join(root, name))
+            for root, dirs, _ in os.walk(temp_dir, topdown=False):
+                for name in dirs:
+                    os.rmdir(os.path.join(root, name))
+            os.rmdir(temp_dir)
 
 
 if __name__ == '__main__':
