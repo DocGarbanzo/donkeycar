@@ -129,7 +129,7 @@ class FieldAggregationSpec:
     output_key: str                      # e.g., 'gyro_z_agg'
     index: Optional[int] = None          # Vector index (None for scalars)
     transform: Optional[Callable] = None # Transform function
-    aggregation: str = 'avg'             # avg, sum, min, max, median
+    aggregation: str = 'avg'             # avg, sum, min, max, median, delta
 
     def extract(self, record: dict) -> Optional[float]:
         """Extract and transform value from record."""
@@ -170,6 +170,9 @@ class FieldAccumulator:
             sorted_vals = sorted(self.values)
             mid = len(sorted_vals) // 2
             return sorted_vals[mid]
+        elif self.method == 'delta':
+            # Delta: last value - first value
+            return self.values[-1] - self.values[0]
         else:
             raise ValueError(f'Unknown aggregation method: {self.method}')
 

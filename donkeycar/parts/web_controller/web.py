@@ -137,6 +137,8 @@ class LocalWebController(tornado.web.Application):
             (r"/wsTest", WsTest),
             (r"/imupath", IMUPathHandler),
             (r"/api/imupath/data", IMUPathDataAPI),
+            (r"/api/imupath/fields", IMUPathFieldsAPI),
+            (r"/api/imupath/stats", IMUPathStatsAPI),
             (r"/api/imupath/shutdown", IMUPathShutdownAPI),
 
             (r"/static/(.*)", StaticFileHandler,
@@ -408,6 +410,83 @@ class IMUPathHandler(RequestHandler):
     async def get(self):
         data = {}
         await self.render("templates/imupath.html", **data)
+
+
+class IMUPathFieldsAPI(RequestHandler):
+    """
+    API endpoint for getting available fields from tub data.
+    Returns list of fields with metadata (type, dimensions, etc.)
+    """
+
+    async def get(self):
+        # Check if data is available
+        if self.application.imupath_builder is None:
+            self.set_status(404)
+            self.write({'error': 'No IMU path data loaded'})
+            return
+
+        try:
+            fields = self.application.imupath_builder.get_available_fields()
+            self.set_header('Content-Type', 'application/json')
+            self.write(json.dumps({'fields': fields}, ensure_ascii=False,
+                                 separators=(',', ':')))
+        except Exception as e:
+            logger.error(f"Error getting available fields: {e}",
+                        exc_info=True)
+            self.set_status(500)
+            self.write({'error': str(e)})
+
+
+class IMUPathStatsAPI(RequestHandler):
+    """
+    API endpoint for computing segment statistics on-demand.
+    Query parameters:
+        - field: Field name (required)
+        - method: Aggregation method (required)
+        - dimension: Vector component index (optional, for vector fields)
+    """
+
+    async def get(self):
+        # Check if data is available
+        if self.application.imupath_builder is None:
+            self.set_status(404)
+            self.write({'error': 'No IMU path data loaded'})
+            return
+
+        # Get query parameters
+        field_name = self.get_argument('field', default=None)
+        method = self.get_argument('method', default=None)
+        dimension_str = self.get_argument('dimension', default=None)
+
+        # Validate required parameters
+        if not field_name or not method:
+            self.set_status(400)
+            self.write({'error': 'Missing required parameters: field, method'})
+            return
+
+        # Parse dimension parameter
+        dimension = None
+        if dimension_str is not None and dimension_str != 'null' and dimension_str != '':
+            try:
+                dimension = int(dimension_str)
+            except ValueError:
+                self.set_status(400)
+                self.write({'error': 'Invalid dimension parameter: must be integer'})
+                return
+
+        try:
+            # Compute segment statistics
+            rankings = self.application.imupath_builder.compute_segment_statistics(
+                field_name, method, dimension)
+
+            self.set_header('Content-Type', 'application/json')
+            self.write(json.dumps({'rankings': rankings}, ensure_ascii=False,
+                                 separators=(',', ':')))
+        except Exception as e:
+            logger.error(f"Error computing segment statistics: {e}",
+                        exc_info=True)
+            self.set_status(500)
+            self.write({'error': str(e)})
 
 
 class IMUPathShutdownAPI(RequestHandler):

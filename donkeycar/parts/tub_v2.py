@@ -25,7 +25,12 @@ class Tub(object):
         self.manifest = Manifest(base_path, inputs=inputs, types=types,
                                  metadata=metadata, max_len=max_catalog_len,
                                  read_only=read_only)
-        self.input_types = dict(zip(inputs, types))
+        # Use manifest inputs/types if parameters were not provided
+        if not inputs and not types:
+            self.input_types = dict(zip(self.manifest.inputs,
+                                       self.manifest.types))
+        else:
+            self.input_types = dict(zip(inputs, types))
         # Create images folder if necessary
         if not os.path.exists(self.images_base_path):
             os.makedirs(self.images_base_path, exist_ok=True)
