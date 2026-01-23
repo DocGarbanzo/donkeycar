@@ -48,11 +48,12 @@ class SegmentTracker:
             for spec in self.field_aggregations
         }
 
-    def should_skip(self, record):
+    def should_skip(self, record, lap=None):
         """Check if record should be skipped (lap 0 filter only)."""
         # Note: Don't check car/segment here - it's computed on-the-fly
         # from manifest metadata if not present in record
-        lap = record.get('car/lap')
+        if lap is None:
+            lap = record.get('car/lap')
         if not self.use_lap_0 and lap == 0:
             return True
 
@@ -197,7 +198,8 @@ class TubStatistics(object):
                                     LAP_SORTING_CRITERIA)
         :param gyro_z_index:        z coordinate in 3d gyro vector (deprecated,
                                     use config)
-        :param sorting_strategy:    Optional custom sorting strategy (backward compat)
+        :param sorting_strategy:    Optional custom sorting strategy
+                                    (backward compat)
         :param field_aggregations:  Optional list of FieldAggregationSpec or
                                     old-style dicts (backward compat)
         """
@@ -353,8 +355,9 @@ class TubStatistics(object):
             if this_lap == lap:
                 continue
 
-            assert this_lap > lap, (f'Found smaller lap {this_lap} than previous'
-                                    f' lap {lap} in session {session_id}')
+            assert this_lap > lap, (
+                f'Found smaller lap {this_lap} than previous lap {lap} '
+                f'in session {session_id}')
 
             this_time_stamp_ms = record['_timestamp_ms']
             lap_time = (this_time_stamp_ms - time_stamp_ms) / 1000
@@ -435,7 +438,10 @@ class TubStatistics(object):
         if compress:
             all_laps = [e for ld in session_lap_data for e in ld]
             session_lap_data = [all_laps]
-            session_lap_metadata = [session_lap_metadata[0] if session_lap_metadata else 'compressed']
+            if session_lap_metadata:
+                session_lap_metadata = [session_lap_metadata[0]]
+            else:
+                session_lap_metadata = ['compressed']
 
         # Use SortingStrategy to rank laps (replaces nested rank_laps function)
         session_lap_rank = defaultdict(lambda: defaultdict(dict))
@@ -588,7 +594,9 @@ class TubStatistics(object):
         self.tub.manifest.write_metadata()
         logger.info('Segment assignment complete')
 
-    def calculate_segment_performance(self, use_lap_0=False, num_bins=None):
+    def calculate_segment_performance(self, use_lap_0=False, num_bins=None,
+                                     lap_resolver=None, segment_resolver=None,
+                                     session_id=None):
         """
         Calculate performance rankings for each segment instance across laps.
 
@@ -597,6 +605,9 @@ class TubStatistics(object):
 
         :param use_lap_0: If the 0'th lap should be ignored
         :param num_bins: If given, buckets the segments into as many buckets
+        :param lap_resolver: Optional callable (record_idx -> lap)
+        :param segment_resolver: Optional callable (record_idx -> segment)
+        :param session_id: Optional session filter for lap_resolver
 
         :return: dict of type
                  {sess_id: {lap_i: {seg_i: rankings_dict}}}
@@ -612,17 +623,24 @@ class TubStatistics(object):
         assigners = {}
         prev_segments = {}
 
+        record_idx = 0
         for record in self.tub:
-            if tracker.should_skip(record):
+            lap = self._resolve_lap(record, record_idx, lap_resolver,
+                                   session_id)
+            if lap is None:
+                record_idx += 1
+                continue
+            if tracker.should_skip(record, lap):
+                record_idx += 1
                 continue
 
             session_id = record.get('_session_id')
-            lap = record.get('car/lap')
             timestamp_ms = record.get('_timestamp_ms', 0)
             distance = record.get('car/distance', 0.0)
 
             # Try to get segment ID from record first (backward compatibility)
-            segment = record.get('car/segment')
+            segment = self._resolve_segment(
+                record, record_idx, segment_resolver, session_id)
 
             # If not in record, compute on-the-fly from metadata
             if segment is None:
@@ -645,15 +663,36 @@ class TubStatistics(object):
             if tracker.handle_segment_change(
                 segment, timestamp_ms, distance, segment_instances,
                 self._finalize_segment_instance):
+                record_idx += 1
                 continue
 
             # Accumulate field values
             tracker.accumulate_fields(record)
+            record_idx += 1
 
         # Finalize last segment
         self._finalize_last_segment(segment_instances, tracker)
 
         return self._rank_segment_instances(segment_instances, num_bins)
+
+    def _resolve_lap(self, record, record_idx, lap_resolver, session_id):
+        """Resolve lap for a record, using optional resolver."""
+        if session_id and record.get('_session_id') != session_id:
+            return None
+        if lap_resolver:
+            return lap_resolver(record_idx)
+        return record.get('car/lap')
+
+    def _resolve_segment(self, record, record_idx, segment_resolver,
+                        session_id):
+        """Resolve segment for a record, using optional resolver."""
+        if session_id and record.get('_session_id') != session_id:
+            return None
+        if segment_resolver:
+            segment = segment_resolver(record_idx)
+            if segment is not None:
+                return segment
+        return record.get('car/segment')
 
     def _finalize_last_segment(self, segment_instances, tracker):
         """Finalize the last segment using last record data."""

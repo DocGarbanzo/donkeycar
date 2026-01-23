@@ -8,6 +8,7 @@ import tempfile
 from donkeycar.course_analysis import CSVPathDataSource, TubPathDataSource
 from donkeycar.web.imupath_data import IMUPathDataBuilder, prepare_imupath_data
 from donkeycar.parts.tub_v2 import Tub
+from donkeycar.config import Config
 
 
 def test_imupath_data_builder_csv():
@@ -240,6 +241,173 @@ def test_imupath_stats_use_tub_session_ranks():
 
         assert 1 in rankings
         assert 0 not in rankings
+    finally:
+        if os.path.exists(temp_dir):
+            for root, _, files in os.walk(temp_dir, topdown=False):
+                for name in files:
+                    os.remove(os.path.join(root, name))
+            for root, dirs, _ in os.walk(temp_dir, topdown=False):
+                for name in dirs:
+                    os.rmdir(os.path.join(root, name))
+            os.rmdir(temp_dir)
+
+
+def test_imupath_stats_bin_by_lap_count():
+    """Ensure segment ranks are bucketed by unique lap count."""
+    temp_dir = tempfile.mkdtemp()
+    tub_path = os.path.join(temp_dir, 'rank_bins_tub')
+
+    cfg = Config()
+    cfg.USE_LAP_0 = True
+
+    tub = Tub(
+        tub_path,
+        inputs=[
+            'car/pos',
+            'car/euler',
+            'car/speed',
+            'car/lap',
+            'car/segment',
+            'car/distance',
+            'car/gyro',
+        ],
+        types=[
+            'vector',
+            'vector',
+            'float',
+            'int',
+            'int',
+            'float',
+            'vector',
+        ],
+    )
+
+    try:
+        timestamp_ms = 0
+        distance = 0.0
+        for i in range(200):
+            lap_num = 0 if i < 100 else 1
+            segment_id = 0 if i % 2 == 0 else 1
+            y_pos = -1.0 if i < 100 else 1.0
+            record = {
+                'car/pos': [float(i) * 0.1, y_pos, 0.0],
+                'car/euler': [0.0, 0.0, 0.0],
+                'car/speed': 1.0 + i * 0.01,
+                'car/lap': lap_num,
+                'car/segment': segment_id,
+                'car/distance': distance,
+                'car/gyro': [0.0, 0.1 + i * 0.001, 0.0],
+                '_timestamp_ms': timestamp_ms,
+            }
+            tub.write_record(record)
+            timestamp_ms += 100
+            distance += 0.1
+        tub.close()
+
+        source = TubPathDataSource(tub_path)
+        path_data = source.load()
+        builder = IMUPathDataBuilder(
+            path_data=path_data,
+            cfg=cfg,
+            lap_method='y_crossing',
+            segment_method='gradient',
+            tub_path=tub_path,
+        )
+        rankings = builder.compute_segment_statistics(
+            'car/gyro', 'mean_abs', dimension=1)
+
+        min_expected = 1.0 / 2.0
+        for lap_data in rankings.values():
+            segment_data = lap_data.get(0, {})
+            rank = segment_data.get('computed_stat')
+            assert rank is not None
+            assert rank >= min_expected
+    finally:
+        if os.path.exists(temp_dir):
+            for root, _, files in os.walk(temp_dir, topdown=False):
+                for name in files:
+                    os.remove(os.path.join(root, name))
+            for root, dirs, _ in os.walk(temp_dir, topdown=False):
+                for name in dirs:
+                    os.rmdir(os.path.join(root, name))
+            os.rmdir(temp_dir)
+
+
+def test_imupath_stats_use_visual_laps_when_constant():
+    """Use visual laps when car/lap stays constant."""
+    temp_dir = tempfile.mkdtemp()
+    tub_path = os.path.join(temp_dir, 'constant_lap_tub')
+
+    cfg = Config()
+    cfg.USE_LAP_0 = True
+
+    tub = Tub(
+        tub_path,
+        inputs=[
+            'car/pos',
+            'car/euler',
+            'car/speed',
+            'car/lap',
+            'car/segment',
+            'car/distance',
+            'car/gyro',
+        ],
+        types=[
+            'vector',
+            'vector',
+            'float',
+            'int',
+            'int',
+            'float',
+            'vector',
+        ],
+    )
+
+    try:
+        timestamp_ms = 0
+        distance = 0.0
+        for i in range(200):
+            if i < 50:
+                y_pos = -1.0
+            elif i < 100:
+                y_pos = 1.0
+            elif i < 150:
+                y_pos = -1.0
+            else:
+                y_pos = 1.0
+            record = {
+                'car/pos': [float(i) * 0.1, y_pos, 0.0],
+                'car/euler': [0.0, 0.0, 0.0],
+                'car/speed': 1.0 + i * 0.01,
+                'car/lap': 0,
+                'car/segment': 0,
+                'car/distance': distance,
+                'car/gyro': [0.0, 0.1 + i * 0.001, 0.0],
+                '_timestamp_ms': timestamp_ms,
+            }
+            tub.write_record(record)
+            timestamp_ms += 100
+            distance += 0.1
+        tub.close()
+
+        source = TubPathDataSource(tub_path)
+        path_data = source.load()
+        builder = IMUPathDataBuilder(
+            path_data=path_data,
+            cfg=cfg,
+            lap_method='y_crossing',
+            segment_method='gradient',
+            tub_path=tub_path,
+        )
+        rankings = builder.compute_segment_statistics(
+            'car/gyro', 'mean_abs', dimension=1)
+
+        assert 0 in rankings
+        assert 1 in rankings
+        segment_ids = set()
+        for lap_data in rankings.values():
+            segment_ids.update(lap_data.keys())
+        assert max(segment_ids) > 0
     finally:
         if os.path.exists(temp_dir):
             for root, _, files in os.walk(temp_dir, topdown=False):

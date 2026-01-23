@@ -170,13 +170,12 @@ def test_segment_assignment_with_2_lap_mean_course():
 - Always confirm which remote you're pushing to before executing git push
 
 **CRITICAL Branch Management:**
-- Never push to the **autorope** main branch without explicit user permission
+- Never push to the **autorope** main branch
 - Pushing to **docgarbanzo** main branch is fine for development/testing
 - Always ask before:
-  - Making commits to autorope main branch
-  - Pushing changes to autorope main branch  
-  - Creating pull requests to autorope main branch
-- Development should happen on feature branches or new_dev branch, but main branch work on the fork is acceptable
+  - Making commits to autorope branch
+  - Pushing changes to autorope branch  
+- Development should happen on feature branches or dev branch, but main branch work on the fork is acceptable
 
 **Remote Configuration:**
 - `autorope` - https://github.com/autorope/donkeycar.git (upstream)
@@ -480,6 +479,9 @@ custom tub fields in the Segment Stats selector.
 Web UI segment stats use TubStatistics session rankings from manifest
 metadata, so `donkey segment` must have stored segmentation data for the
 session.
+If `car/lap` is missing or constant, the web UI falls back to visual lap
+detection for ranking. If `car/segment` is missing or constant, the web UI
+uses visual segment IDs for ranking.
 Changing lap count or segmentation method in the UI recomputes the stats.
 The UI prints "Computing segment statistics..." on startup for tub sources.
 Segment stats ignore trailing partial laps beyond the last boundary.

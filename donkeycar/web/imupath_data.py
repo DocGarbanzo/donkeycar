@@ -234,6 +234,19 @@ class IMUPathDataBuilder:
         try:
             tub = Tub(self.tub_path, read_only=True)
             try:
+                session_id = self._get_session_id(tub)
+                use_lap_0 = self._use_lap_0()
+                num_bins = self._count_session_laps(
+                    tub, session_id, use_lap_0)
+                lap_resolver = None
+                segment_resolver = None
+                if self._should_use_visual_laps(num_bins):
+                    num_bins = self._count_visual_laps(use_lap_0)
+                    lap_resolver = self._build_visual_lap_resolver(use_lap_0)
+                if self._should_use_visual_segments(
+                    tub, session_id):
+                    segment_resolver = (
+                        self._build_visual_segment_resolver())
                 sorting_strategy = SortingStrategy(
                     [{'key': spec.output_key}])
                 stats = TubStatistics(
@@ -243,9 +256,14 @@ class IMUPathDataBuilder:
                     field_aggregations=[spec],
                 )
                 rankings_by_session = (
-                    stats.calculate_segment_performance())
+                    stats.calculate_segment_performance(
+                        use_lap_0,
+                        num_bins=num_bins,
+                        lap_resolver=lap_resolver,
+                        segment_resolver=segment_resolver,
+                        session_id=session_id))
                 session_rankings = self._select_session_rankings(
-                    rankings_by_session, None)
+                    rankings_by_session, session_id)
                 return session_rankings
             finally:
                 tub.close()
@@ -310,6 +328,123 @@ class IMUPathDataBuilder:
             )
 
         return None
+
+    def _use_lap_0(self):
+        """Determine whether lap 0 should be included in rankings."""
+        if self.cfg and hasattr(self.cfg, 'USE_LAP_0'):
+            return bool(self.cfg.USE_LAP_0)
+        return False
+
+    def _get_session_id(self, tub):
+        """Select a session id for ranking context."""
+        if tub.manifest.metadata:
+            return next(iter(tub.manifest.metadata.keys()))
+
+        for record in tub:
+            session_id = record.get('_session_id')
+            if session_id:
+                return session_id
+        return None
+
+    def _count_session_laps(self, tub, session_id, use_lap_0):
+        """Count unique laps for session to keep rank bins stable."""
+        if not session_id:
+            return None
+
+        laps = set()
+        for record in tub:
+            if record.get('_session_id') != session_id:
+                continue
+            lap = record.get('car/lap')
+            if lap is None:
+                continue
+            if not use_lap_0 and lap == 0:
+                continue
+            laps.add(lap)
+
+        if not laps:
+            return None
+        return len(laps)
+
+    def _should_use_visual_laps(self, lap_count):
+        """Check if visual lap detection should be used for rankings."""
+        if self.multilap_data.num_laps <= 1:
+            return False
+        if lap_count is None:
+            return True
+        return lap_count <= 1
+
+    def _count_visual_laps(self, use_lap_0):
+        """Return lap count from visual lap detection."""
+        count = self.multilap_data.num_laps
+        if count <= 0:
+            return None
+        if use_lap_0:
+            return count
+        if count == 1:
+            return None
+        return count - 1
+
+    def _build_visual_lap_resolver(self, use_lap_0):
+        """Create a resolver for lap numbers based on lap boundaries."""
+        boundaries = self.multilap_data.lap_boundaries
+        if not boundaries:
+            return None
+
+        state = {'lap_idx': 0}
+
+        def resolve(record_idx):
+            lap_idx = state['lap_idx']
+            while lap_idx < len(boundaries):
+                boundary = boundaries[lap_idx]
+                if record_idx < boundary.start_index:
+                    return None
+                if record_idx <= boundary.end_index:
+                    state['lap_idx'] = lap_idx
+                    if not use_lap_0 and lap_idx == 0:
+                        return None
+                    return lap_idx
+                lap_idx += 1
+            state['lap_idx'] = lap_idx
+            return None
+
+        return resolve
+
+    def _should_use_visual_segments(self, tub, session_id):
+        """Check if visual segment ids should be used for ranking."""
+        if self.segmentation.num_segments <= 1:
+            return False
+        segment_count = self._count_session_segments(tub, session_id)
+        return segment_count is None or segment_count <= 1
+
+    def _count_session_segments(self, tub, session_id):
+        """Count unique segments for session."""
+        if not session_id:
+            return None
+
+        segments = set()
+        for record in tub:
+            if record.get('_session_id') != session_id:
+                continue
+            segment = record.get('car/segment')
+            if segment is None:
+                continue
+            segments.add(segment)
+        if not segments:
+            return None
+        return len(segments)
+
+    def _build_visual_segment_resolver(self):
+        """Create a resolver for segment ids based on visual assignment."""
+        if self.segment_ids is None or len(self.segment_ids) == 0:
+            return None
+
+        def resolve(record_idx):
+            if record_idx < 0 or record_idx >= len(self.segment_ids):
+                return None
+            return int(self.segment_ids[record_idx])
+
+        return resolve
 
     def _select_session_rankings(self, rankings_by_session, session_id):
         """Select rankings for the active session, fallback to first."""
