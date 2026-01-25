@@ -9,6 +9,7 @@ The client and web server needed to control a car remotely.
 
 
 import os
+import sys
 import json
 import logging
 import time
@@ -140,6 +141,7 @@ class LocalWebController(tornado.web.Application):
             (r"/api/imupath/fields", IMUPathFieldsAPI),
             (r"/api/imupath/stats", IMUPathStatsAPI),
             (r"/api/imupath/shutdown", IMUPathShutdownAPI),
+            (r"/api/imupath/restart", IMUPathRestartAPI),
 
             (r"/static/(.*)", StaticFileHandler,
              {"path": self.static_file_path}),
@@ -489,7 +491,52 @@ class IMUPathStatsAPI(RequestHandler):
             self.write({'error': str(e)})
 
 
-class IMUPathShutdownAPI(RequestHandler):
+class SecuredAPIHandler(RequestHandler):
+    """Base handler with origin validation and JSON parsing."""
+
+    def validate_origin(self):
+        """
+        Validate Origin header matches Host to prevent CSRF.
+        Returns True if valid, sets error response and returns False otherwise.
+        """
+        origin = self.request.headers.get('Origin')
+        if not origin:
+            return True
+        host = self.request.headers.get('Host')
+        origin_host = origin.split('://')[-1]
+        if origin_host != host:
+            logger.warning(f"Request blocked: origin={origin} host={host}")
+            self.set_status(403)
+            self.write({'error': 'Forbidden'})
+            return False
+        return True
+
+    def parse_json_body(self):
+        """
+        Parse request body as JSON.
+        Returns parsed data on success, None on error (sets error response).
+        """
+        try:
+            return tornado.escape.json_decode(self.request.body)
+        except (ValueError, TypeError, UnicodeDecodeError) as e:
+            logger.warning(f"Invalid JSON in request: {e}")
+            self.set_status(400)
+            self.write({'error': 'Invalid JSON'})
+            return None
+
+    def validate_confirmation(self, data, expected_value):
+        """
+        Validate confirmation field in request data.
+        Returns True if valid, sets error response and returns False otherwise.
+        """
+        if data.get('confirm') != expected_value:
+            self.set_status(400)
+            self.write({'error': 'Missing confirmation'})
+            return False
+        return True
+
+
+class IMUPathShutdownAPI(SecuredAPIHandler):
     """
     API endpoint to shutdown the server.
     Uses Origin header validation to prevent cross-origin requests.
@@ -497,25 +544,12 @@ class IMUPathShutdownAPI(RequestHandler):
     """
 
     async def post(self):
-        origin = self.request.headers.get('Origin')
-        host = self.request.headers.get('Host')
-        if origin:
-            origin_host = origin.split('://')[-1]
-            if origin_host != host:
-                logger.warning(f"Shutdown blocked: origin={origin} host={host}")
-                self.set_status(403)
-                self.write({'error': 'Forbidden'})
-                return
-        try:
-            data = tornado.escape.json_decode(self.request.body)
-        except (ValueError, TypeError, UnicodeDecodeError) as e:
-            logger.warning(f"Invalid JSON in shutdown request: {e}")
-            self.set_status(400)
-            self.write({'error': 'Invalid JSON'})
+        if not self.validate_origin():
             return
-        if data.get('confirm') != 'shutdown':
-            self.set_status(400)
-            self.write({'error': 'Missing confirmation'})
+        data = self.parse_json_body()
+        if data is None:
+            return
+        if not self.validate_confirmation(data, 'shutdown'):
             return
         self.write({'status': 'shutting_down'})
         await self.finish()
@@ -524,6 +558,31 @@ class IMUPathShutdownAPI(RequestHandler):
     def _shutdown(self):
         logger.info("Shutdown requested via web UI")
         IOLoop.current().stop()
+
+
+class IMUPathRestartAPI(SecuredAPIHandler):
+    """
+    API endpoint to restart the server.
+    Uses Origin header validation to prevent cross-origin requests.
+    Intended for local development use only.
+    """
+
+    async def post(self):
+        if not self.validate_origin():
+            return
+        data = self.parse_json_body()
+        if data is None:
+            return
+        if not self.validate_confirmation(data, 'restart'):
+            return
+        self.write({'status': 'restarting'})
+        await self.finish()
+        IOLoop.current().call_later(0.5, self._restart)
+
+    def _restart(self):
+        logger.info("Server restart requested via web UI")
+        python = sys.executable
+        os.execv(python, [python] + sys.argv)
 
 
 class IMUPathDataAPI(RequestHandler):

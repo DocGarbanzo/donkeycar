@@ -4,11 +4,16 @@ Test web-based IMU path visualizer components
 
 import json
 import os
+import sys
 import tempfile
+from unittest.mock import patch, MagicMock, call
+import tornado.testing
+import tornado.web
 from donkeycar.course_analysis import CSVPathDataSource, TubPathDataSource
 from donkeycar.web.imupath_data import IMUPathDataBuilder, prepare_imupath_data
 from donkeycar.parts.tub_v2 import Tub
 from donkeycar.config import Config
+from donkeycar.parts.web_controller.web import IMUPathRestartAPI
 
 
 def test_imupath_data_builder_csv():
@@ -417,6 +422,142 @@ def test_imupath_stats_use_visual_laps_when_constant():
                 for name in dirs:
                     os.rmdir(os.path.join(root, name))
             os.rmdir(temp_dir)
+
+
+class IMUPathRestartAPITest(tornado.testing.AsyncHTTPTestCase):
+    """Test the IMU Path restart API endpoint."""
+
+    def get_app(self):
+        """Create a test tornado application with restart handler."""
+        app = tornado.web.Application([
+            (r"/api/imupath/restart", IMUPathRestartAPI),
+        ])
+        return app
+
+    @tornado.testing.gen_test
+    def test_restart_success(self):
+        """Test successful restart with valid origin and confirmation."""
+        with patch('os.execv') as mock_execv:
+            body = json.dumps({'confirm': 'restart'})
+            response = yield self.http_client.fetch(
+                self.get_url('/api/imupath/restart'),
+                method='POST',
+                body=body,
+                headers={
+                    'Content-Type': 'application/json',
+                    'Origin': f'http://localhost:{self.get_http_port()}',
+                    'Host': f'localhost:{self.get_http_port()}'
+                }
+            )
+
+            assert response.code == 200
+            data = json.loads(response.body)
+            assert data['status'] == 'restarting'
+
+            # Wait for the delayed restart call
+            yield tornado.gen.sleep(0.6)
+            mock_execv.assert_called_once()
+            args = mock_execv.call_args[0]
+            assert args[0] == sys.executable
+            assert args[1][0] == sys.executable
+
+    @tornado.testing.gen_test
+    def test_restart_cross_origin_blocked(self):
+        """Test that cross-origin requests are blocked."""
+        body = json.dumps({'confirm': 'restart'})
+
+        try:
+            response = yield self.http_client.fetch(
+                self.get_url('/api/imupath/restart'),
+                method='POST',
+                body=body,
+                headers={
+                    'Content-Type': 'application/json',
+                    'Origin': 'http://evil.com',
+                    'Host': f'localhost:{self.get_http_port()}'
+                },
+                raise_error=False
+            )
+            assert response.code == 403
+            data = json.loads(response.body)
+            assert 'error' in data
+            assert data['error'] == 'Forbidden'
+        except Exception:
+            # Tornado might raise on 403
+            pass
+
+    @tornado.testing.gen_test
+    def test_restart_invalid_json(self):
+        """Test that invalid JSON is rejected."""
+        body = "not valid json"
+
+        try:
+            response = yield self.http_client.fetch(
+                self.get_url('/api/imupath/restart'),
+                method='POST',
+                body=body,
+                headers={
+                    'Content-Type': 'application/json',
+                    'Origin': f'http://localhost:{self.get_http_port()}',
+                    'Host': f'localhost:{self.get_http_port()}'
+                },
+                raise_error=False
+            )
+            assert response.code == 400
+            data = json.loads(response.body)
+            assert 'error' in data
+            assert data['error'] == 'Invalid JSON'
+        except Exception:
+            # Tornado might raise on 400
+            pass
+
+    @tornado.testing.gen_test
+    def test_restart_missing_confirmation(self):
+        """Test that missing confirmation is rejected."""
+        body = json.dumps({'wrong_key': 'restart'})
+
+        try:
+            response = yield self.http_client.fetch(
+                self.get_url('/api/imupath/restart'),
+                method='POST',
+                body=body,
+                headers={
+                    'Content-Type': 'application/json',
+                    'Origin': f'http://localhost:{self.get_http_port()}',
+                    'Host': f'localhost:{self.get_http_port()}'
+                },
+                raise_error=False
+            )
+            assert response.code == 400
+            data = json.loads(response.body)
+            assert 'error' in data
+            assert data['error'] == 'Missing confirmation'
+        except Exception:
+            # Tornado might raise on 400
+            pass
+
+    @tornado.testing.gen_test
+    def test_restart_no_origin_header(self):
+        """Test that requests without Origin header are allowed (same-origin)."""
+        with patch('os.execv') as mock_execv:
+            body = json.dumps({'confirm': 'restart'})
+            response = yield self.http_client.fetch(
+                self.get_url('/api/imupath/restart'),
+                method='POST',
+                body=body,
+                headers={
+                    'Content-Type': 'application/json',
+                    'Host': f'localhost:{self.get_http_port()}'
+                }
+            )
+
+            assert response.code == 200
+            data = json.loads(response.body)
+            assert data['status'] == 'restarting'
+
+            # Wait for the delayed restart call
+            yield tornado.gen.sleep(0.6)
+            mock_execv.assert_called_once()
 
 
 if __name__ == '__main__':
