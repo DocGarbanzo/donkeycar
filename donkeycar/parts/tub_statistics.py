@@ -452,6 +452,9 @@ class TubStatistics(object):
             # Rank laps using the sorting strategy
             rankings = self.sorting_strategy.rank_laps(laps_data, num_bins)
 
+            # Log detailed ranking information
+            self._log_rankings(laps_data, rankings)
+
             # Convert rankings back to session_lap_rank format
             for lap_idx, lap_rankings in rankings.items():
                 lap_data = laps_data[lap_idx]
@@ -747,6 +750,49 @@ class TubStatistics(object):
 
         return session_segment_rank
 
+    def _log_rankings(self, data_items, rankings, segment_id=None):
+        """
+        Log detailed ranking information for laps or segments.
+
+        :param data_items: List of dictionaries containing lap/segment data
+        :param rankings: Dictionary mapping indices to ranking quantiles
+        :param segment_id: Optional segment ID for segment logging (None for
+                           lap logging)
+        """
+        if not self.sorting_strategy.criteria:
+            return
+
+        primary_criterion = self.sorting_strategy.criteria[0]
+        field_key = primary_criterion['key']
+        transform = primary_criterion['transform']
+        reverse = primary_criterion['reverse']
+
+        # Extract and transform values using list comprehension
+        item_values = [
+            (idx, value, transform(value))
+            for idx, item_data in enumerate(data_items)
+            if (value := item_data.get(field_key)) is not None
+        ]
+
+        if not item_values:
+            return
+
+        item_values.sort(key=lambda x: x[2], reverse=reverse)
+
+        total_items = len(item_values)
+        for rank, (idx, raw_value, _) in enumerate(item_values, start=1):
+            lap_num = data_items[idx]['lap']
+            quantile = rankings[idx].get(field_key, 0.0)
+
+            segment_label = (f', Segment {segment_id}'
+                           if segment_id is not None else '')
+            logger.info(
+                f'Lap {lap_num}{segment_label}: '
+                f'{field_key}={raw_value:.4f}, '
+                f'rank={rank}/{total_items}, '
+                f'quantile={quantile*100:.0f}%'
+            )
+
     def _rank_session_segments(self, session_id, segments, num_bins,
                               session_segment_rank):
         """Rank all segments for a single session."""
@@ -755,6 +801,10 @@ class TubStatistics(object):
                 continue
 
             rankings = self.sorting_strategy.rank_laps(instances, num_bins)
+
+            # Log detailed ranking information
+            self._log_rankings(instances, rankings, segment_id)
+
             self._store_segment_rankings(session_id, segment_id, instances,
                                         rankings, session_segment_rank)
 

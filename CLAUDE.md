@@ -485,8 +485,20 @@ uses visual segment IDs for ranking.
 Changing lap count or segmentation method in the UI recomputes the stats.
 The UI prints "Computing segment statistics..." on startup for tub sources.
 Segment stats ignore trailing partial laps beyond the last boundary.
-Segment stats collapse multiple instances per lap to keep ranks unique.
 Lap labels are 0-based to match record indices.
+
+**Segment Assignment Invariant**: Each lap visits segments sequentially exactly
+once: 0 → 1 → 2 → ... → N-1 → 0 (lap complete). Segment boundaries are infinite
+lines. A lap completes only after crossing all segment boundaries in order and
+returning to segment 0. It is impossible for a lap to visit the same segment
+multiple times.
+
+**Lap Definition for Segment Statistics**: When computing segment performance
+statistics, lap boundaries MUST be defined by segment cycle completions (N-1 →
+0 transitions), NOT by Y-crossing lap detection. Y-crossing is for visualization
+only. Using Y-crossing boundaries for segment statistics creates misaligned laps
+that appear to visit segments multiple times, violating the segment assignment
+invariant.
 
 ### Running the Web-Based IMU Path Visualizer
 
