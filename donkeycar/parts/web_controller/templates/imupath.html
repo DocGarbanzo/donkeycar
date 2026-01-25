@@ -80,10 +80,27 @@
       font-size: 11px;
       font-family: 'Courier New', monospace;
       width: 100%;
+      margin-bottom: 4px;
     }
 
     .shutdown-btn:hover {
       background-color: #e74c3c;
+    }
+
+    .restart-btn {
+      background-color: #f39c12;
+      color: white;
+      border: none;
+      padding: 4px 12px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 11px;
+      font-family: 'Courier New', monospace;
+      width: 100%;
+    }
+
+    .restart-btn:hover {
+      background-color: #f1c40f;
     }
 
     .position-panel {
@@ -267,6 +284,7 @@
     <div class="right-panel">
       <div class="shutdown-box">
         <button class="shutdown-btn" id="shutdown-btn">Shutdown</button>
+        <button class="restart-btn" id="restart-btn">Server Restart</button>
       </div>
       <div class="position-panel">
         <div class="info-title">Current Position</div>
@@ -308,11 +326,11 @@
         </div>
         <div class="info-row">
           <span class="info-label">Total Dist:</span>
-          <span class="info-val" id="current-total-dist">0.0m</span>
+          <span class="info-val" id="current-total-dist">0.000m</span>
         </div>
         <div class="info-row">
           <span class="info-label">Lap Dist:</span>
-          <span class="info-val" id="current-lap-dist">0.0m</span>
+          <span class="info-val" id="current-lap-dist">0.000m</span>
         </div>
         <div class="info-row" id="seg-rank-row">
           <span class="info-label">Seg Rank:</span>
@@ -392,18 +410,18 @@
         <span class="lbl">Duration:</span><span id="info-duration">0:00</span>
       </div>
       <div class="dataset-item">
-        <span class="lbl">Distance:</span><span id="info-distance">0.0m</span>
+        <span class="lbl">Distance:</span><span id="info-distance">0.000m</span>
       </div>
       <div class="dataset-item">
         <span class="lbl">Segments:</span><span id="info-segments">0</span>
       </div>
       <div class="dataset-item">
-        <span class="lbl">Mean:</span><span id="info-mean-length">0.0m</span>
+        <span class="lbl">Mean:</span><span id="info-mean-length">0.000m</span>
       </div>
     </div>
   </div>
 </div>
 
-<script src="/static/imupath.js?v=20260120"></script>
+<script src="/static/imupath.js?v=20260125b"></script>
 </body>
 </html>

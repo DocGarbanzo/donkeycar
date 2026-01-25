@@ -76,23 +76,6 @@ function findLapStartIndex(lapNum) {
 }
 
 /**
- * Calculate cumulative distance from start index to end index
- */
-function calculateCumulativeDistance(toIndex, fromIndex = 0) {
-  if (!appState.data || toIndex <= fromIndex) return 0;
-  const pathPoints = appState.data.path_points;
-  let dist = 0;
-  for (let i = fromIndex + 1; i <= toIndex && i < pathPoints.length; i++) {
-    const p1 = pathPoints[i - 1];
-    const p2 = pathPoints[i];
-    const dx = p2.x - p1.x;
-    const dy = p2.y - p1.y;
-    dist += Math.sqrt(dx * dx + dy * dy);
-  }
-  return dist;
-}
-
-/**
  * Update the current path line trace on the plot
  */
 function updateCurrentPathLine(closestIdx) {
@@ -394,6 +377,28 @@ function setupEventHandlers() {
     }
   });
 
+  // Server restart button
+  $('#restart-btn').click(function() {
+    if (confirm('Restart the server? The page will reload automatically.')) {
+      $.ajax({
+        url: '/api/imupath/restart',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({confirm: 'restart'}),
+        success: function() {
+          $('#restart-btn').text('Restarting...').prop('disabled', true);
+          setTimeout(function() {
+            window.location.reload();
+          }, 2500);
+        },
+        error: function() {
+          alert('Failed to restart server');
+          $('#restart-btn').text('Server Restart').prop('disabled', false);
+        }
+      });
+    }
+  });
+
   // Lap selector
   $('#lap-selector').change(function() {
     if (!appState.data) return;
@@ -675,7 +680,7 @@ function renderPlot() {
 }
 
 /**
- * Update display by index (fast path for keyboard navigation)
+ * Update display by index (for keyboard navigation)
  */
 function updateByIndex(idx) {
   const pathPoints = appState.data.path_points;
@@ -685,42 +690,8 @@ function updateByIndex(idx) {
   // Update slider to match
   $('#time-slider').val(point.t);
 
-  // Fast update - only marker, skip expensive operations
-  updateDisplayFast(idx, point);
-}
-
-/**
- * Fast update for keyboard navigation - uses CSS overlay marker
- */
-function updateDisplayFast(closestIdx, point) {
-  // Update slider index display (instant)
-  const totalPoints = appState.data.path_points.length;
-  $('#idx-value').text(`${closestIdx}/${totalPoints - 1}`);
-
-  // Update position panel (instant - no expensive calculations)
-  $('#current-date').text(formatDate(point.t));
-  $('#current-time').text(formatTime(point.t));
-  $('#current-idx').text(closestIdx);
-  $('#current-lap').text(point.lap !== null ? point.lap : '--');
-  $('#current-segment').text(point.segment !== null ? point.segment : '--');
-  $('#current-speed').text(point.v.toFixed(2));
-  $('#current-heading').text((point.h * 180 / Math.PI).toFixed(1) + '°');
-  $('#current-x').text(point.x.toFixed(2));
-  $('#current-y').text(point.y.toFixed(2));
-
-  // Update driven path and marker on plot
-  if (appState.plotInitialized) {
-    const pathPoints = appState.data.path_points;
-    const pathX = pathPoints.slice(0, closestIdx + 1).map(p => p.x);
-    const pathY = pathPoints.slice(0, closestIdx + 1).map(p => p.y);
-
-    Plotly.restyle('plot-container', {
-      x: [pathX, [point.x]],
-      y: [pathY, [point.y]],
-    }, [2, 3]);
-  }
-
-  // Skip distance calculations for speed
+  // Use the same update function as slider for consistency
+  updateDisplayForPoint(idx, point);
 }
 
 /**
@@ -803,15 +774,16 @@ function updateDisplayForPoint(closestIdx, point) {
   $('#current-x').text(point.x.toFixed(2));
   $('#current-y').text(point.y.toFixed(2));
 
-  // Calculate and display distances
-  const totalDist = calculateCumulativeDistance(closestIdx);
-  $('#current-total-dist').text(totalDist.toFixed(1) + 'm');
+  // Display distances from tub data (not calculated)
+  const totalDist = point.d;
+  $('#current-total-dist').text(totalDist.toFixed(3) + 'm');
 
-  // Calculate lap distance
+  // Calculate lap distance as difference from lap start
   const lapNum = point.lap !== null ? point.lap : 0;
   const lapStartIdx = findLapStartIndex(lapNum);
-  const lapDist = calculateCumulativeDistance(closestIdx, lapStartIdx);
-  $('#current-lap-dist').text(lapDist.toFixed(1) + 'm');
+  const lapStartDist = pathPoints[lapStartIdx].d;
+  const lapDist = point.d - lapStartDist;
+  $('#current-lap-dist').text(lapDist.toFixed(3) + 'm');
 
   // Update segment rank if available
   const segRank = getSegmentRanking(point);
@@ -832,9 +804,9 @@ function updateInfoPanels() {
   $('#info-laps').text(metadata.total_laps);
   $('#info-points').text(metadata.total_points);
   $('#info-duration').text(formatDuration(metadata.duration));
-  $('#info-distance').text(metadata.total_distance.toFixed(1));
+  $('#info-distance').text(metadata.total_distance.toFixed(3));
   $('#info-segments').text(metadata.num_segments);
-  $('#info-mean-length').text(metadata.mean_course_length.toFixed(1));
+  $('#info-mean-length').text(metadata.mean_course_length.toFixed(3));
 }
 
 /**

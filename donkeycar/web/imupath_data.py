@@ -241,8 +241,9 @@ class IMUPathDataBuilder:
                 lap_resolver = None
                 segment_resolver = None
                 if self._should_use_visual_laps(num_bins):
-                    num_bins = self._count_visual_laps(use_lap_0)
-                    lap_resolver = self._build_visual_lap_resolver(use_lap_0)
+                    num_bins = self._count_segment_cycle_laps(use_lap_0)
+                    lap_resolver = self._build_segment_cycle_lap_resolver(
+                        use_lap_0)
                 if self._should_use_visual_segments(
                     tub, session_id):
                     segment_resolver = (
@@ -410,6 +411,109 @@ class IMUPathDataBuilder:
 
         return resolve
 
+    def _count_segment_cycle_laps(self, use_lap_0):
+        """
+        Return lap count based on segment cycle completions (4->0 transitions).
+
+        For segment statistics, laps are defined by segment cycles, not
+        Y-crossing detection.
+        """
+        if self.segment_ids is None or len(self.segment_ids) == 0:
+            return None
+
+        num_segments = self.segmentation.num_segments
+        if num_segments <= 1:
+            return None
+
+        last_segment = num_segments - 1
+
+        # Count segment cycle completions
+        cycle_count = 0
+        for i in range(1, len(self.segment_ids)):
+            if (self.segment_ids[i-1] == last_segment and
+                self.segment_ids[i] == 0):
+                cycle_count += 1
+
+        if cycle_count <= 0:
+            return None
+        if use_lap_0:
+            return cycle_count
+        if cycle_count == 1:
+            return None
+        return cycle_count - 1
+
+    def _build_segment_cycle_lap_resolver(self, use_lap_0):
+        """
+        Create a resolver for lap numbers based on segment cycle boundaries.
+
+        Laps are defined by segment cycle completions (4->0 transitions), not
+        Y-crossing detection. This ensures segment statistics use consistent
+        lap definitions.
+        """
+        if self.segment_ids is None or len(self.segment_ids) == 0:
+            return None
+
+        num_segments = self.segmentation.num_segments
+        if num_segments <= 1:
+            return None
+
+        last_segment = num_segments - 1
+
+        # Find segment cycle boundaries (indices where 4->0 transition occurs)
+        cycle_indices = []
+        for i in range(1, len(self.segment_ids)):
+            if (self.segment_ids[i-1] == last_segment and
+                self.segment_ids[i] == 0):
+                cycle_indices.append(i)
+
+        if not cycle_indices:
+            return None
+
+        # Build lap boundaries for complete laps only
+        # - Lap 0 starts at index 0
+        # - Each subsequent complete lap starts at a cycle boundary
+        # - Exclude the last cycle if it doesn't complete (partial lap)
+        # We have N cycles, which means laps 0 through N-1 are complete
+        # Lap N (if it exists) is partial and should be excluded
+        lap_starts = [0] + cycle_indices[:-1] if len(cycle_indices) > 1 else [0]
+        # Last complete lap ends just before the last cycle starts
+        last_complete_lap_end = cycle_indices[-1] - 1 if cycle_indices else len(
+            self.segment_ids) - 1
+
+        state = {'lap_idx': 0}
+
+        def resolve(record_idx):
+            lap_idx = state['lap_idx']
+
+            # Find which lap this record belongs to
+            while lap_idx < len(lap_starts):
+                lap_start = lap_starts[lap_idx]
+
+                # Determine lap end
+                if lap_idx + 1 < len(lap_starts):
+                    # Not the last lap: ends one index before next lap starts
+                    lap_end = lap_starts[lap_idx + 1] - 1
+                else:
+                    # Last complete lap: ends at last_complete_lap_end
+                    lap_end = last_complete_lap_end
+
+                if record_idx < lap_start:
+                    return None
+
+                if lap_start <= record_idx <= lap_end:
+                    state['lap_idx'] = lap_idx
+                    if not use_lap_0 and lap_idx == 0:
+                        return None
+                    return lap_idx
+
+                lap_idx += 1
+
+            # Record is beyond last complete lap (trailing partial lap)
+            state['lap_idx'] = lap_idx
+            return None
+
+        return resolve
+
     def _should_use_visual_segments(self, tub, session_id):
         """Check if visual segment ids should be used for ranking."""
         if self.segmentation.num_segments <= 1:
@@ -515,6 +619,7 @@ class IMUPathDataBuilder:
                 'y': float(self.path_data.y[idx]),
                 'v': float(self.path_data.velocity[idx]),
                 'h': float(self.path_data.heading[idx]),
+                'd': float(self.path_data.distance[idx]),
                 'lap': self._find_lap_for_index(int(idx)),
                 # Defensive check: segment_ids should match path_data length,
                 # but guard against edge cases during initialization
