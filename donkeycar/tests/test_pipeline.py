@@ -12,12 +12,31 @@ from donkeycar.config import Config
 from donkeycar.pipeline.sequence import PipelineGenerator
 from donkeycar.pipeline.types import TubRecord, TubDataset
 from donkeycar.parts.tub_v2 import Tub
-from donkeycar.parts.tub_statistics import TubStatistics
+from donkeycar.parts.tub_statistics import TubStatistics, FieldAggregationSpec
 from donkeycar.pipeline.transformations import (
     SortingStrategy,
     default_lap_sorting_strategy,
     clamp
 )
+
+
+# Standard field aggregation for gyro_z at index 1 (simulator convention)
+GYRO_Z_INDEX_1 = [
+    FieldAggregationSpec(
+        field='car/gyro',
+        output_key='gyro_z_agg',
+        index=1,
+        transform=abs,
+        aggregation='avg'
+    )
+]
+
+# Sorting strategy that includes time, distance, and gyro_z_agg
+FULL_SORTING_STRATEGY = SortingStrategy([
+    {'key': 'time'},
+    {'key': 'distance'},
+    {'key': 'gyro_z_agg'},
+])
 
 
 def random_records(size: int = 100) -> List[TubRecord]:
@@ -229,7 +248,8 @@ class TestTubDatasetSortingAndTransformation(unittest.TestCase):
         tub = self._create_tub_with_data(records)
 
         # Generate lap times
-        stats = TubStatistics(tub, gyro_z_index=1)
+        stats = TubStatistics(tub, field_aggregations=GYRO_Z_INDEX_1,
+                              sorting_strategy=FULL_SORTING_STRATEGY)
         stats.generate_laptimes_from_records()
 
         # Close and reopen as read-only
@@ -239,7 +259,8 @@ class TestTubDatasetSortingAndTransformation(unittest.TestCase):
         tub = Tub(self.test_path, inputs, types, read_only=True)
 
         # Calculate lap performance
-        stats = TubStatistics(tub, gyro_z_index=1)
+        stats = TubStatistics(tub, field_aggregations=GYRO_Z_INDEX_1,
+                              sorting_strategy=FULL_SORTING_STRATEGY)
         session_lap_rank = stats.calculate_lap_performance(use_lap_0=True)
 
         # Test that records can be extended
@@ -263,17 +284,18 @@ class TestTubDatasetSortingAndTransformation(unittest.TestCase):
 
     def test_current_sorting_criteria(self):
         """
-        Test current hardcoded sorting by 'time', 'distance', 'gyro_z_agg'.
+        Test sorting by 'time', 'distance', 'gyro_z_agg' with explicit config.
 
         Validates that:
-        - Laps are sorted by these three criteria
+        - Laps are sorted by these three criteria when configured
         - Sorting is done using itemgetter
         - Rankings are assigned correctly
         """
         records = self._create_oval_track_data(num_laps=5, varying_performance=True)
         tub = self._create_tub_with_data(records)
 
-        stats = TubStatistics(tub, gyro_z_index=1)
+        stats = TubStatistics(tub, field_aggregations=GYRO_Z_INDEX_1,
+                              sorting_strategy=FULL_SORTING_STRATEGY)
         stats.generate_laptimes_from_records()
 
         # Close and reopen
@@ -282,7 +304,8 @@ class TestTubDatasetSortingAndTransformation(unittest.TestCase):
         tub.close()
         tub = Tub(self.test_path, inputs, types, read_only=True)
 
-        stats = TubStatistics(tub, gyro_z_index=1)
+        stats = TubStatistics(tub, field_aggregations=GYRO_Z_INDEX_1,
+                              sorting_strategy=FULL_SORTING_STRATEGY)
         performance = stats.calculate_lap_performance(use_lap_0=True)
 
         session_id = list(performance.keys())[0]
@@ -318,7 +341,7 @@ class TestTubDatasetSortingAndTransformation(unittest.TestCase):
         records = self._create_oval_track_data(num_laps=2)
         tub = self._create_tub_with_data(records)
 
-        stats = TubStatistics(tub, gyro_z_index=1)
+        stats = TubStatistics(tub, field_aggregations=GYRO_Z_INDEX_1)
         stats.generate_laptimes_from_records()
 
         # Calculate aggregated fields (uses abs internally for gyro)
@@ -348,16 +371,28 @@ class TestTubDatasetSortingAndTransformation(unittest.TestCase):
         tub = self._create_tub_with_data(records)
 
         # Generate lap times first
-        stats = TubStatistics(tub, gyro_z_index=1)
+        stats = TubStatistics(tub, field_aggregations=GYRO_Z_INDEX_1)
         stats.generate_laptimes_from_records()
         tub.close()
 
         # Create TubDataset with lap_pct enabled
         config = Config()
-        config.GYRO_Z_INDEX = 1
         config.USE_LAP_0 = True
         config.COMPRESS_SESSIONS_FOR_LAP_STATS = False
         config.NUM_BINS_FOR_LAP_STATS = None
+        config.FIELD_AGGREGATIONS = [
+            {
+                'field': 'car/gyro',
+                'output_key': 'gyro_z_agg',
+                'index': 1,
+                'aggregation': 'avg'
+            }
+        ]
+        config.LAP_SORTING_CRITERIA = [
+            {'key': 'time'},
+            {'key': 'distance'},
+            {'key': 'gyro_z_agg'},
+        ]
 
         dataset = TubDataset(config, [self.test_path], add_lap_pct=True)
         records_loaded = dataset.get_records()
@@ -437,12 +472,15 @@ class TestSortingStrategy(unittest.TestCase):
     """Test suite for the new SortingStrategy classes."""
 
     def test_default_sorting_strategy(self):
-        """Test default sorting strategy (time, distance, gyro_z_agg)."""
+        """Test default sorting strategy (time, distance only).
+
+        Note: gyro_z_agg was removed from defaults because it requires
+        explicit field_aggregations configuration.
+        """
         strategy = default_lap_sorting_strategy()
-        self.assertEqual(len(strategy.criteria), 3)
+        self.assertEqual(len(strategy.criteria), 2)
         self.assertEqual(strategy.criteria[0]['key'], 'time')
         self.assertEqual(strategy.criteria[1]['key'], 'distance')
-        self.assertEqual(strategy.criteria[2]['key'], 'gyro_z_agg')
 
     def test_sorting_with_transformation(self):
         """Test sorting with transformation using plain functions."""
@@ -554,7 +592,8 @@ class TestModularTubStatistics(unittest.TestCase):
             {'key': 'distance'},
         ])
 
-        stats = TubStatistics(tub, gyro_z_index=1, sorting_strategy=custom_strategy)
+        stats = TubStatistics(tub, field_aggregations=GYRO_Z_INDEX_1,
+                           sorting_strategy=custom_strategy)
         stats.generate_laptimes_from_records()
 
         # Close and reopen
@@ -563,7 +602,8 @@ class TestModularTubStatistics(unittest.TestCase):
         tub.close()
         tub = Tub(self.test_path, inputs, types, read_only=True)
 
-        stats = TubStatistics(tub, gyro_z_index=1, sorting_strategy=custom_strategy)
+        stats = TubStatistics(tub, field_aggregations=GYRO_Z_INDEX_1,
+                           sorting_strategy=custom_strategy)
         performance = stats.calculate_lap_performance(use_lap_0=True)
 
         session_id = list(performance.keys())[0]
@@ -583,10 +623,11 @@ class TestModularTubStatistics(unittest.TestCase):
         tub = self._create_simple_tub(num_laps=2)
 
         # Use identity instead of abs for gyro aggregation
+        # New format uses 'index' instead of 'extractor'
         field_aggs = [{
             'field': 'car/gyro',
             'output_key': 'gyro_z_agg',
-            'extractor': lambda r: r['car/gyro'][1],
+            'index': 1,  # Use index instead of extractor
             'transform': lambda x: x  # identity
         }]
 
@@ -597,11 +638,11 @@ class TestModularTubStatistics(unittest.TestCase):
         session_id = tub.manifest.session_id[1]
         lap_times = tub.manifest.metadata[session_id]['laptimer']
 
-        # With identity transformation, gyro values can be negative or positive
-        # (averaging 0.5 and -0.5 should give 0.0)
+        # With identity transformation, gyro values alternate between 0.5 and -0.5
+        # The average should be approximately 0.0
         for lap_time in lap_times:
             if 'gyro_z_agg' in lap_time:
-                # Should be close to 0 with identity transform
+                # Should be close to 0 (average of 0.5 and -0.5)
                 self.assertAlmostEqual(lap_time['gyro_z_agg'], 0.0, delta=0.1)
 
         tub.close()
@@ -645,7 +686,7 @@ class TestModularTubDataset(unittest.TestCase):
         })
 
         # Generate lap times
-        stats = TubStatistics(tub, gyro_z_index=1)
+        stats = TubStatistics(tub, field_aggregations=GYRO_Z_INDEX_1)
         stats.generate_laptimes_from_records()
         tub.close()
 
@@ -656,10 +697,17 @@ class TestModularTubDataset(unittest.TestCase):
         tub_path = self._create_test_tub()
 
         config = Config()
-        config.GYRO_Z_INDEX = 1
         config.USE_LAP_0 = True
         config.COMPRESS_SESSIONS_FOR_LAP_STATS = False
         config.NUM_BINS_FOR_LAP_STATS = None
+        config.FIELD_AGGREGATIONS = [
+            {
+                'field': 'car/gyro',
+                'output_key': 'gyro_z_agg',
+                'index': 1,
+                'aggregation': 'avg'
+            }
+        ]
 
         # Use only time and distance for ranking
         custom_keys = ['time', 'distance']

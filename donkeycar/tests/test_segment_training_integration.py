@@ -18,8 +18,20 @@ import numpy as np
 
 from donkeycar.config import Config
 from donkeycar.parts.tub_v2 import Tub
-from donkeycar.parts.tub_statistics import TubStatistics
+from donkeycar.parts.tub_statistics import TubStatistics, FieldAggregationSpec
 from donkeycar.pipeline.types import TubDataset, PctMode
+
+
+# Standard field aggregation for gyro_z at index 1 (simulator convention)
+GYRO_Z_INDEX_1 = [
+    FieldAggregationSpec(
+        field='car/gyro',
+        output_key='gyro_z_agg',
+        index=1,
+        transform=abs,
+        aggregation='avg'
+    )
+]
 
 
 class TestSegmentTrainingEndToEnd(unittest.TestCase):
@@ -48,8 +60,15 @@ class TestSegmentTrainingEndToEnd(unittest.TestCase):
         cfg = Config()
         cfg.USE_LAP_0 = False
         cfg.TRAIN_TEST_SPLIT = 0.8
-        cfg.GYRO_Z_INDEX = 1
         cfg.SEGMENT_PCT_MODE = True
+        cfg.FIELD_AGGREGATIONS = [
+            {
+                'field': 'car/gyro',
+                'output_key': 'gyro_z_agg',
+                'index': 1,
+                'aggregation': 'avg'
+            }
+        ]
         return cfg
 
     def test_end_to_end_segment_training_workflow(self):
@@ -69,7 +88,7 @@ class TestSegmentTrainingEndToEnd(unittest.TestCase):
         print("Step 2: Running segment assignment")
         tub = Tub(self.tub_path, read_only=False)
         self.open_tubs.append(tub)
-        stats = TubStatistics(tub)
+        stats = TubStatistics(tub, field_aggregations=GYRO_Z_INDEX_1)
 
         # Note: compute_segment_assignments requires actual PathData
         # For this test, we're manually setting segments, so skip actual

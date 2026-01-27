@@ -10,6 +10,7 @@ This test suite covers:
 - Hundreds of parameter combinations
 """
 
+import os
 import pytest
 import numpy as np
 from collections import defaultdict
@@ -31,6 +32,15 @@ from donkeycar.course_analysis import (
 )
 from donkeycar.course_analysis.segment_assignment import SegmentAssigner
 from donkeycar.pipeline.transformations import SortingStrategy
+
+
+# Path to real tub data for integration tests
+HYPER_TUB_PATH = '/Users/dirk/cars/hyper/data'
+# Check for both the directory AND the actual catalog manifest file
+HYPER_TUB_EXISTS = (
+    os.path.exists(HYPER_TUB_PATH) and
+    os.path.exists(os.path.join(HYPER_TUB_PATH, 'catalog_0.catalog_manifest'))
+)
 
 
 def generate_circular_course(radius=1.0, num_points=100, noise=0.0):
@@ -331,9 +341,13 @@ class TestSegmentStatisticsRankings:
 class TestRealTubData:
     """Test with real tub data from /Users/dirk/cars/hyper/data."""
 
+    @pytest.mark.skipif(
+        not HYPER_TUB_EXISTS,
+        reason=f"Real tub data not found at {HYPER_TUB_PATH}"
+    )
     def test_hyper_tub_segment_invariant(self):
         """Test segment invariant on real hyper car data."""
-        tub_path = '/Users/dirk/cars/hyper/data'
+        tub_path = HYPER_TUB_PATH
 
         # Load path data
         source = TubPathDataSource(tub_path)
@@ -362,12 +376,16 @@ class TestRealTubData:
 
         assert is_valid, error_msg
 
+    @pytest.mark.skipif(
+        not HYPER_TUB_EXISTS,
+        reason=f"Real tub data not found at {HYPER_TUB_PATH}"
+    )
     def test_hyper_tub_no_duplicate_segment_rankings(self):
         """
         Test that segment statistics on hyper tub don't create duplicate
         segment instances per lap.
         """
-        tub_path = '/Users/dirk/cars/hyper/data'
+        tub_path = HYPER_TUB_PATH
 
         # Load path data
         source = TubPathDataSource(tub_path)
@@ -407,13 +425,16 @@ class TestRealTubData:
                         f"Hyper tub lap {lap_idx}, segment {seg_id}: "
                         f"expected 1 instance, got {count}")
 
+    @pytest.mark.skipif(
+        not HYPER_TUB_EXISTS,
+        reason=f"Real tub data not found at {HYPER_TUB_PATH}"
+    )
     def test_hyper_tub_segment_statistics_consistency(self):
         """
         Test that TubStatistics produces consistent segment rankings
         (9 laps, each segment appears exactly 9 times).
         """
-        tub_path = '/Users/dirk/cars/hyper/data'
-        tub = Tub(tub_path, read_only=True)
+        tub = Tub(HYPER_TUB_PATH, read_only=True)
 
         try:
             # Create field aggregation spec

@@ -8,7 +8,38 @@ import time
 import numpy as np
 
 from donkeycar.parts.tub_v2 import Tub
-from donkeycar.parts.tub_statistics import TubStatistics
+from donkeycar.parts.tub_statistics import TubStatistics, FieldAggregationSpec
+from donkeycar.pipeline.transformations import SortingStrategy
+
+
+# Standard field aggregation for gyro_z at index 1 (simulator convention)
+GYRO_Z_INDEX_1 = [
+    FieldAggregationSpec(
+        field='car/gyro',
+        output_key='gyro_z_agg',
+        index=1,
+        transform=abs,
+        aggregation='avg'
+    )
+]
+
+# Standard field aggregation for gyro_z at index 2 (real car convention)
+GYRO_Z_INDEX_2 = [
+    FieldAggregationSpec(
+        field='car/gyro',
+        output_key='gyro_z_agg',
+        index=2,
+        transform=abs,
+        aggregation='avg'
+    )
+]
+
+# Sorting strategy that includes time, distance, and gyro_z_agg
+FULL_SORTING_STRATEGY = SortingStrategy([
+    {'key': 'time'},
+    {'key': 'distance'},
+    {'key': 'gyro_z_agg'},
+])
 
 
 class TestTubStatistics(unittest.TestCase):
@@ -131,7 +162,7 @@ class TestTubStatistics(unittest.TestCase):
         tub = self._create_tub_with_data(records)
         
         # Generate lap times
-        stats = TubStatistics(tub, gyro_z_index=1)
+        stats = TubStatistics(tub, field_aggregations=GYRO_Z_INDEX_1)
         stats.generate_laptimes_from_records()
         
         # Get the actual session ID that was written (tub assigns its own)
@@ -204,7 +235,7 @@ class TestTubStatistics(unittest.TestCase):
             })
         
         # Generate lap times
-        stats = TubStatistics(tub, gyro_z_index=1)
+        stats = TubStatistics(tub, field_aggregations=GYRO_Z_INDEX_1)
         stats.generate_laptimes_from_records()
         
         # Verify both sessions have lap times
@@ -232,7 +263,7 @@ class TestTubStatistics(unittest.TestCase):
         records = self._create_oval_track_data(num_laps=2)
         tub = self._create_tub_with_data(records)
         
-        stats = TubStatistics(tub, gyro_z_index=1)
+        stats = TubStatistics(tub, field_aggregations=GYRO_Z_INDEX_1)
         
         # Generate lap times first time
         stats.generate_laptimes_from_records()
@@ -274,7 +305,7 @@ class TestTubStatistics(unittest.TestCase):
         records = self._create_oval_track_data(num_laps=2)
         tub = self._create_tub_with_data(records)
         
-        stats = TubStatistics(tub, gyro_z_index=1)
+        stats = TubStatistics(tub, field_aggregations=GYRO_Z_INDEX_1)
         
         # First generate lap times
         stats.generate_laptimes_from_records()
@@ -336,20 +367,25 @@ class TestTubStatistics(unittest.TestCase):
         # Close and reopen to ensure session info is updated
         tub.close()
         tub = Tub(self.test_path, inputs, types, read_only=True)
-        
-        stats = TubStatistics(tub, gyro_z_index=1)
-        
+
+        # Use explicit sorting strategy that includes gyro_z_agg
+        stats = TubStatistics(
+            tub,
+            field_aggregations=GYRO_Z_INDEX_1,
+            sorting_strategy=FULL_SORTING_STRATEGY
+        )
+
         # Generate lap times and calculate performance
         stats.generate_laptimes_from_records()
         performance = stats.calculate_lap_performance(use_lap_0=True)
-        
+
         # Check that performance rankings were created
         self.assertIn(session_id, performance)
         session_perf = performance[session_id]
-        
+
         # Should have rankings for laps 0-4
         self.assertEqual(len(session_perf), 5)
-        
+
         # Check that each lap has time, distance, and gyro_z_agg rankings
         for lap_num in range(5):
             self.assertIn(lap_num, session_perf)
@@ -357,11 +393,11 @@ class TestTubStatistics(unittest.TestCase):
             self.assertIn('time', lap_perf)
             self.assertIn('distance', lap_perf)
             self.assertIn('gyro_z_agg', lap_perf)
-            
+
             # Rankings should be between 0 and 1
             self.assertGreaterEqual(lap_perf['time'], 0)
             self.assertLessEqual(lap_perf['time'], 1.0)
-        
+
         tub.close()
     
     def test_calculate_lap_performance_with_bins(self):
@@ -383,7 +419,7 @@ class TestTubStatistics(unittest.TestCase):
         tub.close()
         tub = Tub(self.test_path, inputs, types, read_only=True)
         
-        stats = TubStatistics(tub, gyro_z_index=1)
+        stats = TubStatistics(tub, field_aggregations=GYRO_Z_INDEX_1)
         stats.generate_laptimes_from_records()
         
         # Calculate performance with 5 bins
@@ -422,7 +458,7 @@ class TestTubStatistics(unittest.TestCase):
         tub.close()
         tub = Tub(self.test_path, inputs, types, read_only=True)
         
-        stats = TubStatistics(tub, gyro_z_index=1)
+        stats = TubStatistics(tub, field_aggregations=GYRO_Z_INDEX_1)
         stats.generate_laptimes_from_records()
         
         # Calculate performance skipping lap 0
@@ -489,7 +525,7 @@ class TestTubStatistics(unittest.TestCase):
         tub.close()
         tub = Tub(self.test_path, inputs, types, read_only=True)
         
-        stats = TubStatistics(tub, gyro_z_index=1)
+        stats = TubStatistics(tub, field_aggregations=GYRO_Z_INDEX_1)
         stats.generate_laptimes_from_records()
         
         # Calculate compressed performance
@@ -516,7 +552,7 @@ class TestTubStatistics(unittest.TestCase):
         records = self._create_oval_track_data(num_laps=3)
         tub = self._create_tub_with_data(records)
         
-        stats = TubStatistics(tub, gyro_z_index=1)
+        stats = TubStatistics(tub, field_aggregations=GYRO_Z_INDEX_1)
         stats.generate_laptimes_from_records()
         
         # Get all lap times
@@ -537,21 +573,21 @@ class TestTubStatistics(unittest.TestCase):
         
         tub.close()
     
-    def test_gyro_z_index_configuration(self):
+    def test_field_aggregation_index_configuration(self):
         """
-        Test that gyro_z_index parameter is respected.
-        
+        Test that field_aggregations index parameter is respected.
+
         Validates that:
-        - gyro_z_index=1 uses the second element of gyro vector (sim)
-        - gyro_z_index=2 would use the third element (real car)
+        - index=1 uses the second element of gyro vector (sim)
+        - index=2 uses the third element (real car)
         """
         # Create records with distinct gyro values at different indices
         inputs = ['car/lap', 'car/distance', 'car/gyro']
         types = ['int', 'float', 'vector']
-        
+
         start_time_ms = int(time.time() * 1000)
-        
-        # Test with gyro_z_index=1 (middle element)
+
+        # Test with index=1 (middle element)
         tub1 = Tub(self.test_path, inputs, types)
         for lap in range(2):
             for i in range(10):
@@ -561,7 +597,7 @@ class TestTubStatistics(unittest.TestCase):
                     'car/gyro': [0.1, 0.5, 0.9],  # Different values at each index
                     '_timestamp_ms': start_time_ms + lap * 1000 + i * 100,
                 })
-        
+
         # Add final record
         tub1.write_record({
             'car/lap': 2,
@@ -569,23 +605,23 @@ class TestTubStatistics(unittest.TestCase):
             'car/gyro': [0.1, 0.5, 0.9],
             '_timestamp_ms': start_time_ms + 2000,
         })
-        
+
         session_id1 = tub1.manifest.session_id[1]
-        stats1 = TubStatistics(tub1, gyro_z_index=1)
+        stats1 = TubStatistics(tub1, field_aggregations=GYRO_Z_INDEX_1)
         stats1.generate_laptimes_from_records()
         stats1._calculate_aggregated_fields()
-        
+
         lap_times1 = tub1.manifest.metadata[session_id1]['laptimer']
         # Should use 0.5 as the gyro value
         self.assertAlmostEqual(lap_times1[0]['gyro_z_agg'], 0.5, delta=0.01)
-        
+
         tub1.close()
-        
+
         # Clean up and create new tub for second test
         shutil.rmtree(self.test_path)
         self.test_path = tempfile.mkdtemp()
-        
-        # Test with gyro_z_index=2 (last element)
+
+        # Test with index=2 (last element)
         tub2 = Tub(self.test_path, inputs, types)
         for lap in range(2):
             for i in range(10):
@@ -595,7 +631,7 @@ class TestTubStatistics(unittest.TestCase):
                     'car/gyro': [0.1, 0.5, 0.9],
                     '_timestamp_ms': start_time_ms + lap * 1000 + i * 100,
                 })
-        
+
         # Add final record
         tub2.write_record({
             'car/lap': 2,
@@ -603,16 +639,16 @@ class TestTubStatistics(unittest.TestCase):
             'car/gyro': [0.1, 0.5, 0.9],
             '_timestamp_ms': start_time_ms + 2000,
         })
-        
+
         session_id2 = tub2.manifest.session_id[1]
-        stats2 = TubStatistics(tub2, gyro_z_index=2)
+        stats2 = TubStatistics(tub2, field_aggregations=GYRO_Z_INDEX_2)
         stats2.generate_laptimes_from_records()
         stats2._calculate_aggregated_fields()
-        
+
         lap_times2 = tub2.manifest.metadata[session_id2]['laptimer']
         # Should use 0.9 as the gyro value
         self.assertAlmostEqual(lap_times2[0]['gyro_z_agg'], 0.9, delta=0.01)
-        
+
         tub2.close()
     
     def test_empty_tub(self):
@@ -627,7 +663,7 @@ class TestTubStatistics(unittest.TestCase):
         types = ['int', 'float', 'vector']
         tub = Tub(self.test_path, inputs, types)
         
-        stats = TubStatistics(tub, gyro_z_index=1)
+        stats = TubStatistics(tub, field_aggregations=GYRO_Z_INDEX_1)
         
         # Should not raise an error
         try:
@@ -649,7 +685,7 @@ class TestTubStatistics(unittest.TestCase):
         records = self._create_oval_track_data(num_laps=1)
         tub = self._create_tub_with_data(records)
         
-        stats = TubStatistics(tub, gyro_z_index=1)
+        stats = TubStatistics(tub, field_aggregations=GYRO_Z_INDEX_1)
         stats.generate_laptimes_from_records()
         
         session_id = tub.manifest.session_id[1]  # Get actual session ID

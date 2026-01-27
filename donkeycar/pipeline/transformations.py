@@ -109,12 +109,15 @@ class SortingStrategy:
 
 def default_lap_sorting_strategy() -> SortingStrategy:
     """
-    Create default lap sorting strategy (backward compatible).
+    Create default lap sorting strategy.
 
-    Sorts by: time, distance, gyro_z_agg (all ascending).
+    Sorts by: time and distance (all ascending).
+    Only includes fields that are always computed from lap timing.
+
+    Note: For custom field rankings (e.g., gyro_z_agg), configure
+    LAP_SORTING_CRITERIA in your config file.
     """
     return SortingStrategy([
         {'key': 'time'},
         {'key': 'distance'},
-        {'key': 'gyro_z_agg'},
     ])
