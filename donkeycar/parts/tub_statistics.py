@@ -187,7 +187,6 @@ class TubStatistics(object):
     def __init__(self,
                  tub: Tub,
                  config: Optional[Any] = None,
-                 gyro_z_index: int = 1,
                  sorting_strategy: Optional[SortingStrategy] = None,
                  field_aggregations: Optional[List] = None):
         """
@@ -195,38 +194,28 @@ class TubStatistics(object):
 
         :param tub:                 input tub
         :param config:              Config object (loads FIELD_AGGREGATIONS,
-                                    LAP_SORTING_CRITERIA)
-        :param gyro_z_index:        z coordinate in 3d gyro vector (deprecated,
-                                    use config)
+                                    LAP_SORTING_CRITERIA). Required if
+                                    field_aggregations not provided.
         :param sorting_strategy:    Optional custom sorting strategy
-                                    (backward compat)
         :param field_aggregations:  Optional list of FieldAggregationSpec or
-                                    old-style dicts (backward compat)
+                                    dicts. Required if config not provided.
+        :raises ValueError:         If neither config nor field_aggregations
+                                    provided.
         """
         self.tub = tub
 
-        # Load field aggregations with precedence:
-        # 1. Direct parameter (backward compat)
-        # 2. From config (new preferred method)
-        # 3. Default fallback
+        # Load field aggregations - require explicit configuration
         if field_aggregations is not None:
-            # Handle both old-style dicts and new FieldAggregationSpec
             self.field_aggregations = self._normalize_field_aggregations(
-                field_aggregations, gyro_z_index)
+                field_aggregations)
         elif config:
             self.field_aggregations = (
                 self._load_field_aggregations_from_config(config))
         else:
-            # Backward compatible defaults
-            self.field_aggregations = [
-                FieldAggregationSpec(
-                    field='car/gyro',
-                    output_key='gyro_z_agg',
-                    index=gyro_z_index,
-                    transform=abs,
-                    aggregation='avg'
-                )
-            ]
+            raise ValueError(
+                'TubStatistics requires either config or field_aggregations. '
+                'No silent defaults are used - configure FIELD_AGGREGATIONS '
+                'in config or pass field_aggregations directly.')
 
         # Load sorting strategy
         if sorting_strategy:
@@ -240,58 +229,45 @@ class TubStatistics(object):
         logger.info(f'Creating TubStatistics with '
                     f'{len(self.field_aggregations)} field aggregations')
 
-    def _normalize_field_aggregations(self, field_aggregations: List,
-                                     gyro_z_index: int) -> List[
+    def _normalize_field_aggregations(self, field_aggregations: List) -> List[
                                          FieldAggregationSpec]:
-        """Convert old-style dict specs to FieldAggregationSpec."""
+        """Convert dict specs to FieldAggregationSpec.
+
+        :raises ValueError: If old-style extractor syntax is used.
+        """
         normalized = []
         for spec in field_aggregations:
             if isinstance(spec, FieldAggregationSpec):
                 normalized.append(spec)
             elif isinstance(spec, dict):
-                # Old style dict with 'extractor' and 'transform'
                 if 'extractor' in spec:
-                    # Cannot convert old-style extractor lambdas,
-                    # use gyro_z_index default
-                    logger.warning('Old-style field_aggregations dict with '
-                                 'extractor not supported. Using defaults.')
-                    normalized.append(FieldAggregationSpec(
-                        field=spec['field'],
-                        output_key=spec['output_key'],
-                        index=gyro_z_index,
-                        transform=spec.get('transform'),
-                        aggregation='avg'
-                    ))
-                else:
-                    # New style dict
-                    normalized.append(FieldAggregationSpec(
-                        field=spec['field'],
-                        output_key=spec['output_key'],
-                        index=spec.get('index'),
-                        transform=spec.get('transform'),
-                        aggregation=spec.get('aggregation', 'avg')
-                    ))
+                    raise ValueError(
+                        f'Old-style field_aggregations with "extractor" '
+                        f'not supported for field {spec.get("field", "?")}. '
+                        f'Use "index" parameter instead.')
+                normalized.append(FieldAggregationSpec(
+                    field=spec['field'],
+                    output_key=spec['output_key'],
+                    index=spec.get('index'),
+                    transform=spec.get('transform'),
+                    aggregation=spec.get('aggregation', 'avg')
+                ))
         return normalized
 
     def _load_field_aggregations_from_config(self, config) -> List[
         FieldAggregationSpec]:
-        """Load field aggregation specs from config."""
+        """Load field aggregation specs from config.
+
+        :raises ValueError: If FIELD_AGGREGATIONS not found in config.
+        """
         config_specs = getattr(config, 'FIELD_AGGREGATIONS', None)
 
         if not config_specs:
-            # Fallback to legacy GYRO_Z_INDEX
-            gyro_z_index = getattr(config, 'GYRO_Z_INDEX', 1)
-            logger.info(f'No FIELD_AGGREGATIONS in config, using '
-                       f'default gyro aggregation with index {gyro_z_index}')
-            return [
-                FieldAggregationSpec(
-                    field='car/gyro',
-                    output_key='gyro_z_agg',
-                    index=gyro_z_index,
-                    transform=abs,
-                    aggregation='avg'
-                )
-            ]
+            raise ValueError(
+                'FIELD_AGGREGATIONS not found in config. '
+                'Please define FIELD_AGGREGATIONS in your config file. '
+                'Example: FIELD_AGGREGATIONS = [{"field": "car/gyro", '
+                '"output_key": "gyro_z_agg", "index": 1, "aggregation": "avg"}]')
 
         # Convert config dicts to FieldAggregationSpec
         specs = []
@@ -317,7 +293,9 @@ class TubStatistics(object):
                        f'{[c["key"] for c in criteria]}')
             return SortingStrategy(criteria)
         else:
-            logger.info('No LAP_SORTING_CRITERIA in config, using defaults')
+            logger.info('No LAP_SORTING_CRITERIA in config, using minimal '
+                       'defaults (time, distance). Configure LAP_SORTING_CRITERIA '
+                       'in config to include custom fields like gyro_z_agg.')
             return default_lap_sorting_strategy()
 
     def generate_laptimes_from_records(self, overwrite=False):

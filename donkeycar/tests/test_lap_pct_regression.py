@@ -16,8 +16,20 @@ import numpy as np
 
 from donkeycar.config import Config
 from donkeycar.parts.tub_v2 import Tub
-from donkeycar.parts.tub_statistics import TubStatistics
+from donkeycar.parts.tub_statistics import TubStatistics, FieldAggregationSpec
 from donkeycar.pipeline.types import TubDataset, PctMode
+
+
+# Standard field aggregation for gyro_z at index 1 (simulator convention)
+GYRO_Z_INDEX_1 = [
+    FieldAggregationSpec(
+        field='car/gyro',
+        output_key='gyro_z_agg',
+        index=1,
+        transform=abs,
+        aggregation='avg'
+    )
+]
 
 
 class TestLapPerformanceRegression(unittest.TestCase):
@@ -115,7 +127,7 @@ class TestLapPerformanceRegression(unittest.TestCase):
 
         tub = Tub(self.tub_path, read_only=True)
         self.open_tubs.append(tub)
-        stats = TubStatistics(tub)
+        stats = TubStatistics(tub, field_aggregations=GYRO_Z_INDEX_1)
 
         # Calculate lap performance (original method)
         session_lap_rank = stats.calculate_lap_performance()
