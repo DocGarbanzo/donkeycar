@@ -60,8 +60,15 @@ class TestSegmentTrainingEndToEnd(unittest.TestCase):
         cfg = Config()
         cfg.USE_LAP_0 = False
         cfg.TRAIN_TEST_SPLIT = 0.8
-        cfg.GYRO_Z_INDEX = 1
         cfg.SEGMENT_PCT_MODE = True
+        cfg.FIELD_AGGREGATIONS = [
+            {
+                'field': 'car/gyro',
+                'output_key': 'gyro_z_agg',
+                'index': 1,
+                'aggregation': 'avg'
+            }
+        ]
         return cfg
 
     def test_end_to_end_segment_training_workflow(self):

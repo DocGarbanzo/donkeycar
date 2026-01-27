@@ -59,7 +59,19 @@ class TestSegmentationTrainingIntegration(unittest.TestCase):
         cfg = Config()
         cfg.USE_LAP_0 = False
         cfg.TRAIN_TEST_SPLIT = 0.8
-        cfg.GYRO_Z_INDEX = 1
+        cfg.FIELD_AGGREGATIONS = [
+            {
+                'field': 'car/gyro',
+                'output_key': 'gyro_z_agg',
+                'index': 1,
+                'aggregation': 'avg'
+            }
+        ]
+        cfg.LAP_SORTING_CRITERIA = [
+            {'key': 'time'},
+            {'key': 'distance'},
+            {'key': 'gyro_z_agg'},
+        ]
         return cfg
 
     def _create_test_tub(self):
