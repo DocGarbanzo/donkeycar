@@ -18,24 +18,25 @@ from donkeycar.parts.web_controller.web import IMUPathRestartAPI
 
 def test_imupath_data_builder_csv():
     """Test IMUPathDataBuilder with CSV data."""
-    # Create a simple CSV file
-    csv_data = """t,x,y,h,v
-0.0,0.0,0.0,0.0,0.5
-0.1,0.1,0.0,0.0,0.5
-0.2,0.2,0.1,0.1,0.6
-0.3,0.3,0.2,0.2,0.6
-0.4,0.4,0.3,0.3,0.7
-0.5,0.4,0.4,0.5,0.7
-0.6,0.3,0.5,0.7,0.6
-0.7,0.2,0.6,0.9,0.6
-0.8,0.1,0.6,1.2,0.5
-0.9,0.0,0.5,1.5,0.5
-1.0,0.0,0.4,1.57,0.5
-1.1,0.0,0.3,1.57,0.5
-1.2,0.0,0.2,1.57,0.5
-1.3,0.0,0.1,1.57,0.5
-"""
-    
+    # Create a circular path that forms a complete lap
+    # Generate enough points (>50) to meet min_lap_length requirement
+    import numpy as np
+    num_points = 60
+    radius = 0.5
+    theta = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
+    x_vals = -radius + radius * np.cos(theta)
+    y_vals = radius * np.sin(theta)
+    dx = np.gradient(x_vals)
+    dy = np.gradient(y_vals)
+    heading = np.arctan2(dy, dx)
+
+    csv_lines = ["t,x,y,h,v"]
+    for i in range(num_points):
+        t = i * 0.1
+        csv_lines.append(
+            f"{t:.1f},{x_vals[i]:.4f},{y_vals[i]:.4f},{heading[i]:.4f},0.5")
+    csv_data = "\n".join(csv_lines)
+
     with tempfile.NamedTemporaryFile(
         mode='w', suffix='.csv', delete=False) as f:
         f.write(csv_data)
@@ -71,15 +72,24 @@ def test_imupath_data_builder_csv():
 
 def test_imupath_json_payload():
     """Test JSON payload generation."""
-    # Create a simple CSV file
-    csv_data = """t,x,y,h,v
-0.0,0.0,0.0,0.0,0.5
-0.1,0.1,0.0,0.0,0.5
-0.2,0.2,0.1,0.1,0.6
-0.3,0.3,0.2,0.2,0.6
-0.4,0.4,0.3,0.3,0.7
-"""
-    
+    # Create a circular path that forms a complete lap
+    import numpy as np
+    num_points = 60
+    radius = 0.5
+    theta = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
+    x_vals = -radius + radius * np.cos(theta)
+    y_vals = radius * np.sin(theta)
+    dx = np.gradient(x_vals)
+    dy = np.gradient(y_vals)
+    heading = np.arctan2(dy, dx)
+
+    csv_lines = ["t,x,y,h,v"]
+    for i in range(num_points):
+        t = i * 0.1
+        csv_lines.append(
+            f"{t:.1f},{x_vals[i]:.4f},{y_vals[i]:.4f},{heading[i]:.4f},0.5")
+    csv_data = "\n".join(csv_lines)
+
     with tempfile.NamedTemporaryFile(
         mode='w', suffix='.csv', delete=False) as f:
         f.write(csv_data)
@@ -128,7 +138,7 @@ def test_imupath_json_payload():
         metadata = data['metadata']
         assert metadata['lap_method'] == 'y_crossing'
         assert metadata['segment_method'] == 'gradient'
-        assert metadata['total_points'] == 5
+        assert metadata['total_points'] == 60  # Updated from 5
         assert metadata['is_tub_data'] is False
         
         # Verify JSON serializable
@@ -146,16 +156,22 @@ def test_imupath_json_payload():
 
 def test_imupath_downsampling():
     """Test downsampling functionality."""
-    # Create data with many points
+    # Create circular path with many points
+    import numpy as np
     csv_lines = ["t,x,y,h,v"]
-    for i in range(200):
+    num_points = 200
+    radius = 1.0
+    theta = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
+    x = -radius + radius * np.cos(theta)
+    y = radius * np.sin(theta)
+    dx = np.gradient(x)
+    dy = np.gradient(y)
+    heading = np.arctan2(dy, dx)
+
+    for i in range(num_points):
         t = i * 0.01
-        x = i * 0.01
-        y = 0.0
-        h = 0.0
-        v = 0.5
-        csv_lines.append(f"{t},{x},{y},{h},{v}")
-    
+        csv_lines.append(f"{t:.2f},{x[i]:.4f},{y[i]:.4f},{heading[i]:.4f},0.5")
+
     csv_data = "\n".join(csv_lines)
     
     with tempfile.NamedTemporaryFile(
@@ -369,23 +385,36 @@ def test_imupath_stats_use_visual_laps_when_constant():
     )
 
     try:
+        # Generate 2 laps of circular path data with perturbations
+        # This creates varying curvature for segmentation
+        import numpy as np
+        num_laps = 2
+        points_per_lap = 100
+        radius = 0.5
+        perturbation_amplitude = 0.1
+        perturbation_frequency = 4
+        total_points = num_laps * points_per_lap
+
+        theta = np.linspace(0, num_laps * 2 * np.pi, total_points,
+                           endpoint=False)
+        # Add smooth perturbations to create varying curvature
+        radial_perturbation = (
+            perturbation_amplitude * np.sin(perturbation_frequency * theta) +
+            perturbation_amplitude * 0.3 * np.sin(
+                perturbation_frequency * theta * 1.7 + 1.2)
+        )
+        x_vals = (-radius + (radius + radial_perturbation) * np.cos(theta))
+        y_vals = (radius + radial_perturbation) * np.sin(theta)
+
         timestamp_ms = 0
         distance = 0.0
-        for i in range(200):
-            if i < 50:
-                y_pos = -1.0
-            elif i < 100:
-                y_pos = 1.0
-            elif i < 150:
-                y_pos = -1.0
-            else:
-                y_pos = 1.0
+        for i in range(total_points):
             record = {
-                'car/pos': [float(i) * 0.1, y_pos, 0.0],
+                'car/pos': [float(x_vals[i]), float(y_vals[i]), 0.0],
                 'car/euler': [0.0, 0.0, 0.0],
                 'car/speed': 1.0 + i * 0.01,
-                'car/lap': 0,
-                'car/segment': 0,
+                'car/lap': 0,  # Constant - should trigger visual lap fallback
+                'car/segment': 0,  # Constant
                 'car/distance': distance,
                 'car/gyro': [0.0, 0.1 + i * 0.001, 0.0],
                 '_timestamp_ms': timestamp_ms,

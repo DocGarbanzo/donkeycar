@@ -25,13 +25,20 @@ from donkeycar.web.imupath_data import IMUPathDataBuilder
 
 def generate_course_with_noise(num_laps, points_per_lap, radius=1.0,
                                position_noise=0.0, heading_noise=0.0):
-    """Generate multi-lap course with configurable noise."""
+    """
+    Generate multi-lap course with configurable noise.
+
+    Starts at (0, 0) moving in +Y direction.
+    """
     total_points = num_laps * points_per_lap
+    # Circle centered at (-radius, 0), starting at θ=0 for (0, 0) start
     theta = np.linspace(0, num_laps * 2 * np.pi, total_points, endpoint=False)
 
     # Add position noise
-    x = radius * np.cos(theta) + np.random.normal(0, position_noise, total_points)
-    y = radius * np.sin(theta) + np.random.normal(0, position_noise, total_points)
+    x = (-radius + radius * np.cos(theta) +
+         np.random.normal(0, position_noise, total_points))
+    y = (radius * np.sin(theta) +
+         np.random.normal(0, position_noise, total_points))
 
     # Add heading noise
     heading = theta + np.pi / 2 + np.random.normal(0, heading_noise, total_points)

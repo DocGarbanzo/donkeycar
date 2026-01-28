@@ -132,13 +132,7 @@ def create_oval_course(length=20.0, width=10.0, num_points=400):
             y[i] = turn_radius * (1 + np.cos(angle))
             heading[i] = np.pi + angle
 
-    # Normalize to make it circular and consistent
-    radius = np.max(np.sqrt(x**2 + y**2))
-    angles = np.arctan2(y, x)
-    x = radius * np.cos(angles)
-    y = radius * np.sin(angles)
-
-    # Recompute heading
+    # Verify heading is correct using actual path derivatives
     dx = np.gradient(x)
     dy = np.gradient(y)
     heading = np.arctan2(dy, dx)

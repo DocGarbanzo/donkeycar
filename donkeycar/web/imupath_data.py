@@ -241,9 +241,9 @@ class IMUPathDataBuilder:
                 lap_resolver = None
                 segment_resolver = None
                 if self._should_use_visual_laps(num_bins):
-                    num_bins = self._count_segment_cycle_laps(use_lap_0)
-                    lap_resolver = self._build_segment_cycle_lap_resolver(
-                        use_lap_0)
+                    # Use Y-crossing lap detection when car/lap is constant
+                    num_bins = self._count_visual_laps(use_lap_0)
+                    lap_resolver = self._build_visual_lap_resolver(use_lap_0)
                 if self._should_use_visual_segments(
                     tub, session_id):
                     segment_resolver = (

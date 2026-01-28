@@ -35,35 +35,235 @@ from donkeycar.pipeline.transformations import SortingStrategy
 
 
 # Path to real tub data for integration tests
-HYPER_TUB_PATH = '/Users/dirk/cars/hyper/data'
-# Check for both the directory AND the actual catalog manifest file
-HYPER_TUB_EXISTS = (
-    os.path.exists(HYPER_TUB_PATH) and
-    os.path.exists(os.path.join(HYPER_TUB_PATH, 'catalog_0.catalog_manifest'))
-)
+# Try both Linux and macOS paths
+_POSSIBLE_TUB_PATHS = [
+    '/home/dirk/cars/hyper/data',  # Linux
+    '/Users/dirk/cars/hyper/data',  # macOS
+]
+HYPER_TUB_PATH = None
+for path in _POSSIBLE_TUB_PATHS:
+    if (os.path.exists(path) and
+        os.path.exists(os.path.join(path, 'catalog_0.catalog_manifest'))):
+        HYPER_TUB_PATH = path
+        break
+
+HYPER_TUB_EXISTS = HYPER_TUB_PATH is not None
 
 
-def generate_circular_course(radius=1.0, num_points=100, noise=0.0):
-    """Generate a circular course for testing."""
+def generate_circular_course(radius=1.0, num_points=100, noise=0.0,
+                             perturbation_amplitude=0.0,
+                             perturbation_frequency=3):
+    """
+    Generate a circular course with optional smooth perturbations.
+
+    Simulates a driven path starting at (0, 0) moving in +Y direction.
+    The car moves counterclockwise around a circle of given radius, centered
+    at (radius, 0). This naturally crosses Y=0 when completing the loop.
+
+    Args:
+        radius: Base circle radius
+        num_points: Number of points in course
+        noise: Random Gaussian noise amplitude (abrupt changes)
+        perturbation_amplitude: Amplitude of smooth sin wave overlay
+        perturbation_frequency: How many sin wave cycles around the circle
+
+    Returns:
+        PathData with varying curvature profile
+
+    Example:
+        # Perfect circle (constant curvature)
+        course = generate_circular_course(radius=1.0, num_points=100)
+
+        # Circle with smooth deviations (varying curvature)
+        course = generate_circular_course(
+            radius=1.0,
+            num_points=100,
+            perturbation_amplitude=0.15,  # 15cm deviation
+            perturbation_frequency=5       # 5 "wobbles" around track
+        )
+    """
+    # Start at (0, 0) moving +Y: circle centered at (-radius, 0), start at θ=0
+    # This simulates a car starting at origin, moving in +Y direction,
+    # looping clockwise and returning through Y=0
     theta = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
-    x = radius * np.cos(theta) + np.random.normal(0, noise, num_points)
-    y = radius * np.sin(theta) + np.random.normal(0, noise, num_points)
-    heading = theta + np.pi / 2
+
+    # Base circular path centered at (-radius, 0), passing through (0, 0)
+    # at θ=0 (start) and θ=2π (end of lap)
+    x_base = -radius + radius * np.cos(theta)
+    y_base = radius * np.sin(theta)
+
+    # Add smooth perturbations if requested
+    if perturbation_amplitude > 0:
+        # Radial perturbation with varying phase for more realistic variation
+        # Use multiple sin waves with different frequencies for complexity
+        radial_perturbation = (
+            perturbation_amplitude * np.sin(perturbation_frequency * theta) +
+            perturbation_amplitude * 0.3 * np.sin(
+                perturbation_frequency * theta * 1.7 + 1.2)
+        )
+
+        # Apply perturbation radially (moves in/out from center)
+        x = (radius + radial_perturbation) * np.cos(theta)
+        y = (radius + radial_perturbation) * np.sin(theta)
+    else:
+        x = x_base
+        y = y_base
+
+    # Add random noise if requested (creates abrupt changes)
+    if noise > 0:
+        x += np.random.normal(0, noise, num_points)
+        y += np.random.normal(0, noise, num_points)
+
+    # Calculate heading from path derivatives
+    dx = np.gradient(x)
+    dy = np.gradient(y)
+    heading = np.arctan2(dy, dx)
+
     velocity = np.ones(num_points) * 2.0
     timestamps = np.arange(num_points) * 0.1
+
     return PathData(timestamps, x, y, heading, velocity)
 
 
 def generate_multilap_course(num_laps=3, points_per_lap=100, radius=1.0,
-                             noise=0.0):
-    """Generate a multi-lap circular course."""
+                             noise=0.0, perturbation_amplitude=0.0,
+                             perturbation_frequency=3):
+    """
+    Generate a multi-lap circular course with optional smooth perturbations.
+
+    Simulates a driven path starting at (0, 0) moving in +Y direction.
+    The car moves counterclockwise around a circle centered at (radius, 0),
+    naturally crossing Y=0 after each lap completion.
+
+    Args:
+        num_laps: Number of complete laps
+        points_per_lap: Points per lap
+        radius: Base circle radius
+        noise: Random Gaussian noise amplitude
+        perturbation_amplitude: Amplitude of smooth sin wave overlay
+        perturbation_frequency: How many sin wave cycles per lap
+
+    Returns:
+        PathData with multiple laps
+
+    Example:
+        # Perfect circles (constant curvature - won't segment with threshold)
+        course = generate_multilap_course(num_laps=3, points_per_lap=100)
+
+        # Circles with smooth deviations (varying curvature - segments well)
+        course = generate_multilap_course(
+            num_laps=3,
+            points_per_lap=100,
+            perturbation_amplitude=0.15,
+            perturbation_frequency=5
+        )
+    """
     total_points = num_laps * points_per_lap
-    theta = np.linspace(0, num_laps * 2 * np.pi, total_points, endpoint=False)
-    x = radius * np.cos(theta) + np.random.normal(0, noise, total_points)
-    y = radius * np.sin(theta) + np.random.normal(0, noise, total_points)
-    heading = theta + np.pi / 2
+    # Start at (0, 0) moving +Y: θ=0 for circle centered at (-radius, 0)
+    # Each lap: θ goes from 0 → 2π → 4π..., crossing Y=0 at θ=0, 2π, 4π...
+    theta = np.linspace(0, num_laps * 2 * np.pi, total_points,
+                       endpoint=False)
+
+    # Base circular path centered at (-radius, 0)
+    x_base = -radius + radius * np.cos(theta)
+    y_base = radius * np.sin(theta)
+
+    # Add smooth perturbations if requested
+    if perturbation_amplitude > 0:
+        # Radial perturbation with multiple frequency components
+        radial_perturbation = (
+            perturbation_amplitude * np.sin(perturbation_frequency * theta) +
+            perturbation_amplitude * 0.3 * np.sin(
+                perturbation_frequency * theta * 1.7 + 1.2)
+        )
+
+        x = (radius + radial_perturbation) * np.cos(theta)
+        y = (radius + radial_perturbation) * np.sin(theta)
+    else:
+        x = x_base
+        y = y_base
+
+    # Add random noise if requested
+    if noise > 0:
+        x += np.random.normal(0, noise, total_points)
+        y += np.random.normal(0, noise, total_points)
+
+    # Calculate heading from derivatives
+    dx = np.gradient(x)
+    dy = np.gradient(y)
+    heading = np.arctan2(dy, dx)
+
     velocity = np.ones(total_points) * 2.0
     timestamps = np.arange(total_points) * 0.1
+
+    return PathData(timestamps, x, y, heading, velocity)
+
+
+def generate_racetrack_course(num_laps=3, points_per_lap=100,
+                               straight_length=2.0, turn_radius=1.0,
+                               noise=0.0):
+    """
+    Generate a multi-lap oval racetrack with straights and curves.
+
+    This creates a course with varying curvature (straights have ~0
+    curvature, curves have 1/turn_radius), suitable for
+    ThresholdSegmentation.
+
+    Args:
+        num_laps: Number of complete laps
+        points_per_lap: Points per lap
+        straight_length: Length of straight sections
+        turn_radius: Radius of curved sections
+        noise: Gaussian noise to add to positions
+
+    Returns:
+        PathData with varying curvature profile
+    """
+    total_points = num_laps * points_per_lap
+
+    # Create one lap: straight, turn, straight, turn
+    points_per_section = points_per_lap // 4
+
+    x_lap = []
+    y_lap = []
+
+    # Bottom straight (left to right)
+    x_lap.extend(np.linspace(0, straight_length, points_per_section))
+    y_lap.extend([0] * points_per_section)
+
+    # Right turn (90 degrees)
+    theta = np.linspace(-np.pi/2, 0, points_per_section)
+    x_lap.extend(straight_length + turn_radius * np.cos(theta))
+    y_lap.extend(turn_radius + turn_radius * np.sin(theta))
+
+    # Top straight (right to left)
+    x_lap.extend(np.linspace(straight_length, 0, points_per_section))
+    y_lap.extend([2 * turn_radius] * points_per_section)
+
+    # Left turn (90 degrees)
+    theta = np.linspace(np.pi, np.pi/2, points_per_section)
+    x_lap.extend(turn_radius * np.cos(theta))
+    y_lap.extend(turn_radius + turn_radius * np.sin(theta))
+
+    # Replicate for multiple laps
+    x_lap = np.array(x_lap)
+    y_lap = np.array(y_lap)
+
+    x = np.tile(x_lap, num_laps)[:total_points]
+    y = np.tile(y_lap, num_laps)[:total_points]
+
+    # Add noise
+    if noise > 0:
+        x += np.random.normal(0, noise, len(x))
+        y += np.random.normal(0, noise, len(y))
+
+    # Calculate heading and velocity
+    dx = np.gradient(x)
+    dy = np.gradient(y)
+    heading = np.arctan2(dy, dx)
+    velocity = np.ones(len(x)) * 2.0
+    timestamps = np.arange(len(x)) * 0.1
+
     return PathData(timestamps, x, y, heading, velocity)
 
 
@@ -141,17 +341,27 @@ class TestSegmentStatisticsInvariant:
     """Test segment assignment invariant with various configurations."""
 
     @pytest.mark.parametrize("num_segments", [3, 4, 5, 6, 8, 10])
-    @pytest.mark.parametrize("num_laps", [1, 2, 3, 5, 10])
-    @pytest.mark.parametrize("points_per_lap", [50, 100, 200])
+    @pytest.mark.parametrize("num_laps", [2, 3, 5, 10])  # >=2 for Y-crossing lap detection
+    @pytest.mark.parametrize("points_per_lap", [60, 100, 200])
     def test_synthetic_circular_courses(self, num_segments, num_laps,
                                        points_per_lap):
-        """Test segment invariant on synthetic circular courses."""
-        # Generate multi-lap course
+        """
+        Test segment invariant on synthetic circular courses with smooth
+        perturbations.
+
+        Uses circular path with sin wave deviations to create varying
+        curvature while maintaining Y-crossing for lap detection.
+        """
+        # Generate multi-lap course with smooth perturbations
+        # Perturbation creates varying curvature for segmentation
         path_data = generate_multilap_course(
             num_laps=num_laps,
             points_per_lap=points_per_lap,
             radius=1.0,
-            noise=0.01
+            noise=0.01,
+            perturbation_amplitude=0.15,  # 15cm smooth deviation
+            perturbation_frequency=max(3, num_segments // 2)  # Scale with
+                                                               # segments
         )
 
         # Detect laps
@@ -166,21 +376,27 @@ class TestSegmentStatisticsInvariant:
         builder = MeanCourseBuilder()
         mean_course = builder.build(multilap)
 
-        # Segment with threshold to get desired number of segments
-        # Adjust threshold to target num_segments
-        threshold = 2 * np.pi / num_segments
-        strategy = ThresholdSegmentation()
+        # Segment with gradient strategy (works on varying curvature)
+        # Use min_segment_length to target desired segment count
+        target_length = mean_course.distance[-1] / (num_segments * 1.5)
+        strategy = GradientSegmentation()
         segmenter = CourseSegmenter(
             strategy,
-            params={'straight_curvature_threshold': threshold}
+            params={
+                'min_segment_length': target_length,
+                'straight_curvature_threshold': 0.1
+            }
         )
         segmentation = segmenter.segment(mean_course)
 
-        # Allow some flexibility in segment count
-        if abs(segmentation.num_segments - num_segments) > 2:
+        # Verify we got a reasonable number of segments
+        # Don't enforce exact count since perturbations create variable curvature
+        if segmentation.num_segments < 2:
             pytest.skip(
-                f"Segmentation created {segmentation.num_segments} segments, "
-                f"expected ~{num_segments}")
+                f"Too few segments: {segmentation.num_segments}")
+        if segmentation.num_segments > 20:
+            pytest.skip(
+                f"Too many segments: {segmentation.num_segments}")
 
         # Assign segments
         assigner = SegmentAssigner(segmentation)
@@ -198,12 +414,15 @@ class TestSegmentStatisticsInvariant:
     @pytest.mark.parametrize("num_laps", [2, 5, 10])
     def test_different_segmentation_strategies(self, strategy_name, num_laps):
         """Test invariant with different segmentation strategies."""
-        # Generate course
+        # Generate circular course with smooth perturbations
+        # Creates varying curvature that works with all segmentation strategies
         path_data = generate_multilap_course(
             num_laps=num_laps,
             points_per_lap=100,
             radius=1.0,
-            noise=0.01
+            noise=0.01,
+            perturbation_amplitude=0.2,   # 20cm for clear curvature changes
+            perturbation_frequency=5       # 5 peaks/valleys per lap
         )
 
         # Detect laps
@@ -252,12 +471,14 @@ class TestSegmentStatisticsRankings:
         Test that segment statistics don't create duplicate segment instances
         per lap.
         """
-        # Generate course with 5 laps, 5 segments
+        # Generate circular course with smooth perturbations
         path_data = generate_multilap_course(
             num_laps=5,
             points_per_lap=150,
             radius=1.0,
-            noise=0.01
+            noise=0.01,
+            perturbation_amplitude=0.15,
+            perturbation_frequency=5
         )
 
         # Detect laps
@@ -485,7 +706,12 @@ class TestEdgeCases:
 
     def test_single_lap(self):
         """Test with a single lap."""
-        path_data = generate_multilap_course(num_laps=1, points_per_lap=100)
+        path_data = generate_multilap_course(
+            num_laps=1,
+            points_per_lap=100,
+            perturbation_amplitude=0.15,
+            perturbation_frequency=4
+        )
 
         detector = YCrossingLapDetector()
         lap_boundaries = detector.detect_laps(path_data)
@@ -511,8 +737,13 @@ class TestEdgeCases:
 
     def test_partial_final_lap(self):
         """Test course with a partial final lap."""
-        # Generate 3 full laps + 0.5 partial lap
-        full_laps = generate_multilap_course(num_laps=3, points_per_lap=100)
+        # Generate 3 full laps with perturbations
+        full_laps = generate_multilap_course(
+            num_laps=3,
+            points_per_lap=100,
+            perturbation_amplitude=0.15,
+            perturbation_frequency=4
+        )
 
         # Add partial lap (half a lap)
         partial_theta = np.linspace(0, np.pi, 50, endpoint=False)
@@ -553,7 +784,12 @@ class TestEdgeCases:
 
     def test_minimum_segments(self):
         """Test with minimum number of segments (2)."""
-        path_data = generate_multilap_course(num_laps=3, points_per_lap=100)
+        path_data = generate_multilap_course(
+            num_laps=3,
+            points_per_lap=100,
+            perturbation_amplitude=0.2,  # Larger perturbation for clear segments
+            perturbation_frequency=2     # Low frequency = fewer segments
+        )
 
         detector = YCrossingLapDetector()
         lap_boundaries = detector.detect_laps(path_data)

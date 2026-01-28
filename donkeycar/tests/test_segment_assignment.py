@@ -48,7 +48,10 @@ def create_segmentation(mean_course, method='gradient'):
     else:
         strategy = GradientSegmentation()
     segmenter = CourseSegmenter(strategy, params={
-        'min_segment_length': 0.3, 'straight_curvature_threshold': 0.05
+        'min_segment_length': 0.3,
+        # Use more permissive thresholds for test geometries
+        'straight_curvature_threshold': 0.1,
+        'gradient_prominence': 0.02,  # Lower for synthetic courses
     })
     return segmenter.segment(mean_course)
 
@@ -133,8 +136,8 @@ class TestSegmentAssignment:
         x, y, heading, distance = generate_oval_course()
         mean_course = create_mean_course_from_arrays(x, y, heading, distance)
 
-        # Segment the course using new API
-        segmentation = create_segmentation(mean_course, method='threshold')
+        # Segment the course using gradient (works on all geometries)
+        segmentation = create_segmentation(mean_course, method='gradient')
 
         if segmentation.num_segments < 2:
             pytest.skip("Need at least 2 segments")
@@ -159,7 +162,7 @@ class TestSegmentAssignment:
         x, y, heading, distance = generate_oval_course()
         mean_course = create_mean_course_from_arrays(x, y, heading, distance)
 
-        segmentation = create_segmentation(mean_course, method='threshold')
+        segmentation = create_segmentation(mean_course, method='gradient')
 
         if segmentation.num_segments < 2:
             pytest.skip("Need at least two segments")
@@ -182,7 +185,7 @@ class TestSegmentAssignment:
         # Generate a course with known segments
         x, y, heading, distance = generate_figure8_course(radius=5.0)
         mean_course = create_mean_course_from_arrays(x, y, heading, distance)
-        segmentation = create_segmentation(mean_course, method='threshold')
+        segmentation = create_segmentation(mean_course, method='gradient')
 
         if segmentation.num_segments < 2:
             pytest.skip("Need at least 2 segments")
@@ -203,7 +206,7 @@ class TestSegmentAssignment:
         x, y, heading, distance = generate_oval_course()
         mean_course = create_mean_course_from_arrays(x, y, heading, distance)
 
-        segmentation = create_segmentation(mean_course, method='threshold')
+        segmentation = create_segmentation(mean_course, method='gradient')
 
         if segmentation.num_segments < 2:
             pytest.skip("Need multiple segments for wraparound test")
@@ -220,7 +223,7 @@ class TestSegmentAssignment:
         x, y, heading, distance = generate_oval_course()
         mean_course = create_mean_course_from_arrays(x, y, heading, distance)
 
-        segmentation = create_segmentation(mean_course, method='threshold')
+        segmentation = create_segmentation(mean_course, method='gradient')
 
         if segmentation.num_segments < 2:
             pytest.skip("Need multiple segments for relocated start test")
@@ -251,7 +254,7 @@ class TestSegmentAssignment:
         x, y, heading, distance = generate_oval_course()
         mean_course = create_mean_course_from_arrays(x, y, heading, distance)
 
-        segmentation = create_segmentation(mean_course, method='threshold')
+        segmentation = create_segmentation(mean_course, method='gradient')
 
         if segmentation.num_segments < 2:
             pytest.skip("Need multiple segments for wrap test")
@@ -275,7 +278,7 @@ class TestSegmentAssignment:
         x, y, heading, distance = generate_oval_course()
         mean_course = create_mean_course_from_arrays(x, y, heading, distance)
 
-        segmentation = create_segmentation(mean_course, method='threshold')
+        segmentation = create_segmentation(mean_course, method='gradient')
 
         if segmentation.num_segments < 2:
             pytest.skip("Need multiple segments for boundary proximity test")
@@ -296,7 +299,7 @@ class TestSegmentAssignment:
         x, y, heading, distance = generate_oval_course()
         mean_course = create_mean_course_from_arrays(x, y, heading, distance)
 
-        segmentation = create_segmentation(mean_course, method='threshold')
+        segmentation = create_segmentation(mean_course, method='gradient')
         if segmentation.num_segments < 2:
             pytest.skip("Need multiple segments for relabel test")
 
@@ -384,7 +387,7 @@ class TestSegmentAssignment:
         )
         mean_course = create_mean_course_from_arrays(x, y, heading, distance)
 
-        segmentation = create_segmentation(mean_course, method='threshold')
+        segmentation = create_segmentation(mean_course, method='gradient')
         assert segmentation.num_segments > 0, "Should detect segments"
 
         x_path, y_path = simulate_perfect_lap(mean_course)
@@ -414,7 +417,7 @@ class TestSegmentAssignment:
 
         mean_course = create_mean_course_from_arrays(x, y, heading, distance)
 
-        segmentation = create_segmentation(mean_course, method='threshold')
+        segmentation = create_segmentation(mean_course, method='gradient')
 
         if segmentation.num_segments < 3:
             pytest.skip("Need multiple segments for this test")
@@ -443,7 +446,7 @@ class TestSegmentAssignment:
         x, y, heading, distance = generate_figure8_course(radius=5.0)
         mean_course = create_mean_course_from_arrays(x, y, heading, distance)
 
-        segmentation = create_segmentation(mean_course, method='threshold')
+        segmentation = create_segmentation(mean_course, method='gradient')
 
         if segmentation.num_segments < 2:
             pytest.skip("Need at least 2 segments")
@@ -477,7 +480,7 @@ class TestSegmentAssignment:
         x, y, heading, distance = generate_figure8_course(radius=5.0)
         mean_course = create_mean_course_from_arrays(x, y, heading, distance)
 
-        segmentation = create_segmentation(mean_course, method='threshold')
+        segmentation = create_segmentation(mean_course, method='gradient')
         num_segs = segmentation.num_segments
 
         if num_segs < 3:

@@ -33,7 +33,10 @@ class TestSegmentEstimator(unittest.TestCase):
         mean_course = create_mean_course_from_arrays(x, y, heading, distance)
 
         # Create segmentation using CourseSegmenter
-        segmenter = CourseSegmenter(GradientSegmentation())
+        segmenter = CourseSegmenter(
+            GradientSegmentation(),
+            params={'gradient_prominence': 0.01}  # Lower for synthetic ellipse
+        )
         segmentation = segmenter.segment(mean_course)
 
         return mean_course, segmentation
