@@ -324,8 +324,9 @@ class TubPathDataSource(PathDataSource):
             # Calculate heading from euler angles (car/euler is [x, y, z] in
             # degrees)
             euler = record.get('car/euler', [0, 0, 0])
-            # Convert to radians: heading = 90 - euler[2] (in degrees), then
-            # to radians
+            # IMU coordinate system: euler[2] where 0° = forward (+Y)
+            # Math coordinate system: heading where 0° = right (+X), 90° = forward (+Y)
+            # Transform from IMU to math coordinates for geometric calculations
             h_deg = 90.0 - euler[2]
             h = math.radians(h_deg)
 

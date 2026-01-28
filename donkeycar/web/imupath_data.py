@@ -613,12 +613,21 @@ class IMUPathDataBuilder:
         
         path_points = []
         for idx in display_indices:
+            # heading is in math coordinates (0° = right/+X, 90° = forward/+Y)
+            # Convert back to IMU yaw for display (0° = forward/+Y)
+            heading_rad = float(self.path_data.heading[idx])
+            heading_deg = np.degrees(heading_rad)
+            imu_yaw_deg = 90.0 - heading_deg
+            # Normalize to [0, 360)
+            imu_yaw_deg = imu_yaw_deg % 360.0
+
             point = {
                 't': float(self.path_data.timestamp[idx]),
                 'x': float(self.path_data.x[idx]),
                 'y': float(self.path_data.y[idx]),
                 'v': float(self.path_data.velocity[idx]),
-                'h': float(self.path_data.heading[idx]),
+                'h': heading_rad,  # Math heading for geometric calculations
+                'imu_yaw': np.radians(imu_yaw_deg),  # IMU yaw for display
                 'd': float(self.path_data.distance[idx]),
                 'lap': self._find_lap_for_index(int(idx)),
                 # Defensive check: segment_ids should match path_data length,

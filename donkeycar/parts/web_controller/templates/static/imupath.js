@@ -770,7 +770,8 @@ function updateDisplayForPoint(closestIdx, point) {
   $('#current-lap').text(point.lap !== null ? point.lap : '--');
   $('#current-segment').text(point.segment !== null ? point.segment : '--');
   $('#current-speed').text(point.v.toFixed(2));
-  $('#current-heading').text((point.h * 180 / Math.PI).toFixed(1) + '°');
+  // Display IMU yaw angle (0° = forward), not math heading (0° = right)
+  $('#current-heading').text((point.imu_yaw * 180 / Math.PI).toFixed(1) + '°');
   $('#current-x').text(point.x.toFixed(2));
   $('#current-y').text(point.y.toFixed(2));
 
