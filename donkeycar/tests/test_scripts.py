@@ -1,11 +1,16 @@
 import os
 import platform
+import shutil
 import subprocess
 import sys
 import tarfile
 
 from donkeycar import utils
 import pytest
+
+
+# Check if donkey CLI is available in PATH
+DONKEY_CLI_AVAILABLE = shutil.which('donkey') is not None
 
 
 def is_error(err):
@@ -25,12 +30,20 @@ def cardir(tmpdir_factory):
     return path
 
 
+@pytest.mark.skipif(
+    not DONKEY_CLI_AVAILABLE,
+    reason="donkey CLI not installed in PATH"
+)
 def test_createcar(cardir):
     cmd = ['donkey', 'createcar', '--path', cardir]
     out, err, proc_id = utils.run_shell_command(cmd)
     assert is_error(err) is False
 
 
+@pytest.mark.skipif(
+    not DONKEY_CLI_AVAILABLE,
+    reason="donkey CLI not installed in PATH"
+)
 def test_drivesim(cardir):
     cmd = ['donkey', 'createcar', '--path', cardir ,'--template', 'square']
     out, err, proc_id = utils.run_shell_command(cmd, timeout=10)
@@ -44,6 +57,10 @@ def test_drivesim(cardir):
         raise ValueError(err)
 
 
+@pytest.mark.skipif(
+    not DONKEY_CLI_AVAILABLE,
+    reason="donkey CLI not installed in PATH"
+)
 def test_bad_command_fails():
     cmd = ['donkey', 'not a comand']
     out, err, proc_id = utils.run_shell_command(cmd)

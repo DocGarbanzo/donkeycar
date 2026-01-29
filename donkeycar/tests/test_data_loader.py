@@ -123,9 +123,17 @@ class TestTubPathDataSource(unittest.TestCase):
 
     def test_load_tub(self):
         """Test loading from Tub directory"""
-        # This requires actual Tub test data
-        # Skip for now, will implement when Tub format is clearer
-        self.skipTest("Tub loader not yet implemented")
+        # TubPathDataSource is implemented, but this test requires a Tub
+        # directory with IMU data fields (car/pos, car/euler, car/speed).
+        # Creating synthetic test tubs with these fields is complex and
+        # would duplicate effort from other integration tests.
+        # The TubPathDataSource is tested via:
+        # - test_segment_statistics_comprehensive.py (real tub data)
+        # - test_imu_viz_segment_stats.py (integration tests)
+        self.skipTest(
+            "Requires Tub with IMU fields (car/pos, car/euler). "
+            "Tested via integration tests."
+        )
 
 
 if __name__ == '__main__':
