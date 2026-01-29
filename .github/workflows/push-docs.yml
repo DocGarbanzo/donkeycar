@@ -23,15 +23,15 @@ jobs:
         shell: bash -l {0}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          
+
       - name: Setup conda environment
         uses: conda-incubator/setup-miniconda@v3
         with:
           python-version: 3.11
-          auto-activate-base: true
+          auto-activate: true
           channels: defaults, conda-forge
           
       - name: Cache conda environment
