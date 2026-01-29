@@ -175,6 +175,21 @@ class IMUPathDataBuilder:
             tub = Tub(self.tub_path, read_only=True)
             try:
                 fields = []
+
+                # Add built-in computed fields first (time and distance)
+                fields.append({
+                    'name': 'time',
+                    'type': 'float',
+                    'is_vector': False,
+                    'dimensions': None,
+                })
+                fields.append({
+                    'name': 'distance',
+                    'type': 'float',
+                    'is_vector': False,
+                    'dimensions': None,
+                })
+
                 # Iterate through input_types to get field metadata
                 for field_name, field_type in tub.input_types.items():
                     # Only include numeric scalars and vectors
@@ -214,9 +229,10 @@ class IMUPathDataBuilder:
         Uses TubStatistics session rankings for consistency with training.
 
         Args:
-            field_name: Name of the field to aggregate
+            field_name: Name of the field to aggregate, or built-in metrics
+                       'time' or 'distance'
             method: Aggregation method ('delta', 'mean_abs', 'sum_abs',
-                   'max', 'min', 'norm')
+                   'max', 'min', 'norm'). Ignored for 'time' and 'distance'.
             dimension: For vector fields, which component (0=X, 1=Y, 2=Z,
                       None=compute norm)
 
@@ -226,10 +242,20 @@ class IMUPathDataBuilder:
         if not self.is_tub_data or not self.tub_path:
             return {}
 
-        spec = self._build_field_aggregation_spec(field_name, method, dimension)
-        if spec is None:
-            logger.error(f"Unknown aggregation method: {method}")
-            return {}
+        # Handle built-in computed metrics (time, distance)
+        # These don't need field aggregation - they're already computed
+        if field_name in ('time', 'distance'):
+            sorting_key = field_name
+            field_aggregations = []
+        else:
+            # Regular tub field - create aggregation spec
+            spec = self._build_field_aggregation_spec(
+                field_name, method, dimension)
+            if spec is None:
+                logger.error(f"Unknown aggregation method: {method}")
+                return {}
+            sorting_key = spec.output_key
+            field_aggregations = [spec]
 
         try:
             tub = Tub(self.tub_path, read_only=True)
@@ -248,13 +274,12 @@ class IMUPathDataBuilder:
                     tub, session_id):
                     segment_resolver = (
                         self._build_visual_segment_resolver())
-                sorting_strategy = SortingStrategy(
-                    [{'key': spec.output_key}])
+                sorting_strategy = SortingStrategy([{'key': sorting_key}])
                 stats = TubStatistics(
                     tub,
                     config=self.cfg,
                     sorting_strategy=sorting_strategy,
-                    field_aggregations=[spec],
+                    field_aggregations=field_aggregations,
                 )
                 rankings_by_session = (
                     stats.calculate_segment_performance(
