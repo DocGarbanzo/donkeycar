@@ -105,8 +105,14 @@ function getSegmentRanking(point) {
   const segRanks = lapRanks[String(point.segment)];
   if (!segRanks) return null;
 
-  // The computed ranking has the key 'computed_stat'
-  const value = segRanks['computed_stat'];
+  // For built-in fields (time, distance), use field name as key
+  // For aggregated fields, use 'computed_stat'
+  const fieldName = appState.selectedField;
+  const key = (fieldName === 'time' || fieldName === 'distance')
+    ? fieldName
+    : 'computed_stat';
+
+  const value = segRanks[key];
   if (value === undefined || value === null) return null;
 
   return value;
