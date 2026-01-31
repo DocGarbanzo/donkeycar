@@ -261,6 +261,7 @@ function computeSegmentStatistics() {
     dataType: 'json',
     success: function(response) {
       appState.segmentRankings = response.rankings || null;
+      appState.selectedField = fieldName;  // Store for getSegmentRanking()
       $('#stats-spinner').hide();
 
       // Refresh display
