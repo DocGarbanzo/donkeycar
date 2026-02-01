@@ -595,25 +595,23 @@ class IMUPathDataAPI(RequestHandler):
         # Get optional query parameters
         num_laps = self.get_argument('num_laps', default=None)
         segment_method = self.get_argument('segment_method', default=None)
-        max_display_points = self.get_argument('max_display_points',
-                                               default='10000')
         
         # Validate segment_method parameter
         valid_methods = ['threshold', 'extrema', 'gradient', 'hybrid']
         if segment_method is not None and segment_method not in valid_methods:
             self.set_status(400)
-            self.write({'error': f'Invalid segment_method. Must be one of: {", ".join(valid_methods)}'})
+            msg = (f'Invalid segment_method. '
+                   f'Must be one of: {", ".join(valid_methods)}')
+            self.write({'error': msg})
             return
         
         # Convert parameters with error handling
         try:
             if num_laps is not None:
                 num_laps = int(num_laps)
-            if max_display_points is not None:
-                max_display_points = int(max_display_points)
         except ValueError:
             self.set_status(400)
-            self.write({'error': 'Invalid query parameter: num_laps and max_display_points must be integers.'})
+            self.write({'error': 'Invalid query parameter: num_laps must be an integer.'})
             return
         
         # Check if data is available
@@ -626,8 +624,7 @@ class IMUPathDataAPI(RequestHandler):
             # Build JSON payload
             data = self.application.imupath_builder.build_json_payload(
                 num_laps=num_laps,
-                segment_method=segment_method,
-                max_display_points=max_display_points
+                segment_method=segment_method
             )
             
             self.set_header('Content-Type', 'application/json')

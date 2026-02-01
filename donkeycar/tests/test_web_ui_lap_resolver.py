@@ -7,8 +7,6 @@ correctly identifies laps based on segment cycle completions.
 
 import pytest
 import numpy as np
-from unittest.mock import Mock
-
 from donkeycar.course_analysis import (
     PathData,
     YCrossingLapDetector,
@@ -18,6 +16,7 @@ from donkeycar.course_analysis import (
     HybridSegmentation,
 )
 from donkeycar.course_analysis.segment_assignment import SegmentAssigner
+from donkeycar.web.imupath_data import _find_segment_cycle_indices
 
 
 def generate_multilap_course(num_laps=3, points_per_lap=100, radius=1.0):
@@ -34,9 +33,8 @@ def generate_multilap_course(num_laps=3, points_per_lap=100, radius=1.0):
 
 class MockIMUPathDataBuilder:
     """
-    Mock version of IMUPathDataBuilder with segment-cycle lap resolver.
-
-    Implements the same lap resolver logic as the real web UI.
+    Minimal stand-in for IMUPathDataBuilder that exposes only the
+    segment-cycle lap resolver methods under test.
     """
 
     def __init__(self, path_data, segmentation, segment_ids):
@@ -46,22 +44,8 @@ class MockIMUPathDataBuilder:
 
     def _count_segment_cycle_laps(self, use_lap_0):
         """Count laps based on segment cycle completions."""
-        if self.segment_ids is None or len(self.segment_ids) == 0:
-            return None
-
-        num_segments = self.segmentation.num_segments
-        if num_segments <= 1:
-            return None
-
-        last_segment = num_segments - 1
-
-        # Count segment cycle completions
-        cycle_count = 0
-        for i in range(1, len(self.segment_ids)):
-            if (self.segment_ids[i-1] == last_segment and
-                self.segment_ids[i] == 0):
-                cycle_count += 1
-
+        cycle_count = len(_find_segment_cycle_indices(
+            self.segment_ids, self.segmentation.num_segments))
         if cycle_count <= 0:
             return None
         if use_lap_0:
@@ -72,55 +56,36 @@ class MockIMUPathDataBuilder:
 
     def _build_segment_cycle_lap_resolver(self, use_lap_0):
         """Build lap resolver based on segment cycles."""
-        if self.segment_ids is None or len(self.segment_ids) == 0:
-            return None
-
-        num_segments = self.segmentation.num_segments
-        if num_segments <= 1:
-            return None
-
-        last_segment = num_segments - 1
-
-        # Find segment cycle boundaries
-        cycle_indices = []
-        for i in range(1, len(self.segment_ids)):
-            if (self.segment_ids[i-1] == last_segment and
-                self.segment_ids[i] == 0):
-                cycle_indices.append(i)
-
+        cycle_indices = _find_segment_cycle_indices(
+            self.segment_ids, self.segmentation.num_segments)
         if not cycle_indices:
             return None
 
-        # Build lap boundaries for complete laps only
-        lap_starts = [0] + cycle_indices[:-1] if len(
-            cycle_indices) > 1 else [0]
-        last_complete_lap_end = cycle_indices[-1] - 1 if cycle_indices else len(
-            self.segment_ids) - 1
+        lap_starts = (
+            [0] + cycle_indices[:-1]
+            if len(cycle_indices) > 1 else [0]
+        )
+        last_complete_lap_end = cycle_indices[-1] - 1
 
         state = {'lap_idx': 0}
 
         def resolve(record_idx):
             lap_idx = state['lap_idx']
-
             while lap_idx < len(lap_starts):
                 lap_start = lap_starts[lap_idx]
-
-                if lap_idx + 1 < len(lap_starts):
-                    lap_end = lap_starts[lap_idx + 1] - 1
-                else:
-                    lap_end = last_complete_lap_end
-
+                lap_end = (
+                    lap_starts[lap_idx + 1] - 1
+                    if lap_idx + 1 < len(lap_starts)
+                    else last_complete_lap_end
+                )
                 if record_idx < lap_start:
                     return None
-
                 if lap_start <= record_idx <= lap_end:
                     state['lap_idx'] = lap_idx
                     if not use_lap_0 and lap_idx == 0:
                         return None
                     return lap_idx
-
                 lap_idx += 1
-
             state['lap_idx'] = lap_idx
             return None
 
@@ -147,12 +112,9 @@ class TestSegmentCycleLapResolver:
         assigner = SegmentAssigner(segmentation)
         segment_ids = assigner.assign(path_data.x, path_data.y)
 
-        # Count segment cycles manually
-        num_segments = segmentation.num_segments
-        cycle_count = sum(
-            1 for i in range(1, len(segment_ids))
-            if (segment_ids[i-1] == num_segments - 1 and segment_ids[i] == 0)
-        )
+        # Count segment cycles
+        cycle_count = len(_find_segment_cycle_indices(
+            segment_ids, segmentation.num_segments))
 
         # Test lap resolver
         mock_builder = MockIMUPathDataBuilder(path_data, segmentation,
@@ -195,11 +157,8 @@ class TestSegmentCycleLapResolver:
         assert resolver is not None
 
         # Find segment cycle boundaries
-        num_segments = segmentation.num_segments
-        cycle_indices = [
-            i for i in range(1, len(segment_ids))
-            if (segment_ids[i-1] == num_segments - 1 and segment_ids[i] == 0)
-        ]
+        cycle_indices = _find_segment_cycle_indices(
+            segment_ids, segmentation.num_segments)
 
         # Test lap assignments at key points
         assert resolver(0) == 0, "First record should be lap 0"
@@ -234,11 +193,8 @@ class TestSegmentCycleLapResolver:
         segment_ids = assigner.assign(path_data.x, path_data.y)
 
         # Find last cycle boundary
-        num_segments = segmentation.num_segments
-        cycle_indices = [
-            i for i in range(1, len(segment_ids))
-            if (segment_ids[i-1] == num_segments - 1 and segment_ids[i] == 0)
-        ]
+        cycle_indices = _find_segment_cycle_indices(
+            segment_ids, segmentation.num_segments)
 
         if not cycle_indices:
             pytest.skip("No complete cycles detected")
@@ -430,11 +386,8 @@ class TestIntegrationWithTubStatistics:
             use_lap_0=True)
 
         # Find segment cycles
-        num_segments = segmentation.num_segments
-        cycle_indices = [
-            i for i in range(1, len(segment_ids))
-            if (segment_ids[i-1] == num_segments - 1 and segment_ids[i] == 0)
-        ]
+        cycle_indices = _find_segment_cycle_indices(
+            segment_ids, segmentation.num_segments)
 
         # Verify lap assignments align with cycle boundaries
         for cycle_idx in cycle_indices[:-1]:

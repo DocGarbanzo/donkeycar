@@ -5,8 +5,9 @@ Test web-based IMU path visualizer components
 import json
 import os
 import sys
+import shutil
 import tempfile
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch
 import tornado.testing
 import tornado.web
 from donkeycar.course_analysis import CSVPathDataSource, TubPathDataSource
@@ -107,8 +108,7 @@ def test_imupath_json_payload():
             lap_method='y_crossing',
             segment_method='gradient',
             tub_path=None,
-            num_laps=None,
-            max_display_points=100
+            num_laps=None
         )
         
         # Verify structure
@@ -149,55 +149,6 @@ def test_imupath_json_payload():
         print(f"Path points: {len(data['path_points'])}")
         print(f"Mean course points: {len(data['mean_course'])}")
         print(f"Segments: {len(data['segments'])}")
-        
-    finally:
-        os.unlink(csv_path)
-
-
-def test_imupath_downsampling():
-    """Test downsampling functionality."""
-    # Create circular path with many points
-    import numpy as np
-    csv_lines = ["t,x,y,h,v"]
-    num_points = 200
-    radius = 1.0
-    theta = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
-    x = -radius + radius * np.cos(theta)
-    y = radius * np.sin(theta)
-    dx = np.gradient(x)
-    dy = np.gradient(y)
-    heading = np.arctan2(dy, dx)
-
-    for i in range(num_points):
-        t = i * 0.01
-        csv_lines.append(f"{t:.2f},{x[i]:.4f},{y[i]:.4f},{heading[i]:.4f},0.5")
-
-    csv_data = "\n".join(csv_lines)
-    
-    with tempfile.NamedTemporaryFile(
-        mode='w', suffix='.csv', delete=False) as f:
-        f.write(csv_data)
-        csv_path = f.name
-    
-    try:
-        # Load data
-        source = CSVPathDataSource(csv_path)
-        path_data = source.load()
-        
-        # Build JSON with downsampling
-        data = prepare_imupath_data(
-            path_data=path_data,
-            cfg=None,
-            max_display_points=50
-        )
-        
-        # Verify downsampling
-        assert len(data['path_points']) <= 50
-        assert data['metadata']['total_points'] == 200
-        assert data['metadata']['display_points'] == len(data['path_points'])
-        
-        print(f"Downsampled from {data['metadata']['total_points']} "
-              f"to {data['metadata']['display_points']} points")
         
     finally:
         os.unlink(csv_path)
@@ -263,14 +214,7 @@ def test_imupath_stats_use_tub_session_ranks():
         assert 1 in rankings
         assert 0 not in rankings
     finally:
-        if os.path.exists(temp_dir):
-            for root, _, files in os.walk(temp_dir, topdown=False):
-                for name in files:
-                    os.remove(os.path.join(root, name))
-            for root, dirs, _ in os.walk(temp_dir, topdown=False):
-                for name in dirs:
-                    os.rmdir(os.path.join(root, name))
-            os.rmdir(temp_dir)
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def test_imupath_stats_bin_by_lap_count():
@@ -344,18 +288,11 @@ def test_imupath_stats_bin_by_lap_count():
             assert rank is not None
             assert rank >= min_expected
     finally:
-        if os.path.exists(temp_dir):
-            for root, _, files in os.walk(temp_dir, topdown=False):
-                for name in files:
-                    os.remove(os.path.join(root, name))
-            for root, dirs, _ in os.walk(temp_dir, topdown=False):
-                for name in dirs:
-                    os.rmdir(os.path.join(root, name))
-            os.rmdir(temp_dir)
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
-def test_imupath_stats_use_visual_laps_when_constant():
-    """Use visual laps when car/lap stays constant."""
+def test_imupath_stats_use_segment_cycle_laps_when_constant():
+    """Use segment cycle laps when car/lap and car/segment are constant."""
     temp_dir = tempfile.mkdtemp()
     tub_path = os.path.join(temp_dir, 'constant_lap_tub')
 
@@ -413,7 +350,7 @@ def test_imupath_stats_use_visual_laps_when_constant():
                 'car/pos': [float(x_vals[i]), float(y_vals[i]), 0.0],
                 'car/euler': [0.0, 0.0, 0.0],
                 'car/speed': 1.0 + i * 0.01,
-                'car/lap': 0,  # Constant - should trigger visual lap fallback
+                'car/lap': 0,  # Constant
                 'car/segment': 0,  # Constant
                 'car/distance': distance,
                 'car/gyro': [0.0, 0.1 + i * 0.001, 0.0],
@@ -436,21 +373,11 @@ def test_imupath_stats_use_visual_laps_when_constant():
         rankings = builder.compute_segment_statistics(
             'car/gyro', 'mean_abs', dimension=1)
 
+        # Segment cycle laps: this path completes 1 cycle, so 1 lap
         assert 0 in rankings
-        assert 1 in rankings
-        segment_ids = set()
-        for lap_data in rankings.values():
-            segment_ids.update(lap_data.keys())
-        assert max(segment_ids) > 0
+        assert len(rankings[0]) > 1  # multiple segments in that lap
     finally:
-        if os.path.exists(temp_dir):
-            for root, _, files in os.walk(temp_dir, topdown=False):
-                for name in files:
-                    os.remove(os.path.join(root, name))
-            for root, dirs, _ in os.walk(temp_dir, topdown=False):
-                for name in dirs:
-                    os.rmdir(os.path.join(root, name))
-            os.rmdir(temp_dir)
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 class IMUPathRestartAPITest(tornado.testing.AsyncHTTPTestCase):
@@ -594,6 +521,4 @@ if __name__ == '__main__':
     test_imupath_data_builder_csv()
     print("\nTesting JSON payload...")
     test_imupath_json_payload()
-    print("\nTesting downsampling...")
-    test_imupath_downsampling()
     print("\nAll tests passed!")

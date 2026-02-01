@@ -270,18 +270,7 @@ Visualization Features:
     - Interactive controls (time slider, lap selector, etc.)
     - Real-time statistics display
 
-Parameters:
-    max_display_points: Maximum number of points to display at once.
-        Large datasets are downsampled for performance. Higher values
-        = more detail but slower rendering.
-    update_throttle_ms: Minimum milliseconds between display updates.
-        Prevents excessive redraws during rapid slider movement.
-        Lower = more responsive but higher CPU usage.
 """
-IMU_VISUALIZATION_PARAMS = {
-    'max_display_points': 1000,
-    'update_throttle_ms': 100,
-}
 
 
 # TRAINING

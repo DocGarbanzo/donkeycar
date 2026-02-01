@@ -73,7 +73,6 @@ Then open browser to: http://localhost:8887/imupath
 
 ### 7. Web UI - Configuration
 - [ ] `--config` option loads custom config
-- [ ] IMU_VISUALIZATION_PARAMS respected for downsampling
 - [ ] FIELD_AGGREGATIONS used for Tub stats (if available)
 
 ### 8. Error Handling
@@ -83,7 +82,6 @@ Then open browser to: http://localhost:8887/imupath
 - [ ] Browser console shows no errors
 
 ### 9. Performance
-- [ ] Large datasets (>1000 points) downsample correctly
 - [ ] JSON payload size is reasonable
 - [ ] Plot renders smoothly
 - [ ] Time slider responds quickly
@@ -179,7 +177,6 @@ pytest donkeycar/tests/test_imupath_web.py -v
 # Expected output:
 # test_imupath_data_builder_csv PASSED
 # test_imupath_json_payload PASSED
-# test_imupath_downsampling PASSED
 ```
 
 ## Known Limitations
@@ -207,7 +204,6 @@ pytest donkeycar/tests/test_imupath_web.py -v
 - Check browser console for JavaScript errors
 
 ### Performance issues
-- Reduce `max_display_points` via query parameter
 - Check network latency to server
 - Verify JSON payload size is reasonable
 

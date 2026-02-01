@@ -120,7 +120,6 @@ CSV/Tub → PathData → IMUPathDataBuilder → JSON → Browser
 **Query Parameters:**
 - `num_laps`: Number of laps for mean course (optional)
 - `segment_method`: Segmentation method (optional)
-- `max_display_points`: Maximum points for display (default: 1000)
 
 **Response:**
 ```json
@@ -144,7 +143,6 @@ CSV/Tub → PathData → IMUPathDataBuilder → JSON → Browser
     "num_laps": 3,
     "total_laps": 3,
     "total_points": 1500,
-    "display_points": 1000,
     "num_segments": 5,
     "mean_course_length": 25.5,
     "total_distance": 75.0,
@@ -160,21 +158,6 @@ CSV/Tub → PathData → IMUPathDataBuilder → JSON → Browser
 ```
 
 ## Configuration
-
-### Downsampling
-
-The visualizer respects `IMU_VISUALIZATION_PARAMS` from the config:
-
-```python
-# In config.py
-IMU_VISUALIZATION_PARAMS = {
-    'max_display_points': 1000,  # Used for downsampling display
-    'update_throttle_ms': 100,   # (Not used by web UI)
-}
-```
-
-Points are uniformly downsampled for display while full data is maintained
-for statistics.
 
 ### Segment Statistics
 
@@ -217,7 +200,6 @@ Available stats fields are shown in the UI dropdown (when Tub data loaded).
 - Course analysis stack (lap detection, mean course, segmentation)
 - Tornado web server (LocalWebController)
 - Config loading (load_config)
-- IMU_VISUALIZATION_PARAMS (downsampling)
 
 ### Additive Design
 

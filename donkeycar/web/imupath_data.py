@@ -30,6 +30,20 @@ from donkeycar.course_analysis import (
 logger = logging.getLogger(__name__)
 
 
+def _find_segment_cycle_indices(segment_ids, num_segments):
+    """Find indices where segment cycles complete (N-1 -> 0)."""
+    if segment_ids is None or len(segment_ids) == 0:
+        return []
+    if num_segments <= 1:
+        return []
+    last_segment = num_segments - 1
+    return [
+        i for i in range(1, len(segment_ids))
+        if segment_ids[i - 1] == last_segment
+        and segment_ids[i] == 0
+    ]
+
+
 class IMUPathDataBuilder:
     """
     Builds JSON-ready data payloads for web-based IMU path visualization.
@@ -73,10 +87,6 @@ class IMUPathDataBuilder:
         # Initialize pipeline
         self._initialize_data_pipeline()
         
-        # Load segment statistics if Tub data
-        if self.is_tub_data:
-            self._load_segment_statistics()
-    
     def _initialize_data_pipeline(self):
         """Initialize the complete data processing pipeline."""
         logger.info("Initializing data processing pipeline...")
@@ -148,15 +158,6 @@ class IMUPathDataBuilder:
         
         logger.info("Assigned segments to driven path")
     
-    def _load_segment_statistics(self):
-        """
-        Deprecated: segment statistics are now computed on-demand.
-        This method is kept for backward compatibility but does nothing.
-        """
-        # No longer pre-compute segment statistics
-        self.segment_rankings = {}
-        self.available_ranking_keys = []
-
     def get_available_fields(self):
         """
         Detect all numeric/vector fields available in the tub.
@@ -266,14 +267,20 @@ class IMUPathDataBuilder:
                     tub, session_id, use_lap_0)
                 lap_resolver = None
                 segment_resolver = None
-                if self._should_use_visual_laps(num_bins):
-                    # Use Y-crossing lap detection when car/lap is constant
-                    num_bins = self._count_visual_laps(use_lap_0)
-                    lap_resolver = self._build_visual_lap_resolver(use_lap_0)
                 if self._should_use_visual_segments(
                     tub, session_id):
                     segment_resolver = (
                         self._build_visual_segment_resolver())
+                    # Lap boundaries must align with segment cycles
+                    lap_resolver = (
+                        self._build_segment_cycle_lap_resolver(
+                            use_lap_0))
+                    num_bins = self._count_segment_cycle_laps(
+                        use_lap_0)
+                elif self._should_use_visual_laps(num_bins):
+                    num_bins = self._count_visual_laps(use_lap_0)
+                    lap_resolver = (
+                        self._build_visual_lap_resolver(use_lap_0))
                 sorting_strategy = SortingStrategy([{'key': sorting_key}])
                 stats = TubStatistics(
                     tub,
@@ -438,27 +445,13 @@ class IMUPathDataBuilder:
 
     def _count_segment_cycle_laps(self, use_lap_0):
         """
-        Return lap count based on segment cycle completions (4->0 transitions).
+        Return lap count based on segment cycle completions.
 
-        For segment statistics, laps are defined by segment cycles, not
-        Y-crossing detection.
+        For segment statistics, laps are defined by segment cycles,
+        not Y-crossing detection.
         """
-        if self.segment_ids is None or len(self.segment_ids) == 0:
-            return None
-
-        num_segments = self.segmentation.num_segments
-        if num_segments <= 1:
-            return None
-
-        last_segment = num_segments - 1
-
-        # Count segment cycle completions
-        cycle_count = 0
-        for i in range(1, len(self.segment_ids)):
-            if (self.segment_ids[i-1] == last_segment and
-                self.segment_ids[i] == 0):
-                cycle_count += 1
-
+        cycle_count = len(_find_segment_cycle_indices(
+            self.segment_ids, self.segmentation.num_segments))
         if cycle_count <= 0:
             return None
         if use_lap_0:
@@ -469,71 +462,46 @@ class IMUPathDataBuilder:
 
     def _build_segment_cycle_lap_resolver(self, use_lap_0):
         """
-        Create a resolver for lap numbers based on segment cycle boundaries.
+        Create a resolver for lap numbers based on segment cycle
+        boundaries.
 
-        Laps are defined by segment cycle completions (4->0 transitions), not
-        Y-crossing detection. This ensures segment statistics use consistent
-        lap definitions.
+        Laps are defined by segment cycle completions (N-1 -> 0
+        transitions), not Y-crossing detection. This ensures segment
+        statistics use consistent lap definitions.
         """
-        if self.segment_ids is None or len(self.segment_ids) == 0:
-            return None
-
-        num_segments = self.segmentation.num_segments
-        if num_segments <= 1:
-            return None
-
-        last_segment = num_segments - 1
-
-        # Find segment cycle boundaries (indices where 4->0 transition occurs)
-        cycle_indices = []
-        for i in range(1, len(self.segment_ids)):
-            if (self.segment_ids[i-1] == last_segment and
-                self.segment_ids[i] == 0):
-                cycle_indices.append(i)
-
+        cycle_indices = _find_segment_cycle_indices(
+            self.segment_ids, self.segmentation.num_segments)
         if not cycle_indices:
             return None
 
-        # Build lap boundaries for complete laps only
-        # - Lap 0 starts at index 0
-        # - Each subsequent complete lap starts at a cycle boundary
-        # - Exclude the last cycle if it doesn't complete (partial lap)
-        # We have N cycles, which means laps 0 through N-1 are complete
-        # Lap N (if it exists) is partial and should be excluded
-        lap_starts = [0] + cycle_indices[:-1] if len(cycle_indices) > 1 else [0]
-        # Last complete lap ends just before the last cycle starts
-        last_complete_lap_end = cycle_indices[-1] - 1 if cycle_indices else len(
-            self.segment_ids) - 1
+        # N cycles means laps 0 through N-1 are complete;
+        # any data after the last cycle is a partial lap.
+        lap_starts = (
+            [0] + cycle_indices[:-1]
+            if len(cycle_indices) > 1 else [0]
+        )
+        last_complete_lap_end = cycle_indices[-1] - 1
 
         state = {'lap_idx': 0}
 
         def resolve(record_idx):
             lap_idx = state['lap_idx']
-
-            # Find which lap this record belongs to
             while lap_idx < len(lap_starts):
                 lap_start = lap_starts[lap_idx]
-
-                # Determine lap end
-                if lap_idx + 1 < len(lap_starts):
-                    # Not the last lap: ends one index before next lap starts
-                    lap_end = lap_starts[lap_idx + 1] - 1
-                else:
-                    # Last complete lap: ends at last_complete_lap_end
-                    lap_end = last_complete_lap_end
-
+                lap_end = (
+                    lap_starts[lap_idx + 1] - 1
+                    if lap_idx + 1 < len(lap_starts)
+                    else last_complete_lap_end
+                )
                 if record_idx < lap_start:
                     return None
-
                 if lap_start <= record_idx <= lap_end:
                     state['lap_idx'] = lap_idx
                     if not use_lap_0 and lap_idx == 0:
                         return None
                     return lap_idx
-
                 lap_idx += 1
-
-            # Record is beyond last complete lap (trailing partial lap)
+            # Beyond last complete lap (trailing partial lap)
             state['lap_idx'] = lap_idx
             return None
 
@@ -584,37 +552,14 @@ class IMUPathDataBuilder:
         return rankings_by_session.get(
             session_id, next(iter(rankings_by_session.values())))
     
-    def _downsample_points(self, indices, max_points=1000):
-        """
-        Downsample point indices for display.
-        
-        Args:
-            indices: Array of indices to downsample
-            max_points: Maximum number of points to return
-            
-        Returns:
-            Downsampled array of indices (unique, no duplicates)
-        """
-        # No downsampling needed if we have fewer points than max
-        if len(indices) <= max_points:
-            return indices
-        
-        # Uniform downsampling using linspace to avoid out-of-bounds indices
-        # linspace with integer dtype produces unique indices (no duplicates)
-        downsampled = np.linspace(
-            0, len(indices) - 1, num=max_points, dtype=int)
-        return downsampled
-    
-    def build_json_payload(self, num_laps=None, segment_method=None,
-                          max_display_points=1000):
+    def build_json_payload(self, num_laps=None, segment_method=None):
         """
         Build complete JSON payload for web visualization.
-        
+
         Args:
             num_laps: Number of laps for mean course (None = all)
             segment_method: Segmentation method to use (None = current)
-            max_display_points: Maximum points to include in display arrays
-            
+
         Returns:
             Dictionary ready for JSON serialization
         """
@@ -627,17 +572,9 @@ class IMUPathDataBuilder:
             self._rebuild_segmentation(segment_method)
             self.segment_method = segment_method
         
-        # Get downsampling config from cfg if available
-        if self.cfg and hasattr(self.cfg, 'IMU_VISUALIZATION_PARAMS'):
-            max_display_points = self.cfg.IMU_VISUALIZATION_PARAMS.get(
-                'max_display_points', max_display_points)
-        
-        # Build path points (downsampled for display)
-        display_indices = self._downsample_points(
-            np.arange(len(self.path_data.timestamp)), max_display_points)
-        
+        # Build path points from all records
         path_points = []
-        for idx in display_indices:
+        for idx in range(len(self.path_data.timestamp)):
             # heading is in math coordinates (0° = right/+X, 90° = forward/+Y)
             # Convert back to IMU yaw for display (0° = forward/+Y)
             heading_rad = float(self.path_data.heading[idx])
@@ -706,7 +643,6 @@ class IMUPathDataBuilder:
             'num_laps': self.num_laps_for_mean,
             'total_laps': self.multilap_data.num_laps,
             'total_points': len(self.path_data.timestamp),
-            'display_points': len(path_points),
             'num_segments': self.segmentation.num_segments,
             'mean_course_length': float(self.mean_course.length),
             'total_distance': float(self.path_data.total_distance),
@@ -745,10 +681,10 @@ class IMUPathDataBuilder:
 
 def prepare_imupath_data(path_data, cfg=None, lap_method='y_crossing',
                         segment_method='gradient', tub_path=None,
-                        num_laps=None, max_display_points=1000):
+                        num_laps=None):
     """
     Convenience function to prepare IMU path data for web visualization.
-    
+
     Args:
         path_data: PathData object
         cfg: Configuration object
@@ -756,8 +692,7 @@ def prepare_imupath_data(path_data, cfg=None, lap_method='y_crossing',
         segment_method: Segmentation method
         tub_path: Path to Tub directory
         num_laps: Number of laps for mean course
-        max_display_points: Maximum points for display
-        
+
     Returns:
         JSON-ready dictionary
     """
@@ -768,9 +703,7 @@ def prepare_imupath_data(path_data, cfg=None, lap_method='y_crossing',
         segment_method=segment_method,
         tub_path=tub_path
     )
-    
     return builder.build_json_payload(
         num_laps=num_laps,
-        segment_method=segment_method,
-        max_display_points=max_display_points
+        segment_method=segment_method
     )

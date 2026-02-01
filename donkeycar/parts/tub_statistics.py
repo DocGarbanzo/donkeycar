@@ -628,17 +628,20 @@ class TubStatistics(object):
                 segment = self._compute_segment_from_metadata(
                     record, session_id, assigners, prev_segments)
                 if segment is None:
+                    record_idx += 1
                     continue  # No segmentation data for this session
 
             # Handle state changes (early continue on change)
             if tracker.handle_session_change(
                 session_id, lap, segment, timestamp_ms, distance,
                 segment_instances, self._finalize_segment_instance):
+                record_idx += 1
                 continue
 
             if tracker.handle_lap_change(
                 lap, segment, timestamp_ms, distance, segment_instances,
                 self._finalize_segment_instance):
+                record_idx += 1
                 continue
 
             if tracker.handle_segment_change(

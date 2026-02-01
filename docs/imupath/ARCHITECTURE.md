@@ -36,8 +36,8 @@
 │  │ InteractiveIMU     │                 │ IMUPathDataBuilder│       │
 │  │ Visualizer         │                 │                   │       │
 │  │                    │                 │ • JSON generator  │       │
-│  │ • _run_web_mode()  │◄────────────────┤ • Downsampler     │       │
-│  │   calls builder    │                 │ • Metadata        │       │
+│  │ • _run_web_mode()  │◄────────────────┤ • Metadata        │       │
+│  │   calls builder    │                 │                   │       │
 │  └────────┬───────────┘                 └───────┬───────────┘       │
 │           │                                      │                    │
 └───────────┼──────────────────────────────────────┼───────────────────┘
@@ -124,9 +124,6 @@
 ├────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
 │  config.py                                                             │
-│  ├─ IMU_VISUALIZATION_PARAMS                                          │
-│  │  └─ max_display_points: 1000  ◄───── Downsampling control         │
-│  │                                                                      │
 │  ├─ FIELD_AGGREGATIONS           ◄───── Segment stats (Tub only)      │
 │  │  └─ time, gyro_z, distance                                         │
 │  │                                                                      │
@@ -163,8 +160,7 @@
 │  2. OPT-IN: --web flag, default behavior unchanged                    │
 │  3. ADDITIVE: No modifications to existing matplotlib code            │
 │  4. MINIMAL: Reuse tornado server, no new dependencies                │
-│  5. CONFIGURABLE: Respect IMU_VISUALIZATION_PARAMS                    │
-│  6. TESTABLE: Unit tests, manual tests, syntax validation             │
+│  5. TESTABLE: Unit tests, manual tests, syntax validation             │
 │  7. DOCUMENTED: README, testing guide, inline comments                │
 │                                                                         │
 └────────────────────────────────────────────────────────────────────────┘
@@ -177,7 +173,6 @@
 **IMUPathDataBuilder** (`donkeycar/web/imupath_data.py`)
 - Initializes data processing pipeline
 - Builds JSON payloads for visualization
-- Handles downsampling for display
 - Manages lap/segment metadata
 - Supports dynamic reconfiguration
 
@@ -192,7 +187,7 @@
 
 **IMUPathDataAPI**
 - JSON endpoint (`/api/imupath/data`)
-- Query parameters: num_laps, segment_method, max_display_points
+- Query parameters: num_laps, segment_method
 - Returns structured JSON payload
 
 **ImuPathCommand** (`donkeycar/management/imupath.py`)
