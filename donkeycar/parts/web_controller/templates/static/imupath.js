@@ -29,6 +29,8 @@ let appState = {
   resizeTimer: null,
   plotUpdateTimer: null,  // Debounce timer for plot updates
   pendingPlotUpdate: false,  // Flag for pending plot update
+  // Debug: track lap changes
+  lastLapNum: null,
 };
 
 /**
@@ -64,14 +66,29 @@ function formatTime(unixTimestamp) {
 }
 
 /**
- * Find the start index for a given lap
+ * Find the start index for a given lap.
+ *
+ * Searches for the first point in the dataset with the given lap number.
+ * This assumes lap numbers are monotonically increasing (0, 1, 2, ...)
+ * based on Y-crossing lap detection.
  */
 function findLapStartIndex(lapNum) {
-  if (!appState.data || lapNum <= 0) return 0;
+  if (!appState.data) return 0;
   const pathPoints = appState.data.path_points;
+
+  // Handle null/undefined lap number
+  if (lapNum === null || lapNum === undefined) return 0;
+
+  // Search for first occurrence of this lap number
   for (let i = 0; i < pathPoints.length; i++) {
-    if (pathPoints[i].lap === lapNum) return i;
+    if (pathPoints[i].lap === lapNum) {
+      console.log(`Lap ${lapNum} starts at index ${i}, distance ${pathPoints[i].d.toFixed(3)}m`);
+      return i;
+    }
   }
+
+  // If lap not found, return 0
+  console.warn(`Lap ${lapNum} not found in path points, returning index 0`);
   return 0;
 }
 
@@ -94,12 +111,20 @@ function updateCurrentPositionMarker(point) {
 
 /**
  * Get segment ranking for the current point using computed rankings.
+ *
+ * Note: Path points use 0-based lap numbering (0, 1, 2, ...), but
+ * segment rankings may exclude lap 0 when USE_LAP_0=False (default).
+ * In that case, rankings are stored for laps 1, 2, 3, ... which
+ * correspond to path laps 1, 2, 3, ... (path lap 0 has no ranking).
  */
 function getSegmentRanking(point) {
   if (!appState.segmentRankings) return null;
   if (point.lap === null || point.segment === null) return null;
 
+  // Look up ranking using path lap number directly
   const lapRanks = appState.segmentRankings[String(point.lap)];
+
+  // If no ranking found for this lap, it may be excluded (e.g., lap 0)
   if (!lapRanks) return null;
 
   const segRanks = lapRanks[String(point.segment)];
@@ -792,6 +817,13 @@ function updateDisplayForPoint(closestIdx, point) {
   const lapStartDist = pathPoints[lapStartIdx].d;
   const lapDist = point.d - lapStartDist;
   $('#current-lap-dist').text(lapDist.toFixed(3) + 'm');
+
+  // Debug: log lap changes
+  if (!appState.lastLapNum || appState.lastLapNum !== lapNum) {
+    console.log(`LAP CHANGE: ${appState.lastLapNum || 'start'} → ${lapNum} at index ${closestIdx}, segment ${point.segment}`);
+    console.log(`  Lap start index: ${lapStartIdx}, distance from start: ${lapDist.toFixed(3)}m`);
+    appState.lastLapNum = lapNum;
+  }
 
   // Update segment rank if available
   const segRank = getSegmentRanking(point);
