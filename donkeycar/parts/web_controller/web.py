@@ -137,6 +137,7 @@ class LocalWebController(tornado.web.Application):
             (r"/video", VideoAPI),
             (r"/wsTest", WsTest),
             (r"/imupath", IMUPathHandler),
+            (r"/imupath/docs", IMUPathDocsHandler),
             (r"/api/imupath/data", IMUPathDataAPI),
             (r"/api/imupath/fields", IMUPathFieldsAPI),
             (r"/api/imupath/stats", IMUPathStatsAPI),
@@ -412,6 +413,14 @@ class IMUPathHandler(RequestHandler):
     async def get(self):
         data = {}
         await self.render("templates/imupath.html", **data)
+
+
+class IMUPathDocsHandler(RequestHandler):
+    """Serves the IMU path visualizer user documentation."""
+
+    async def get(self):
+        data = {}
+        await self.render("templates/imupath_docs.html", **data)
 
 
 class IMUPathFieldsAPI(RequestHandler):

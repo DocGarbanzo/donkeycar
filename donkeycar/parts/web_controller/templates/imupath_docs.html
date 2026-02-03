@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IMU Path Visualizer - User Guide</title>
+  <style>
+    body {
+      background-color: #1a1a1a;
+      color: #e0e0e0;
+      font-family: 'Courier New', monospace;
+      margin: 0;
+      padding: 20px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background-color: #2a2a2a;
+      padding: 30px;
+      border-radius: 8px;
+    }
+
+    h1 {
+      color: #4CAF50;
+      border-bottom: 2px solid #4CAF50;
+      padding-bottom: 10px;
+      margin-top: 0;
+    }
+
+    h2 {
+      color: #64B5F6;
+      margin-top: 30px;
+      border-bottom: 1px solid #444;
+      padding-bottom: 5px;
+    }
+
+    h3 {
+      color: #FFB74D;
+      margin-top: 20px;
+    }
+
+    code {
+      background-color: #1a1a1a;
+      padding: 2px 6px;
+      border-radius: 3px;
+      color: #4CAF50;
+    }
+
+    .feature-box {
+      background-color: #333;
+      padding: 15px;
+      margin: 15px 0;
+      border-left: 3px solid #4CAF50;
+      border-radius: 4px;
+    }
+
+    .control-desc {
+      background-color: #1a1a1a;
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 4px;
+    }
+
+    .control-name {
+      color: #FFB74D;
+      font-weight: bold;
+    }
+
+    ul, ol {
+      margin: 10px 0;
+    }
+
+    li {
+      margin: 5px 0;
+    }
+
+    .back-link {
+      display: inline-block;
+      margin-top: 30px;
+      padding: 8px 16px;
+      background-color: #4CAF50;
+      color: white;
+      text-decoration: none;
+      border-radius: 4px;
+    }
+
+    .back-link:hover {
+      background-color: #66BB6A;
+    }
+
+    .tip {
+      background-color: #1a3a4a;
+      border-left: 3px solid #64B5F6;
+      padding: 10px;
+      margin: 15px 0;
+    }
+
+    .warning {
+      background-color: #4a2a1a;
+      border-left: 3px solid #FFB74D;
+      padding: 10px;
+      margin: 15px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📊 IMU Path Visualizer - User Guide</h1>
+
+    <h2>Overview</h2>
+    <p>
+      The IMU Path Visualizer helps you analyze your car's recorded driving
+      sessions. It displays your driving path, detects laps automatically,
+      segments the course into sections, and ranks your performance in each
+      segment.
+    </p>
+
+    <h2>Basic Controls</h2>
+
+    <div class="control-desc">
+      <span class="control-name">Play/Pause Button</span><br>
+      Start or stop automatic playback through your recorded path.
+    </div>
+
+    <div class="control-desc">
+      <span class="control-name">Time Slider</span><br>
+      Drag to navigate to any point in your recording. You can also use
+      keyboard arrow keys (← →) for frame-by-frame navigation.
+    </div>
+
+    <div class="control-desc">
+      <span class="control-name">Laps Selector</span><br>
+      Choose how many laps to use for computing the mean reference course.
+      The mean course is shown in cyan and represents the average path across
+      the selected number of laps.
+    </div>
+
+    <div class="control-desc">
+      <span class="control-name">Segments Selector</span><br>
+      Choose the algorithm for dividing the course into segments:
+      <ul>
+        <li><b>Threshold</b>: Segments based on curvature thresholds</li>
+        <li><b>Extrema</b>: Segments at curvature peaks/valleys</li>
+        <li><b>Gradient</b>: Segments where curvature changes rapidly</li>
+        <li><b>Hybrid</b>: Combines multiple methods (recommended)</li>
+      </ul>
+    </div>
+
+    <div class="control-desc">
+      <span class="control-name">Path/Mean Checkboxes</span><br>
+      Toggle visibility of the driven path (your actual recording) and mean
+      course (reference line).
+    </div>
+
+    <h2>Segment Performance Analysis</h2>
+
+    <div class="feature-box">
+      <h3>What are Segments?</h3>
+      <p>
+        Segments are geometric sections of your course (straights, turns,
+        chicanes). The visualizer automatically divides your course into
+        segments based on curvature analysis.
+      </p>
+    </div>
+
+    <div class="feature-box">
+      <h3>How Performance Ranking Works</h3>
+      <p>
+        For each segment, the visualizer compares how you drove it across
+        different laps. It ranks each instance from 0% (worst) to 100% (best)
+        based on the selected field and aggregation method.
+      </p>
+      <p>
+        <b>Example:</b> If you drove segment 3 in three laps with times of
+        2.1s, 1.8s, and 2.0s, the rankings would be:<br>
+        Lap 1: 0% (slowest), Lap 2: 100% (fastest), Lap 3: 50% (middle)
+      </p>
+    </div>
+
+    <h2>Advanced: Custom Segment Statistics</h2>
+
+    <p>
+      When viewing Tub data (recorded driving sessions), you can analyze
+      segment performance using any numeric field from your recordings.
+    </p>
+
+    <div class="control-desc">
+      <span class="control-name">Field Selector</span><br>
+      Choose which data field to analyze:
+      <ul>
+        <li><code>time</code> - Time spent in segment (built-in)</li>
+        <li><code>distance</code> - Distance traveled (built-in)</li>
+        <li><code>car/speed</code> - Vehicle speed data</li>
+        <li><code>imu/gyr</code> - Gyroscope data (smoothness)</li>
+        <li><code>imu/acl</code> - Accelerometer data</li>
+        <li>... any numeric field from your tub</li>
+      </ul>
+    </div>
+
+    <div class="control-desc">
+      <span class="control-name">Method Selector</span><br>
+      Choose how to aggregate the field values within each segment:
+      <ul>
+        <li><code>delta</code> - Last minus first (for time, distance)</li>
+        <li><code>mean_abs</code> - Average of absolute values</li>
+        <li><code>sum_abs</code> - Sum of absolute values</li>
+        <li><code>max</code> - Maximum value in segment</li>
+        <li><code>min</code> - Minimum value in segment</li>
+        <li><code>norm</code> - Euclidean magnitude (for vectors)</li>
+      </ul>
+    </div>
+
+    <div class="control-desc">
+      <span class="control-name">Dimension Selector</span><br>
+      For vector fields (like IMU data), choose which component to analyze:
+      <ul>
+        <li><code>X</code> - First component</li>
+        <li><code>Y</code> - Second component</li>
+        <li><code>Z</code> - Third component</li>
+        <li><code>Magnitude</code> - Combined length of vector</li>
+      </ul>
+    </div>
+
+    <div class="tip">
+      <b>💡 Tip:</b> Use <code>imu/gyr</code> Z-axis with <code>sum_abs</code>
+      to measure driving smoothness. Lower values = smoother steering.
+    </div>
+
+    <h2>Understanding the Display</h2>
+
+    <div class="feature-box">
+      <h3>Current Position Panel</h3>
+      <p>
+        Shows real-time information about the current position on the path:
+      </p>
+      <ul>
+        <li><b>Date/Time:</b> Recording timestamp</li>
+        <li><b>Index:</b> Data point number</li>
+        <li><b>Lap:</b> Current lap number (0-based)</li>
+        <li><b>Segment:</b> Current segment ID</li>
+        <li><b>Speed:</b> Vehicle speed in m/s</li>
+        <li><b>IMU Yaw:</b> Heading angle from IMU</li>
+        <li><b>X/Y:</b> Position coordinates in meters</li>
+        <li><b>Total Dist:</b> Cumulative distance traveled</li>
+        <li><b>Lap Dist:</b> Distance within current lap</li>
+        <li><b>Seg Rank:</b> Performance ranking (0-100%)</li>
+      </ul>
+    </div>
+
+    <div class="feature-box">
+      <h3>Path Visualization</h3>
+      <ul>
+        <li><b>Color-coded points:</b> Each point shows segment ranking by
+          color (red = worst, green = best)</li>
+        <li><b>Segment boundaries:</b> White lines perpendicular to the
+          course</li>
+        <li><b>Mean course:</b> Cyan line showing average path</li>
+        <li><b>Current position marker:</b> Red circle with white border</li>
+      </ul>
+    </div>
+
+    <h2>Training with Segment Performance</h2>
+
+    <div class="feature-box">
+      <p>
+        After analyzing your data, you can use segment-based training to
+        create a model that learns from the best-driven instance of each
+        segment, rather than just the best complete lap.
+      </p>
+      <ol>
+        <li>Record multiple laps with varied performance</li>
+        <li>Run: <code>donkey segment --tub ./data/</code></li>
+        <li>Enable in config: <code>SEGMENT_PCT_MODE = True</code></li>
+        <li>Train: <code>python manage.py train --tub ./data/</code></li>
+      </ol>
+      <p>
+        The model will learn a "synthetic perfect lap" combining the best
+        driving from each segment across all your laps.
+      </p>
+    </div>
+
+    <div class="warning">
+      <b>⚠️ Note:</b> Segment-based training requires segmentation data
+      to be computed first using <code>donkey segment</code> command.
+    </div>
+
+    <h2>Keyboard Shortcuts</h2>
+    <ul>
+      <li><b>←</b> (Left Arrow): Go to previous frame</li>
+      <li><b>→</b> (Right Arrow): Go to next frame</li>
+      <li><b>Space:</b> Play/Pause (when plot is focused)</li>
+    </ul>
+
+    <h2>Configuration</h2>
+
+    <div class="tip">
+      <b>💡 Advanced:</b> You can configure which fields are available
+      for segment analysis by editing <code>FIELD_AGGREGATIONS</code>
+      in your <code>config.py</code> file. Pass <code>--config
+      /path/to/config.py</code> when starting the visualizer.
+    </div>
+
+    <a href="/imupath" class="back-link">← Back to Visualizer</a>
+  </div>
+</body>
+</html>

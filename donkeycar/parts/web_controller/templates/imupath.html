@@ -103,6 +103,24 @@
       background-color: #f1c40f;
     }
 
+    .help-link {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 2px 8px;
+      color: #64B5F6;
+      text-decoration: none;
+      font-size: 10px;
+      border: 1px solid #64B5F6;
+      border-radius: 3px;
+      transition: background-color 0.2s;
+    }
+
+    .help-link:hover {
+      background-color: #1a3a4a;
+      color: #90CAF9;
+      border-color: #90CAF9;
+    }
+
     .position-panel {
       flex: 1;
       background-color: #2a2a2a;
@@ -285,6 +303,7 @@
       <div class="shutdown-box">
         <button class="shutdown-btn" id="shutdown-btn">Shutdown</button>
         <button class="restart-btn" id="restart-btn">Server Restart</button>
+        <a href="/imupath/docs" target="_blank" class="help-link">📖 User Guide</a>
       </div>
       <div class="position-panel">
         <div class="info-title">Current Position</div>
