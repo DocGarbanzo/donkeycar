@@ -60,17 +60,14 @@ class TestSegmentationTrainingIntegration(unittest.TestCase):
         cfg.USE_LAP_0 = False
         cfg.TRAIN_TEST_SPLIT = 0.8
         cfg.FIELD_AGGREGATIONS = [
+            {'output_key': 'time'},      # Boundary field
+            {'output_key': 'distance'},  # Boundary field
             {
                 'field': 'car/gyro',
                 'output_key': 'gyro_z_agg',
                 'index': 1,
                 'aggregation': 'avg'
             }
-        ]
-        cfg.LAP_SORTING_CRITERIA = [
-            {'key': 'time'},
-            {'key': 'distance'},
-            {'key': 'gyro_z_agg'},
         ]
         return cfg
 

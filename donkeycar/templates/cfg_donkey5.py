@@ -293,6 +293,66 @@ CACHE_IMAGES = True
 CACHE_POLICY = "ARRAY"
 USE_LAP_0 = False
 
+# SEGMENT-BASED PERFORMANCE RANKING
+# Enable segment-based training (train on best segments across laps)
+SEGMENT_PCT_MODE = False  # True = segment-based, False = lap-based
+
+# FIELD AGGREGATIONS FOR LAP/SEGMENT PERFORMANCE
+# This is the SINGLE SOURCE OF TRUTH for:
+# 1. Which fields to aggregate per lap/segment
+# 2. How to rank laps/segments (order matters - first field is primary)
+# 3. What goes into the lap_pct vector for training
+
+# Field aggregation specifications
+# Two types of fields:
+# - Boundary fields: computed from lap/segment timing (no 'field' key)
+#   Time and distance are computed as deltas automatically (end - start)
+#   No 'aggregation' needed - they bypass record accumulation
+# - Record fields: extracted from individual records ('field' key present)
+#   Accumulated across records using specified aggregation method
+FIELD_AGGREGATIONS = [
+    # Primary: lap/segment time (lower is better)
+    {
+        'output_key': 'time',
+        # No 'field' key = boundary field
+        # Computed as: (end_timestamp - start_timestamp) / 1000.0
+    },
+    # Secondary: lap/segment distance (lower is better for same time)
+    {
+        'output_key': 'distance',
+        # No 'field' key = boundary field
+        # Computed as: end_distance - start_distance
+    },
+    # Tertiary: smoothness via gyroscope Z-axis (lower is smoother)
+    {
+        'field': 'car/gyro',
+        'index': 2,                    # Z-axis index
+        'output_key': 'gyro_z_agg',
+        'transform': abs,              # Built-in abs function
+        'aggregation': 'avg'           # avg, sum, min, max, median, delta
+    }
+]
+
+# Example: Custom field aggregations
+# To rank by acceleration smoothness instead of gyro:
+# FIELD_AGGREGATIONS = [
+#     {'output_key': 'time'},
+#     {'output_key': 'distance'},
+#     {
+#         'field': 'car/accel',
+#         'index': 0,                  # X-axis acceleration
+#         'output_key': 'accel_x_agg',
+#         'transform': abs,            # Use built-in abs
+#         'aggregation': 'avg'
+#     }
+# ]
+#
+# To use only time and distance (no behavioral metrics):
+# FIELD_AGGREGATIONS = [
+#     {'output_key': 'time'},
+#     {'output_key': 'distance'}
+# ]
+
 # model transfer options
 FREEZE_LAYERS = False
 NUM_LAST_LAYERS_TO_TRAIN = 7

@@ -473,9 +473,10 @@ Visualizes recorded vehicle trajectories, detects laps, computes mean reference
 courses, and segments courses into geometric features.
 
 **Segment stats:** For Tub data, imupath computes segment performance on the
-fly using `FIELD_AGGREGATIONS` and `LAP_SORTING_CRITERIA`. It loads
-`./config.py` by default; pass `--config` to use another config and include
-custom tub fields in the Segment Stats selector.
+fly using `FIELD_AGGREGATIONS` (the single source of truth for both field
+aggregation and ranking). It loads `./config.py` by default; pass `--config`
+to use another config and include custom tub fields in the Segment Stats
+selector.
 Web UI segment stats use TubStatistics session rankings from manifest
 metadata, so `donkey segment` must have stored segmentation data for the
 session.
@@ -602,11 +603,17 @@ lap" that outperforms any single recorded lap.
 **Data Structure:**
 - Segment assignments stored in manifest metadata (NOT in catalog records)
 - Metadata stores: segmentation parameters, segment boundaries, rankings
-- Performance rankings: `session_rank[session_id][lap_num][segment_id] =
-  [time_pct, gyro_z_pct, distance_pct]`
+- Performance rankings computed from FIELD_AGGREGATIONS:
+  `session_rank[session_id][lap_num][segment_id] = {field1_pct, field2_pct, ...}`
+- The `lap_pct` vector passed to training matches FIELD_AGGREGATIONS order:
+  `[time_pct, distance_pct, gyro_z_pct, ...]`
 
 **IMPORTANT:** See "Tub Data Integrity" section - segment data is computed at
 training time from manifest metadata, NOT stored in individual records.
+
+**Single source of truth:** `FIELD_AGGREGATIONS` defines both what gets
+aggregated AND how laps/segments are ranked. The order of entries determines
+ranking priority (first entry is primary sort key).
 
 **Example:** 3 laps, 4 segments per lap
 
@@ -625,16 +632,48 @@ segment!
 
 ### Configuration
 
-`donkeycar/templates/cfg_complete.py`:
+**Primary config:** `donkeycar/templates/cfg_donkey5.py` (cfg_complete.py uses
+deprecated LAP_SORTING_CRITERIA for backward compatibility)
 
 ```python
-#SEGMENT PERFORMANCE
-SEGMENT_PCT_MODE = False  # True = segment-based, False = lap-based
-SEGMENT_STRATEGY = 'hybrid'  # threshold, extrema, gradient, or hybrid
-SEGMENT_LAP_DETECTOR = 'ycrossing'  # ycrossing or drift
-SEGMENT_MIN_LENGTH = 1.0  # Minimum segment length in meters
-SEGMENT_CURVATURE_THRESHOLD = 0.1  # Curvature threshold for segmentation
+# Enable segment-based training
+SEGMENT_PCT_MODE = True  # True = segment-based, False = lap-based
+
+# FIELD_AGGREGATIONS: Single source of truth for:
+# 1. Which fields to aggregate per lap/segment
+# 2. How to rank laps/segments (order matters!)
+# 3. What goes into the lap_pct vector for training
+
+def abs_transform(value):
+    return abs(value)
+
+FIELD_AGGREGATIONS = [
+    # Primary ranking: lap/segment time
+    {'output_key': 'time'},        # Boundary field (no 'field' key)
+    # Secondary ranking: distance
+    {'output_key': 'distance'},    # Boundary field
+    # Tertiary ranking: smoothness via gyro Z-axis
+    {
+        'field': 'car/gyro',       # Record field
+        'index': 2,
+        'output_key': 'gyro_z_agg',
+        'transform': abs_transform,
+        'aggregation': 'avg'
+    }
+]
+
+# To train using ONLY time and distance (no behavioral metrics):
+# FIELD_AGGREGATIONS = [
+#     {'output_key': 'time'},
+#     {'output_key': 'distance'}
+# ]
 ```
+
+**Field types:**
+- **Boundary fields**: Computed from lap/segment timing (time, distance).
+  No 'field' key.
+- **Record fields**: Extracted from tub records (gyro, accel, speed). Have
+  'field' key.
 
 ### Iterative Training Strategy
 

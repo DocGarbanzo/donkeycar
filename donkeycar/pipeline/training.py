@@ -144,9 +144,20 @@ def train(cfg: Config, tub_paths: str, model: str = None,
     elif add_lap_pct or getattr(cfg, 'LAP_QUANTIFIER', None) is not None:
         pct_mode = PctMode.LAP
 
+    # Extract ranking keys from FIELD_AGGREGATIONS (single source of truth)
+    ranking_keys = None
+    if hasattr(cfg, 'FIELD_AGGREGATIONS') and cfg.FIELD_AGGREGATIONS:
+        ranking_keys = [spec['output_key'] for spec in cfg.FIELD_AGGREGATIONS]
+        logger.info(f'Extracted ranking keys from FIELD_AGGREGATIONS: '
+                    f'{ranking_keys}')
+    else:
+        logger.warning('No FIELD_AGGREGATIONS in config - lap_pct will not be '
+                      'populated. Define FIELD_AGGREGATIONS in your config.')
+
     dataset = TubDataset(config=cfg, tub_paths=all_tub_paths,
                          seq_size=kl.seq_size(),
                          add_lap_pct=add_lap_pct,
+                         ranking_keys=ranking_keys,
                          pct_mode=pct_mode)
     train_records, val_records \
         = train_test_split(dataset.get_records(), shuffle=True,

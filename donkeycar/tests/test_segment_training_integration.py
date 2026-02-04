@@ -62,6 +62,8 @@ class TestSegmentTrainingEndToEnd(unittest.TestCase):
         cfg.TRAIN_TEST_SPLIT = 0.8
         cfg.SEGMENT_PCT_MODE = True
         cfg.FIELD_AGGREGATIONS = [
+            {'output_key': 'time'},      # Boundary field
+            {'output_key': 'distance'},  # Boundary field
             {
                 'field': 'car/gyro',
                 'output_key': 'gyro_z_agg',

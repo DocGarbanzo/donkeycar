@@ -775,11 +775,6 @@ SEGMENT_CURVATURE_THRESHOLD = 0.1  # Curvature threshold for segmentation
 #Configure which tub fields to aggregate per lap/segment and how to rank them
 #This enables custom behavioral parameters for training (e.g., smoothness, speed, accel)
 
-# Define transform functions (like TRAIN_FILTER pattern)
-def abs_transform(value):
-    """Absolute value transform."""
-    return abs(value)
-
 # Default field aggregations (can be customized)
 # DEPRECATED: GYRO_Z_INDEX is superseded by FIELD_AGGREGATIONS
 # To maintain backward compatibility, this config uses GYRO_Z_INDEX if FIELD_AGGREGATIONS is not specified
@@ -788,13 +783,15 @@ FIELD_AGGREGATIONS = [
         'field': 'car/gyro',
         'index': 2,                    # Z-axis (default GYRO_Z_INDEX)
         'output_key': 'gyro_z_agg',
-        'transform': abs_transform,
+        'transform': abs,              # Built-in abs function
         'aggregation': 'avg'           # Options: avg, sum, min, max, median
     }
 ]
 
-# Sorting criteria for ranking laps/segments
-# These keys must match the 'output_key' values in FIELD_AGGREGATIONS
+# DEPRECATED: LAP_SORTING_CRITERIA is obsolete
+# Use FIELD_AGGREGATIONS as the single source of truth instead.
+# FIELD_AGGREGATIONS defines both aggregation AND ranking criteria.
+# This setting is kept for backward compatibility only.
 LAP_SORTING_CRITERIA = [
     {'key': 'time'},                   # Primary: lap time
     {'key': 'distance'},               # Secondary: distance traveled
@@ -811,21 +808,21 @@ LAP_SORTING_CRITERIA = [
 #         'field': 'car/gyro',
 #         'index': 2,
 #         'output_key': 'gyro_z_agg',
-#         'transform': abs_transform,
+#         'transform': abs,            # Built-in abs
 #         'aggregation': 'avg'
 #     },
 #     {
 #         'field': 'car/accel',
 #         'index': 0,                  # X-axis acceleration
 #         'output_key': 'accel_x_sum',
-#         'transform': clip_1g_transform,
+#         'transform': clip_1g_transform,  # Custom transform
 #         'aggregation': 'sum'
 #     },
 #     {
 #         'field': 'car/speed',
 #         'index': None,               # Scalar field
 #         'output_key': 'speed_min',
-#         'transform': None,
+#         'transform': None,           # No transform needed
 #         'aggregation': 'min'
 #     }
 # ]

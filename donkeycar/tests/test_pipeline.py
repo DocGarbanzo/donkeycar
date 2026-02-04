@@ -381,17 +381,14 @@ class TestTubDatasetSortingAndTransformation(unittest.TestCase):
         config.COMPRESS_SESSIONS_FOR_LAP_STATS = False
         config.NUM_BINS_FOR_LAP_STATS = None
         config.FIELD_AGGREGATIONS = [
+            {'output_key': 'time'},      # Boundary field
+            {'output_key': 'distance'},  # Boundary field
             {
                 'field': 'car/gyro',
                 'output_key': 'gyro_z_agg',
                 'index': 1,
                 'aggregation': 'avg'
             }
-        ]
-        config.LAP_SORTING_CRITERIA = [
-            {'key': 'time'},
-            {'key': 'distance'},
-            {'key': 'gyro_z_agg'},
         ]
 
         dataset = TubDataset(config, [self.test_path], add_lap_pct=True)

@@ -188,10 +188,10 @@ class TubRecord(object):
                                 For LAP mode: {session_id: {lap: rankings}}
                                 For SEGMENT mode: {session_id: {lap: {segment:
                                 rankings}}}
-        :param ranking_keys: Optional list of keys to extract for lap_pct.
-                           If None, uses default ('time', 'distance',
-                           'gyro_z_agg')
-                           for backward compatibility.
+        :param ranking_keys: List of keys to extract for lap_pct. Should match
+                           output_key values from FIELD_AGGREGATIONS in config.
+                           If None, auto-extracts keys from first available
+                           ranking dict (backward compatibility).
         :param pct_mode: Performance mode (NONE, LAP, or SEGMENT)
         :param segment_id: Pre-computed segment ID (for SEGMENT mode).
                           If provided, uses instead of reading record.
@@ -202,9 +202,12 @@ class TubRecord(object):
         session_id = self.underlying['_session_id']
         lap_i = self.underlying.get('car/lap', 0)
 
-        # Use default keys for backward compatibility
-        if ranking_keys is None:
-            ranking_keys = ('time', 'distance', 'gyro_z_agg')
+        # Auto-extract ranking_keys if not provided (backward compatibility)
+        if ranking_keys is None and session_lap_rank:
+            ranking_keys = self._extract_ranking_keys(session_lap_rank,
+                                                      pct_mode, segment_id)
+            if ranking_keys is None:
+                return False  # Couldn't determine keys
 
         if pct_mode == PctMode.SEGMENT:
             # Use passed segment_id if provided, otherwise read from record
@@ -236,6 +239,34 @@ class TubRecord(object):
                     return True  # Successfully populated lap_pct
 
             return False  # Couldn't populate lap_pct, exclude from training
+
+    def _extract_ranking_keys(self, session_lap_rank, pct_mode, segment_id):
+        """
+        Extract ranking keys from session_lap_rank dict (backward compat).
+
+        :return: List of ranking keys or None if can't be determined
+        """
+        session_id = self.underlying['_session_id']
+        lap_i = self.underlying.get('car/lap', 0)
+
+        try:
+            if pct_mode == PctMode.SEGMENT:
+                # Try to get segment rankings
+                if segment_id is None:
+                    segment_id = self.underlying.get('car/segment')
+                if segment_id is None:
+                    return None
+                lap_dict = session_lap_rank.get(session_id, {}).get(lap_i)
+                if lap_dict and segment_id in lap_dict:
+                    return list(lap_dict[segment_id].keys())
+            else:
+                # LAP mode or fallback
+                lap_i_dict = session_lap_rank.get(session_id, {}).get(lap_i)
+                if lap_i_dict and isinstance(lap_i_dict, dict):
+                    return list(lap_i_dict.keys())
+        except (KeyError, TypeError, AttributeError):
+            pass
+        return None
 
     def __repr__(self) -> str:
         return repr(self.underlying)

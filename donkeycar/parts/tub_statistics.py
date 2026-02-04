@@ -125,15 +125,32 @@ class SegmentTracker:
 
 @dataclass
 class FieldAggregationSpec:
-    """Specification for aggregating a field across lap/segment."""
-    field: str                           # e.g., 'car/gyro'
-    output_key: str                      # e.g., 'gyro_z_agg'
+    """
+    Specification for aggregating a field across lap/segment.
+
+    Two types of fields:
+    1. Boundary fields: computed from lap/segment boundaries (time, distance)
+       - No 'field' attribute (field=None)
+       - Computed in _finalize_segment_instance()
+    2. Record fields: extracted from individual records (gyro, accel, etc.)
+       - Has 'field' attribute (e.g., 'car/gyro')
+       - Aggregated across records in _aggregate_single_field()
+    """
+    output_key: str                      # e.g., 'gyro_z_agg' or 'time'
+    field: Optional[str] = None          # e.g., 'car/gyro' (None for boundary)
     index: Optional[int] = None          # Vector index (None for scalars)
     transform: Optional[Callable] = None # Transform function
     aggregation: str = 'avg'             # avg, sum, min, max, median, delta
+    reverse: bool = False                # For sorting: True = descending
+
+    def is_boundary_field(self) -> bool:
+        """Check if this is a boundary field (time/distance)."""
+        return self.field is None
 
     def extract(self, record: dict) -> Optional[float]:
         """Extract and transform value from record."""
+        if self.is_boundary_field():
+            return None  # Boundary fields are not extracted from records
         try:
             value = record[self.field]
             if self.index is not None:
@@ -193,9 +210,10 @@ class TubStatistics(object):
         Construct tub statistics calculator for tub
 
         :param tub:                 input tub
-        :param config:              Config object (loads FIELD_AGGREGATIONS,
-                                    LAP_SORTING_CRITERIA). Required if
-                                    field_aggregations not provided.
+        :param config:              Config object (loads FIELD_AGGREGATIONS).
+                                    FIELD_AGGREGATIONS is the single source of
+                                    truth for both aggregation and ranking.
+                                    Required if field_aggregations not provided.
         :param sorting_strategy:    Optional custom sorting strategy
         :param field_aggregations:  Optional list of FieldAggregationSpec or
                                     dicts. Required if config not provided.
@@ -233,7 +251,8 @@ class TubStatistics(object):
                                          FieldAggregationSpec]:
         """Convert dict specs to FieldAggregationSpec.
 
-        :raises ValueError: If old-style extractor syntax is used.
+        :raises ValueError: If old-style extractor syntax is used or required
+                           fields are missing.
         """
         normalized = []
         for spec in field_aggregations:
@@ -245,12 +264,17 @@ class TubStatistics(object):
                         f'Old-style field_aggregations with "extractor" '
                         f'not supported for field {spec.get("field", "?")}. '
                         f'Use "index" parameter instead.')
+                if 'output_key' not in spec:
+                    raise ValueError(
+                        f'Field aggregation missing required "output_key": '
+                        f'{spec}')
                 normalized.append(FieldAggregationSpec(
-                    field=spec['field'],
                     output_key=spec['output_key'],
+                    field=spec.get('field'),  # None for boundary fields
                     index=spec.get('index'),
                     transform=spec.get('transform'),
-                    aggregation=spec.get('aggregation', 'avg')
+                    aggregation=spec.get('aggregation', 'avg'),
+                    reverse=spec.get('reverse', False)
                 ))
         return normalized
 
@@ -266,37 +290,60 @@ class TubStatistics(object):
             raise ValueError(
                 'FIELD_AGGREGATIONS not found in config. '
                 'Please define FIELD_AGGREGATIONS in your config file. '
-                'Example: FIELD_AGGREGATIONS = [{"field": "car/gyro", '
-                '"output_key": "gyro_z_agg", "index": 1, "aggregation": "avg"}]')
+                'Example: FIELD_AGGREGATIONS = [\n'
+                '  {"output_key": "time"},  # Boundary field\n'
+                '  {"output_key": "distance"},\n'
+                '  {"field": "car/gyro", "output_key": "gyro_z_agg", '
+                '"index": 2, "aggregation": "avg"}\n'
+                ']')
 
-        # Convert config dicts to FieldAggregationSpec
-        specs = []
-        for spec_dict in config_specs:
-            spec = FieldAggregationSpec(
-                field=spec_dict['field'],
-                output_key=spec_dict['output_key'],
-                index=spec_dict.get('index'),
-                transform=spec_dict.get('transform'),
-                aggregation=spec_dict.get('aggregation', 'avg')
-            )
-            specs.append(spec)
-            logger.info(f'Loaded field aggregation: {spec.output_key} from '
-                       f'{spec.field}[{spec.index}] using {spec.aggregation}')
+        # Use normalization method for consistency
+        specs = self._normalize_field_aggregations(config_specs)
+
+        for spec in specs:
+            if spec.is_boundary_field():
+                logger.info(f'Loaded boundary field: {spec.output_key}')
+            else:
+                logger.info(
+                    f'Loaded field aggregation: {spec.output_key} from '
+                    f'{spec.field}[{spec.index}] using {spec.aggregation}')
 
         return specs
 
     def _load_sorting_strategy_from_config(self, config) -> SortingStrategy:
-        """Load sorting strategy from config."""
-        criteria = getattr(config, 'LAP_SORTING_CRITERIA', None)
-        if criteria:
-            logger.info(f'Loaded sorting criteria from config: '
-                       f'{[c["key"] for c in criteria]}')
+        """
+        Load sorting strategy from config.
+
+        Strategy is built from FIELD_AGGREGATIONS (single source of truth).
+        For backward compatibility, falls back to LAP_SORTING_CRITERIA if found.
+        """
+        # Check for deprecated LAP_SORTING_CRITERIA
+        old_criteria = getattr(config, 'LAP_SORTING_CRITERIA', None)
+        if old_criteria:
+            logger.warning(
+                'LAP_SORTING_CRITERIA is DEPRECATED. '
+                'Use FIELD_AGGREGATIONS instead as the single source of truth. '
+                'Add time/distance as boundary fields: '
+                '{"output_key": "time"}, {"output_key": "distance"}')
+            return SortingStrategy(old_criteria)
+
+        # Build strategy from FIELD_AGGREGATIONS
+        if self.field_aggregations:
+            criteria = []
+            for spec in self.field_aggregations:
+                criteria.append({
+                    'key': spec.output_key,
+                    'transform': spec.transform or (lambda x: x),
+                    'reverse': spec.reverse
+                })
+            logger.info(
+                f'Built sorting strategy from FIELD_AGGREGATIONS: '
+                f'{[c["key"] for c in criteria]}')
             return SortingStrategy(criteria)
-        else:
-            logger.info('No LAP_SORTING_CRITERIA in config, using minimal '
-                       'defaults (time, distance). Configure LAP_SORTING_CRITERIA '
-                       'in config to include custom fields like gyro_z_agg.')
-            return default_lap_sorting_strategy()
+
+        # Should never reach here due to validation in __init__
+        logger.error('No field aggregations available for sorting strategy')
+        return default_lap_sorting_strategy()
 
     def generate_laptimes_from_records(self, overwrite=False):
 
@@ -803,11 +850,16 @@ class TubStatistics(object):
 
         Generic implementation that handles any field with custom
         extractor and transform functions.
-        """
-        logger.info(f'Calculating {len(self.field_aggregations)} field '
-                    f'aggregations in tub {self.tub.base_path}')
 
-        for field_spec in self.field_aggregations:
+        Boundary fields (time, distance) are skipped here - they're
+        computed in _finalize_segment_instance().
+        """
+        record_fields = [spec for spec in self.field_aggregations
+                        if not spec.is_boundary_field()]
+        logger.info(f'Calculating {len(record_fields)} field aggregations '
+                    f'from records in tub {self.tub.base_path}')
+
+        for field_spec in record_fields:
             self._aggregate_single_field(field_spec)
 
     def _aggregate_single_field(self, spec: FieldAggregationSpec):
