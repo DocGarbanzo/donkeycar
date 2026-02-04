@@ -30,6 +30,7 @@ or test functions. It is imported by test files.
 ### 2.2 Constants
 
 ```python
+import math
 import numpy as np
 
 # Minimal image to satisfy image_array type without I/O overhead
@@ -58,173 +59,312 @@ MINIMAL_INPUTS = [
 MINIMAL_TYPES = [
     'int', 'float', 'vector', 'vector', 'float',
 ]
+
+# ── Realistic sensor ranges from real RC car hardware ──────────
+# Source: donkeycar/parts/imu.py, cfg_donkey5.py, real tub data
+#
+# These define the physical envelope. Generated data MUST stay
+# within these bounds, and the generator validates this.
+
+SENSOR_RANGES = {
+    # car/speed: 0 to MAX_SPEED (cfg_donkey5.py MAX_SPEED = 4.4)
+    'speed_min': 0.0,
+    'speed_max': 4.4,          # m/s
+
+    # car/gyro: IMU_GYRO_NORM = 250 °/s → normalized ±1.0
+    # Real driving: typically ±0.8 normalized in tight turns
+    'gyro_min': -1.0,
+    'gyro_max': 1.0,           # normalized
+
+    # car/accel: IMU_ACCEL_NORM = 20 m/s² → normalized ±1.0
+    # Real driving: longitudinal ±0.3, lateral ±0.5 normalized
+    'accel_min': -1.0,
+    'accel_max': 1.0,          # normalized
+
+    # _timestamp_ms delta: 50-200ms between records (5-20 Hz)
+    'dt_ms_min': 50,
+    'dt_ms_max': 200,
+
+    # car/distance delta: depends on speed * dt
+    # At max speed 4.4 m/s and dt=0.1s → 0.44m per record
+    'distance_delta_max': 1.0,  # m per record (generous bound)
+}
+
+# Physical constants for deriving sensor values
+# Centripetal acceleration: a_y = v² * curvature
+# Yaw rate: gyro_z = v * curvature (rad/s, pre-normalization)
+# Longitudinal accel: a_x = dv/dt
+IMU_GYRO_NORM = 250.0     # °/s → normalized
+IMU_ACCEL_NORM = 20.0     # m/s² → normalized
 ```
 
 ### 2.3 `DrivingProfile` dataclass
 
 ```python
-from dataclasses import dataclass, field
-from typing import Optional, Callable, List
+from dataclasses import dataclass
+from typing import Optional, List
 
 @dataclass
 class DrivingProfile:
     """
-    Parameterizes driving behavior for one segment.
+    Parameterizes driving behavior for one segment using
+    TRAJECTORY parameters. Sensor values are DERIVED from these
+    using physics, not specified directly.
 
-    All values are physical quantities, not raw sensor readings.
-    The record generator converts these into correlated sensor
-    values.
+    The key insight: we parameterize what the car DOES (speed,
+    curvature, braking) and compute what the sensors MEASURE.
+    This guarantees physical consistency.
     """
-    speed: float = 8.0          # m/s average through segment
-    gyro_z_base: float = 0.0    # rad/s yaw rate (+ = left turn)
-    gyro_z_noise: float = 0.05  # rad/s noise amplitude
-    accel_x_base: float = 0.0   # m/s^2 longitudinal (+ = accel)
-    accel_x_profile: str = 'constant'
-        # 'constant' | 'brake_then_accel' | 'accel_then_brake'
-    accel_y_base: float = 0.0   # m/s^2 lateral (centripetal)
-    gyro_x_base: float = 0.0    # rad/s roll rate
-    speed_delta: float = 0.0    # m/s speed change across segment
-        # end_speed = speed + speed_delta
+    # ── Trajectory parameters (what the car does) ──────────
+    speed: float = 2.0          # m/s average through segment
+    speed_delta: float = 0.0    # m/s change start→end (linear)
+    curvature: float = 0.0      # 1/m path curvature (+ = left)
+    smoothness: float = 0.9     # 0-1: how smooth the steering is
+        # 1.0 = perfect path following, no corrections
+        # 0.0 = constant corrections (noisy gyro/accel)
+    braking_profile: str = 'constant'
+        # 'constant'          → steady speed through segment
+        # 'brake_then_accel'  → slow down then speed up
+        # 'accel_then_brake'  → speed up then slow down
+    braking_intensity: float = 0.0
+        # m/s² peak braking deceleration (positive number)
+        # Only used with brake_then_accel / accel_then_brake
+        # Realistic range: 0-5 m/s² for RC car
 ```
 
-**Design rationale:** `accel_x_profile` controls the longitudinal
-acceleration shape across the segment so that `min` and `max`
-aggregations produce predictable results. `speed_delta` controls the
-`delta` aggregation result for speed.
+**Design rationale:** The profile describes the TRAJECTORY, not the
+sensor readings. `generate_sensor_record()` derives all sensor values
+using physics equations:
+
+| Profile parameter | Derived sensor | Physics equation |
+|-------------------|---------------|------------------|
+| `curvature` | `car/gyro[2]` | `gyro_z = speed * curvature` (rad/s) |
+| `curvature`, `speed` | `car/accel[1]` | `accel_y = speed² * curvature` (centripetal) |
+| `speed_delta`, segment duration | `car/accel[0]` | `accel_x = dv/dt` |
+| `curvature`, `smoothness` | gyro noise | `noise ∝ (1 - smoothness)` |
+| `speed`, `speed_delta` | `car/speed` | linear interpolation |
+
+This makes the data authentic BY CONSTRUCTION — sensor values that
+violate physics (e.g., high lateral accel without curvature) cannot
+be generated.
 
 ### 2.4 Pre-defined Profiles
 
+All profiles use trajectory parameters. Sensor values are derived.
+The comments show the EXPECTED sensor consequences, which the
+validation function checks.
+
 ```python
 STRAIGHT_FAST = DrivingProfile(
-    speed=12.0,
-    gyro_z_base=0.02, gyro_z_noise=0.01,
-    accel_x_base=0.5, accel_y_base=0.0,
-    gyro_x_base=0.0,
+    speed=3.5,             # Near max for RC car
+    curvature=0.0,         # Straight → gyro_z ≈ 0, accel_y ≈ 0
+    smoothness=0.95,       # Very smooth → low gyro noise
 )
+# Expected sensors: gyro_z ≈ 0, accel_y ≈ 0, accel_x ≈ 0
 
 STRAIGHT_SLOW = DrivingProfile(
-    speed=6.0,
-    gyro_z_base=0.02, gyro_z_noise=0.01,
-    accel_x_base=0.2, accel_y_base=0.0,
-    gyro_x_base=0.0,
+    speed=1.5,
+    curvature=0.0,
+    smoothness=0.9,
 )
 
 TURN_SMOOTH = DrivingProfile(
-    speed=8.0,
-    gyro_z_base=0.8, gyro_z_noise=0.05,
-    accel_x_base=-0.5, accel_y_base=2.0,
-    gyro_x_base=0.1,
+    speed=2.0,
+    curvature=0.5,         # Moderate turn (r = 2m)
+    smoothness=0.9,        # Smooth → low noise
 )
+# Expected sensors: gyro_z = 2.0 * 0.5 = 1.0 rad/s → normalized 0.23
+#                   accel_y = 2.0² * 0.5 = 2.0 m/s² → normalized 0.10
 
 TURN_AGGRESSIVE = DrivingProfile(
-    speed=10.0,
-    gyro_z_base=1.2, gyro_z_noise=0.3,
-    accel_x_base=-3.0, accel_y_base=4.0,
-    gyro_x_base=0.3,
+    speed=3.0,
+    curvature=0.8,         # Tight turn (r = 1.25m)
+    smoothness=0.6,        # Less smooth → noticeable corrections
 )
+# Expected sensors: gyro_z = 3.0 * 0.8 = 2.4 rad/s → normalized 0.55
+#                   accel_y = 3.0² * 0.8 = 7.2 m/s² → normalized 0.36
 
 TURN_JERKY = DrivingProfile(
-    speed=8.0,        # Same speed as TURN_SMOOTH
-    gyro_z_base=0.8, gyro_z_noise=0.4,  # Same base, much noisier
-    accel_x_base=-1.0, accel_y_base=3.0,
-    gyro_x_base=0.2,
+    speed=2.0,             # Same speed as TURN_SMOOTH
+    curvature=0.5,         # Same curvature as TURN_SMOOTH
+    smoothness=0.3,        # Much less smooth → many corrections
 )
+# Same base sensors as TURN_SMOOTH but much noisier.
+# avg(abs(gyro_z)) will be similar, but sum(abs(gyro_z)) will
+# be higher due to noise adding on top of base signal.
 
 BRAKING_HARD = DrivingProfile(
-    speed=10.0,
-    gyro_z_base=0.3, gyro_z_noise=0.05,
-    accel_x_base=-8.0, accel_x_profile='brake_then_accel',
-    accel_y_base=1.0, gyro_x_base=0.1,
-    speed_delta=-4.0,
+    speed=3.0,
+    speed_delta=-1.5,      # 3.0 → 1.5 m/s
+    curvature=0.3,         # Slight turn
+    smoothness=0.8,
+    braking_profile='brake_then_accel',
+    braking_intensity=5.0, # 5 m/s² peak deceleration
 )
+# Expected sensors: accel_x min ≈ -5.0 m/s² → normalized -0.25
 
 BRAKING_GENTLE = DrivingProfile(
-    speed=10.0,
-    gyro_z_base=0.3, gyro_z_noise=0.05,
-    accel_x_base=-2.0, accel_x_profile='brake_then_accel',
-    accel_y_base=1.0, gyro_x_base=0.1,
-    speed_delta=-2.0,
+    speed=3.0,
+    speed_delta=-0.5,      # 3.0 → 2.5 m/s
+    curvature=0.3,
+    smoothness=0.8,
+    braking_profile='brake_then_accel',
+    braking_intensity=1.5, # 1.5 m/s² peak deceleration
 )
+# Expected sensors: accel_x min ≈ -1.5 m/s² → normalized -0.075
 
 CHICANE = DrivingProfile(
-    speed=7.0,
-    gyro_z_base=0.0, gyro_z_noise=0.8,
-    accel_x_base=-1.0, accel_y_base=0.0,
-    gyro_x_base=0.2,
+    speed=2.0,
+    curvature=0.0,         # Net zero curvature (alternates L/R)
+    smoothness=0.4,        # Inherently jerky (rapid direction changes)
+    # Note: chicane behavior is modeled by the noise pattern
+    # alternating sign, not by curvature. The low smoothness
+    # creates large signed noise that alternates around 0.
 )
 ```
 
-### 2.5 `generate_sensor_record()`
+**Profile validation table:** Each profile's expected sensor ranges
+are documented so the validator can check them.
+
+| Profile | speed | gyro_z (norm) | accel_y (norm) | accel_x (norm) |
+|---------|-------|---------------|----------------|----------------|
+| STRAIGHT_FAST | 3.5 | ≈0.00 | ≈0.00 | ≈0.00 |
+| STRAIGHT_SLOW | 1.5 | ≈0.00 | ≈0.00 | ≈0.00 |
+| TURN_SMOOTH | 2.0 | ≈0.23 | ≈0.10 | ≈0.00 |
+| TURN_AGGRESSIVE | 3.0 | ≈0.55 | ≈0.36 | ≈0.00 |
+| TURN_JERKY | 2.0 | ≈0.23±large | ≈0.10±large | ≈0.00 |
+| BRAKING_HARD | 3.0→1.5 | varies | varies | min≈-0.25 |
+| BRAKING_GENTLE | 3.0→2.5 | varies | varies | min≈-0.075 |
+
+### 2.5 `generate_sensor_record()` — Physics-Based Derivation
 
 ```python
 def generate_sensor_record(
     profile: DrivingProfile,
     progress: float,        # 0.0 to 1.0 within segment
     record_index: int,      # For deterministic noise seeding
+    dt_s: float = 0.1,      # Time between records in seconds
 ) -> dict:
     """
-    Generate correlated sensor values from a driving profile.
+    Derive sensor values from trajectory parameters using physics.
 
-    :param profile: Driving behavior parameters
+    Sensors are NOT specified directly — they are computed from the
+    trajectory. This guarantees physical consistency: you cannot get
+    lateral acceleration without curvature, or yaw rate without
+    turning.
+
+    :param profile: Trajectory parameters
     :param progress: Position within segment (0.0 = start, 1.0 = end)
     :param record_index: Global record index for deterministic noise
+    :param dt_s: Time step in seconds (for accel_x derivation)
     :return: dict with keys: car/gyro, car/accel, car/speed
-             (NOT car/lap, car/segment, etc. — caller adds those)
     """
 ```
 
-**Implementation logic:**
+**Implementation logic — physics derivation:**
 
 ```
-speed:
-    base = profile.speed + progress * profile.speed_delta
-    (linear interpolation from start to end speed)
+# ── Step 1: Compute instantaneous speed ────────────────────
+speed = profile.speed + progress * profile.speed_delta
+speed = max(speed, 0.0)  # Can't go negative
 
-gyro_z:
-    value = profile.gyro_z_base
-    noise = profile.gyro_z_noise * sin(record_index * 7.3)
-    # Deterministic pseudo-noise, not random, for reproducibility
-    result = value + noise
+# ── Step 2: Derive gyro_z from curvature and speed ─────────
+# Physics: yaw_rate (rad/s) = speed (m/s) * curvature (1/m)
+gyro_z_raw = speed * profile.curvature  # rad/s
 
-gyro_x:
-    value = profile.gyro_x_base
+# Add noise scaled by (1 - smoothness)
+# Deterministic pseudo-noise: sin(i * 7.3) ∈ [-1, 1]
+noise_factor = (1.0 - profile.smoothness)
+noise = noise_factor * 0.5 * sin(record_index * 7.3)  # rad/s
+gyro_z_raw += noise  # rad/s, before normalization
 
-gyro = [gyro_x, 0.0, gyro_z]
-    # Index 0 = roll, index 1 = pitch (near 0), index 2 = yaw
+# Normalize to IMU output: raw °/s / IMU_GYRO_NORM
+gyro_z_deg = gyro_z_raw * (180.0 / math.pi)  # rad/s → °/s
+gyro_z_norm = gyro_z_deg / IMU_GYRO_NORM
+gyro_z_norm = max(-1.0, min(1.0, gyro_z_norm))  # Clamp
 
-accel_x:
-    if profile == 'constant':
-        value = profile.accel_x_base
-    elif profile == 'brake_then_accel':
-        # First half: braking (negative), second half: accelerating
-        if progress < 0.5:
-            value = profile.accel_x_base  # e.g., -8.0
-        else:
-            value = -profile.accel_x_base * 0.3  # e.g., +2.4
-    elif profile == 'accel_then_brake':
-        # Reverse of above
-        if progress < 0.5:
-            value = -profile.accel_x_base * 0.3
-        else:
-            value = profile.accel_x_base
+# ── Step 3: Derive gyro_x (roll) from lateral load ─────────
+# Approximation: roll rate ∝ lateral acceleration
+gyro_x_raw = speed * speed * profile.curvature * 0.05  # rad/s
+gyro_x_norm = (gyro_x_raw * 180.0 / math.pi) / IMU_GYRO_NORM
+gyro_x_norm = max(-1.0, min(1.0, gyro_x_norm))
 
-accel_y:
-    # Lateral acceleration correlates with speed^2 * curvature
-    # Approximate: scale base by (speed / 8.0)^2
-    speed_factor = (speed / 8.0) ** 2
-    value = profile.accel_y_base * speed_factor
+gyro = [gyro_x_norm, 0.0, gyro_z_norm]
+# Index 0 = roll, index 1 = pitch (≈0), index 2 = yaw
 
-accel = [accel_x, accel_y, 0.0]
-    # Index 0 = longitudinal, index 1 = lateral, index 2 = vertical
+# ── Step 4: Derive accel_x from speed profile ──────────────
+# Physics: a_x = dv/dt
+if profile.braking_profile == 'constant':
+    # Constant speed change → constant acceleration
+    accel_x_raw = profile.speed_delta / (dt_s * 20)
+        # Spread over ~20 records per segment
+elif profile.braking_profile == 'brake_then_accel':
+    if progress < 0.5:
+        accel_x_raw = -profile.braking_intensity  # Braking
+    else:
+        accel_x_raw = profile.braking_intensity * 0.3  # Recovery
+elif profile.braking_profile == 'accel_then_brake':
+    if progress < 0.5:
+        accel_x_raw = profile.braking_intensity * 0.3
+    else:
+        accel_x_raw = -profile.braking_intensity
+
+# Add noise
+accel_x_raw += noise_factor * 0.3 * sin(record_index * 3.7)
+accel_x_norm = accel_x_raw / IMU_ACCEL_NORM
+accel_x_norm = max(-1.0, min(1.0, accel_x_norm))
+
+# ── Step 5: Derive accel_y from centripetal acceleration ────
+# Physics: a_y = v² * curvature (centripetal)
+accel_y_raw = speed * speed * profile.curvature  # m/s²
+# Add noise (lateral wobble)
+accel_y_raw += noise_factor * 0.5 * sin(record_index * 5.1)
+accel_y_norm = accel_y_raw / IMU_ACCEL_NORM
+accel_y_norm = max(-1.0, min(1.0, accel_y_norm))
+
+accel = [accel_x_norm, accel_y_norm, 0.0]
+# Index 0 = longitudinal, index 1 = lateral, index 2 = vertical
+
+return {
+    'car/gyro': gyro,
+    'car/accel': accel,
+    'car/speed': speed,
+}
 ```
 
 **Key design decisions:**
-- Uses `sin(record_index * 7.3)` for deterministic pseudo-noise, not
-  `random`. This means tests produce identical data on every run.
-- Sensor correlations are physically motivated: lateral accel scales
-  with speed squared, braking profile creates predictable min/max.
-- Returns only sensor fields. Caller is responsible for `car/lap`,
-  `car/segment`, `_timestamp_ms`, `car/distance`, etc.
+
+1. **Physics-first:** Every sensor value is derived from trajectory
+   parameters using physical equations. You cannot create a record
+   with high `accel_y` but zero `curvature` — the physics won't
+   produce it.
+
+2. **Noise model:** Noise amplitude is `(1 - smoothness) * scale`.
+   Smooth driving → low noise. Jerky driving → high noise on ALL
+   correlated channels simultaneously (gyro, accel_x, accel_y).
+
+3. **IMU normalization:** Raw values (rad/s, m/s²) are converted to
+   normalized IMU output using the same constants as the real
+   hardware (`IMU_GYRO_NORM=250`, `IMU_ACCEL_NORM=20`).
+
+4. **Clamping:** All normalized values are clamped to [-1, 1] matching
+   real IMU saturation behavior.
+
+5. **Deterministic:** Uses `sin(record_index * prime)` with different
+   primes per channel (7.3, 3.7, 5.1) for uncorrelated but
+   reproducible noise.
+
+**Physics consistency guarantees:**
+
+| If this is true about trajectory... | Then sensors MUST show... |
+|-------------------------------------|--------------------------|
+| curvature = 0 (straight) | gyro_z ≈ 0, accel_y ≈ 0 |
+| curvature > 0 (left turn) | gyro_z > 0, accel_y > 0 |
+| speed increases (speed_delta > 0) | accel_x > 0 |
+| speed decreases (speed_delta < 0) | accel_x < 0 |
+| high speed + high curvature | large accel_y (v²κ) |
+| smoothness = 1.0 | zero noise on all channels |
+| smoothness = 0.0 | maximum noise on all channels |
 
 ### 2.6 `create_multilap_tub()`
 
@@ -411,6 +551,165 @@ Same as `create_multilap_tub` but uses `lap_segment_times_ms` to
 control `_timestamp_ms` spacing instead of a fixed `segment_time_ms`.
 This gives precise control over the `time` boundary field in rankings.
 
+### 2.9 `validate_generated_tub()` — Data Authenticity Checker
+
+This function validates that generated tub data is physically plausible.
+It is called IMPLICITLY by `create_multilap_tub()` (always runs after
+generation) and can be called EXPLICITLY by tests for detailed
+diagnostics.
+
+```python
+class PhysicsViolation(Exception):
+    """Raised when generated data violates physical constraints."""
+    pass
+
+
+def validate_generated_tub(tub, strict=True) -> dict:
+    """
+    Validate that tub data is physically plausible.
+
+    Checks sensor ranges, inter-record consistency, and cross-
+    channel correlations. Returns a summary dict and optionally
+    raises on violations.
+
+    :param tub: Tub to validate
+    :param strict: If True, raise PhysicsViolation on any failure.
+                   If False, return summary with 'violations' list.
+    :return: dict with validation summary
+    """
+```
+
+**Validation checks (6 categories):**
+
+#### Check 1: Sensor Range Bounds
+
+```
+For each record:
+    assert 0 <= car/speed <= SENSOR_RANGES['speed_max']
+    for i in range(3):
+        assert SENSOR_RANGES['gyro_min'] <= car/gyro[i]
+            <= SENSOR_RANGES['gyro_max']
+        assert SENSOR_RANGES['accel_min'] <= car/accel[i]
+            <= SENSOR_RANGES['accel_max']
+```
+
+This catches generator bugs that produce out-of-range values.
+
+#### Check 2: Speed Continuity
+
+```
+For consecutive records in same lap:
+    speed_change = abs(record[i+1].speed - record[i].speed)
+    dt_s = (record[i+1].timestamp - record[i].timestamp) / 1000.0
+    max_change = 10.0 * dt_s  # 10 m/s² max deceleration
+    assert speed_change <= max_change + tolerance
+```
+
+This catches unrealistic speed jumps (e.g., 1 m/s to 4 m/s in one
+record).
+
+#### Check 3: Distance Monotonicity
+
+```
+For consecutive records in same lap:
+    assert record[i+1].distance >= record[i].distance
+    delta_dist = record[i+1].distance - record[i].distance
+    assert delta_dist <= SENSOR_RANGES['distance_delta_max']
+```
+
+Distance must increase (car doesn't teleport backward).
+
+#### Check 4: Gyro-Curvature Correlation (Implicit Physics Check)
+
+```
+For each segment's records:
+    # Compute mean gyro_z and mean accel_y
+    mean_gyro_z = mean(abs(record.gyro[2]) for record in segment)
+    mean_accel_y = mean(abs(record.accel[1]) for record in segment)
+
+    # If gyro_z is significant, accel_y must also be present
+    if mean_gyro_z > 0.05:  # Turning
+        assert mean_accel_y > 0.01, \
+            f"Physics violation: turning (gyro_z={mean_gyro_z}) "
+            f"without lateral acceleration (accel_y={mean_accel_y})"
+
+    # If accel_y is significant, gyro_z must also be present
+    if mean_accel_y > 0.05:
+        assert mean_gyro_z > 0.01, \
+            f"Physics violation: lateral accel without turning"
+```
+
+This is the KEY authenticity check — it catches data where gyro and
+lateral accel are independently specified (old approach) rather than
+derived from the same curvature (new approach).
+
+#### Check 5: Accel-X vs Speed Change Correlation
+
+```
+For each segment's records:
+    mean_accel_x = mean(record.accel[0] for record in segment)
+    speed_change = last_record.speed - first_record.speed
+
+    # If accelerating (positive speed change), mean accel_x
+    # should be non-negative (within noise)
+    if speed_change > 0.5:
+        assert mean_accel_x > -0.1, \
+            f"Physics violation: speed increasing but "
+            f"mean accel_x is negative"
+
+    # If decelerating, mean accel_x should be non-positive
+    if speed_change < -0.5:
+        assert mean_accel_x < 0.1, \
+            f"Physics violation: speed decreasing but "
+            f"mean accel_x is positive"
+```
+
+#### Check 6: Timestamp Spacing
+
+```
+For consecutive records:
+    dt_ms = record[i+1].timestamp - record[i].timestamp
+    assert dt_ms > 0, "Timestamps must increase"
+    assert dt_ms <= SENSOR_RANGES['dt_ms_max'] * 2, \
+        "Timestamp gap too large"
+```
+
+**Return value:**
+
+```python
+{
+    'num_records': int,
+    'num_laps': int,
+    'speed_range': (min, max),
+    'gyro_z_range': (min, max),
+    'accel_x_range': (min, max),
+    'accel_y_range': (min, max),
+    'violations': [],           # Empty if all checks pass
+    'valid': True,              # False if any check fails
+}
+```
+
+**Integration with `create_multilap_tub()`:**
+
+```
+def create_multilap_tub(...):
+    # ... (record generation loop) ...
+
+    # Validate generated data before returning
+    summary = validate_generated_tub(tub, strict=True)
+    # If strict=True and validation fails, PhysicsViolation
+    # is raised immediately — the test never even starts with
+    # bad data.
+
+    return tub
+```
+
+This means EVERY tub created by the generator is automatically
+validated. If a profile change or generator bug produces
+unphysical data, the test fails at data generation time with
+a clear `PhysicsViolation` message, not at assertion time with
+a confusing ranking mismatch.
+
 ---
 
 ## 3. `test_segment_ranking_comprehensive.py` — Test File
@@ -512,7 +811,178 @@ class SegmentRankingTestBase(unittest.TestCase):
         return tub.manifest.session_id[1]
 ```
 
-### 3.3 Class: `TestFieldAggregationMethods`
+### 3.3 Class: `TestDataAuthenticity`
+
+**Purpose:** Verify that the data generator produces physically
+plausible data. These tests run BEFORE the ranking tests and serve
+as a confidence gate — if the generated data isn't authentic, ranking
+test results are meaningless.
+
+#### `test_straight_segment_has_zero_yaw_and_lateral_accel`
+
+```
+Setup:
+    profiles = [[STRAIGHT_FAST], [STRAIGHT_SLOW]]
+    tub = create_multilap_tub(path, profiles)
+
+Assert:
+    for record in tub:
+        gyro_z = record['car/gyro'][2]
+        accel_y = record['car/accel'][1]
+        # Straight → no turning → near-zero yaw and lateral accel
+        assert abs(gyro_z) < 0.05, \
+            f"Straight segment has gyro_z={gyro_z}"
+        assert abs(accel_y) < 0.05, \
+            f"Straight segment has accel_y={accel_y}"
+```
+
+#### `test_turn_has_correlated_gyro_and_lateral_accel`
+
+```
+Setup:
+    profiles = [[TURN_SMOOTH], [TURN_AGGRESSIVE]]
+    tub = create_multilap_tub(path, profiles)
+
+Assert:
+    for record in tub:
+        gyro_z = abs(record['car/gyro'][2])
+        accel_y = abs(record['car/accel'][1])
+        # Both must be present when turning
+        # (physics: both derive from curvature)
+        if gyro_z > 0.05:
+            assert accel_y > 0.01, \
+                f"Turning (gyro_z={gyro_z}) without "
+                f"lateral accel (accel_y={accel_y})"
+```
+
+#### `test_braking_produces_negative_longitudinal_accel`
+
+```
+Setup:
+    profiles = [[BRAKING_HARD], [BRAKING_GENTLE]]
+    tub = create_multilap_tub(path, profiles)
+
+Assert:
+    for record in tub:
+        if record['car/lap'] < 2:  # Skip final record
+            progress = <compute from record position in segment>
+            if progress < 0.5:  # First half = braking phase
+                accel_x = record['car/accel'][0]
+                assert accel_x < 0.01, \
+                    f"Braking phase has positive accel_x={accel_x}"
+```
+
+#### `test_speed_within_rc_car_range`
+
+```
+Setup:
+    # Generate tubs with ALL pre-defined profiles
+    all_profiles = [STRAIGHT_FAST, STRAIGHT_SLOW, TURN_SMOOTH,
+                    TURN_AGGRESSIVE, TURN_JERKY, BRAKING_HARD,
+                    BRAKING_GENTLE, CHICANE]
+    profiles = [[p] for p in all_profiles]
+    tub = create_multilap_tub(path, profiles)
+
+Assert:
+    for record in tub:
+        speed = record['car/speed']
+        assert 0 <= speed <= SENSOR_RANGES['speed_max'], \
+            f"Speed {speed} outside RC car range"
+```
+
+#### `test_all_sensors_within_normalized_range`
+
+```
+Setup:
+    Same as above (all profiles)
+
+Assert:
+    for record in tub:
+        for i in range(3):
+            gyro = record['car/gyro'][i]
+            assert -1.0 <= gyro <= 1.0, \
+                f"gyro[{i}]={gyro} outside [-1,1]"
+        for i in range(3):
+            accel = record['car/accel'][i]
+            assert -1.0 <= accel <= 1.0, \
+                f"accel[{i}]={accel} outside [-1,1]"
+```
+
+#### `test_speed_continuity_between_records`
+
+```
+Setup:
+    profiles = [[BRAKING_HARD, STRAIGHT_FAST],
+                [TURN_SMOOTH, TURN_AGGRESSIVE]]
+    tub = create_multilap_tub(path, profiles, records_per_segment=20)
+
+Assert:
+    prev_speed = None
+    prev_ts = None
+    prev_lap = None
+    for record in tub:
+        if prev_speed is not None and record['car/lap'] == prev_lap:
+            dt_s = (record['_timestamp_ms'] - prev_ts) / 1000.0
+            speed_change = abs(record['car/speed'] - prev_speed)
+            # Max 10 m/s² deceleration
+            max_change = 10.0 * dt_s + 0.01
+            assert speed_change <= max_change, \
+                f"Speed jump {speed_change:.2f} m/s in {dt_s:.3f}s"
+        prev_speed = record['car/speed']
+        prev_ts = record['_timestamp_ms']
+        prev_lap = record['car/lap']
+```
+
+#### `test_smooth_driving_has_lower_noise_than_jerky`
+
+```
+Setup:
+    profiles = [[TURN_SMOOTH], [TURN_JERKY]]
+    tub = create_multilap_tub(path, profiles, records_per_segment=50)
+
+Approach:
+    Collect gyro_z values per lap. Compute standard deviation.
+
+Assert:
+    # TURN_SMOOTH (smoothness=0.9) → low std dev
+    # TURN_JERKY (smoothness=0.3) → high std dev
+    assert std_smooth < std_jerky, \
+        f"Smooth driving ({std_smooth:.4f}) noisier than "
+        f"jerky driving ({std_jerky:.4f})"
+```
+
+#### `test_validate_generated_tub_runs_implicitly`
+
+```
+Setup:
+    # Create a tub — validation runs automatically inside
+    # create_multilap_tub(). If it gets here without raising,
+    # validation passed.
+    profiles = [[TURN_AGGRESSIVE, BRAKING_HARD],
+                [STRAIGHT_FAST, CHICANE],
+                [TURN_SMOOTH, BRAKING_GENTLE]]
+    tub = create_multilap_tub(path, profiles)
+
+Assert:
+    # Explicitly call for the summary report
+    summary = validate_generated_tub(tub, strict=False)
+    assert summary['valid'] is True
+    assert len(summary['violations']) == 0
+    # Check ranges are populated
+    assert summary['speed_range'][0] >= 0
+    assert summary['speed_range'][1] <= SENSOR_RANGES['speed_max']
+```
+
+**Total: 8 authenticity tests.**
+
+These tests serve a dual purpose:
+1. **Confidence gate:** If any of these fail, the ranking tests cannot
+   be trusted — the data they'd test against is unphysical.
+2. **Generator regression:** If someone modifies `DrivingProfile` or
+   `generate_sensor_record()`, these tests catch physics violations
+   immediately.
+
+### 3.5 Class: `TestFieldAggregationMethods`
 
 All tests use `_rank_laps()` with 3 laps to verify aggregation
 correctness through ranking order.
@@ -543,19 +1013,21 @@ Assert:
     # TURN_AGGRESSIVE has highest base gyro, should rank worst
 ```
 
-**Why this works:** `TURN_SMOOTH.gyro_z_base=0.8, noise=0.05` produces
-avg(abs) around 0.8. `TURN_AGGRESSIVE.gyro_z_base=1.2, noise=0.3`
-produces avg(abs) around 1.2. The ranking should order them accordingly.
+**Why this works:** `TURN_SMOOTH` has `curvature=0.5, speed=2.0` →
+gyro_z ≈ 0.23 normalized. `TURN_AGGRESSIVE` has `curvature=0.8,
+speed=3.0` → gyro_z ≈ 0.55 normalized. The ranking orders them by
+avg(abs(gyro_z)).
 
 #### `test_sum_aggregation_total_yaw`
 
 ```
 Setup:
     # 3 laps, 1 segment each (simplest case for sum)
+    # Different curvatures → different gyro_z sums
     profiles = [
-        [DrivingProfile(gyro_z_base=0.1, gyro_z_noise=0.01)],  # Low sum
-        [DrivingProfile(gyro_z_base=0.5, gyro_z_noise=0.01)],  # Medium
-        [DrivingProfile(gyro_z_base=1.0, gyro_z_noise=0.01)],  # High sum
+        [DrivingProfile(speed=2.0, curvature=0.1)],  # Low sum
+        [DrivingProfile(speed=2.0, curvature=0.5)],  # Medium
+        [DrivingProfile(speed=2.0, curvature=1.0)],  # High sum
     ]
     field_aggs = [
         FieldAggregationSpec(output_key='time'),
@@ -565,7 +1037,7 @@ Setup:
     ]
 
 Assert:
-    # Lap with gyro_z_base=0.1 has lowest sum → best ranking
+    # Lap with curvature=0.1 has lowest sum → best ranking
     assert perf[s][0]['yaw_sum'] < perf[s][1]['yaw_sum']
     assert perf[s][1]['yaw_sum'] < perf[s][2]['yaw_sum']
 ```
@@ -575,9 +1047,9 @@ Assert:
 ```
 Setup:
     profiles = [
-        [BRAKING_HARD],    # Lap 0: accel_x_base = -8.0
-        [BRAKING_GENTLE],  # Lap 1: accel_x_base = -2.0
-        [TURN_SMOOTH],     # Lap 2: accel_x_base = -0.5
+        [BRAKING_HARD],    # Lap 0: braking_intensity = 5.0
+        [BRAKING_GENTLE],  # Lap 1: braking_intensity = 1.5
+        [TURN_SMOOTH],     # Lap 2: no braking
     ]
     field_aggs = [
         FieldAggregationSpec(output_key='time'),
@@ -599,9 +1071,9 @@ Assert:
 ```
 Setup:
     profiles = [
-        [DrivingProfile(accel_x_base=5.0)],   # High peak
-        [DrivingProfile(accel_x_base=3.0)],   # Medium peak
-        [DrivingProfile(accel_x_base=1.0)],   # Low peak
+        [DrivingProfile(speed=2.0, speed_delta=1.5)],   # Strong accel
+        [DrivingProfile(speed=2.0, speed_delta=0.8)],   # Medium accel
+        [DrivingProfile(speed=2.0, speed_delta=0.2)],   # Gentle accel
     ]
     field_aggs = [
         FieldAggregationSpec(output_key='time'),
@@ -633,9 +1105,9 @@ Setup:
     #
     # Use 3 single-segment laps with different speed bases:
     profiles = [
-        [DrivingProfile(speed=5.0, speed_delta=0.0)],   # Median=5
-        [DrivingProfile(speed=10.0, speed_delta=0.0)],  # Median=10
-        [DrivingProfile(speed=15.0, speed_delta=0.0)],  # Median=15
+        [DrivingProfile(speed=1.5, speed_delta=0.0)],   # Median≈1.5
+        [DrivingProfile(speed=2.5, speed_delta=0.0)],   # Median≈2.5
+        [DrivingProfile(speed=3.5, speed_delta=0.0)],   # Median≈3.5
     ]
     field_aggs = [
         FieldAggregationSpec(output_key='time'),
@@ -680,8 +1152,8 @@ Assert:
 Setup:
     Create tub with records_per_segment=1
     profiles = [
-        [DrivingProfile(speed=10.0)],
-        [DrivingProfile(speed=15.0)],
+        [DrivingProfile(speed=2.0)],
+        [DrivingProfile(speed=3.5)],
     ]
     field_aggs = [
         FieldAggregationSpec(output_key='time'),
@@ -706,8 +1178,8 @@ Setup:
     Create tub with records_per_segment=4
     # Lap 0: 4 speed values will be deterministic from profile
     profiles = [
-        [DrivingProfile(speed=10.0, speed_delta=0.0)],
-        [DrivingProfile(speed=20.0, speed_delta=0.0)],
+        [DrivingProfile(speed=2.0, speed_delta=0.0)],
+        [DrivingProfile(speed=3.5, speed_delta=0.0)],
     ]
     field_aggs = [
         FieldAggregationSpec(output_key='time'),
@@ -723,7 +1195,7 @@ Assert:
     assert perf[s][0]['speed_med'] < perf[s][1]['speed_med']
 ```
 
-### 3.4 Class: `TestMultiFieldRankingPriority`
+### 3.6 Class: `TestMultiFieldRankingPriority`
 
 #### `test_primary_sort_key_dominates`
 
@@ -762,12 +1234,12 @@ Assert:
 
 ```
 Setup:
-    # 3 laps, 1 segment. All same time but different gyro.
-    # Use same segment_time_ms for all, vary profiles.
+    # 3 laps, 1 segment. All same speed → same time.
+    # Different curvatures → different gyro_z.
     profiles = [
-        [DrivingProfile(speed=10.0, gyro_z_base=0.1)],  # Smoothest
-        [DrivingProfile(speed=10.0, gyro_z_base=0.5)],  # Medium
-        [DrivingProfile(speed=10.0, gyro_z_base=0.9)],  # Jerkiest
+        [DrivingProfile(speed=2.5, curvature=0.1)],  # Least turning
+        [DrivingProfile(speed=2.5, curvature=0.5)],  # Medium turning
+        [DrivingProfile(speed=2.5, curvature=0.9)],  # Most turning
     ]
     # All same speed → same time and distance → tie on primary
 
@@ -792,14 +1264,14 @@ Assert:
 Setup:
     # 4 laps, 2 segments. Each lap has distinct values for all 4 fields.
     profiles = [
-        [DrivingProfile(speed=12, gyro_z_base=0.1, accel_x_base=-1),
-         STRAIGHT_FAST],
-        [DrivingProfile(speed=10, gyro_z_base=0.3, accel_x_base=-3),
-         STRAIGHT_FAST],
-        [DrivingProfile(speed=8, gyro_z_base=0.5, accel_x_base=-5),
-         STRAIGHT_FAST],
-        [DrivingProfile(speed=6, gyro_z_base=0.7, accel_x_base=-7),
-         STRAIGHT_FAST],
+        [DrivingProfile(speed=3.5, curvature=0.1,
+                        braking_intensity=0.5), STRAIGHT_FAST],
+        [DrivingProfile(speed=3.0, curvature=0.3,
+                        braking_intensity=1.5), STRAIGHT_FAST],
+        [DrivingProfile(speed=2.5, curvature=0.5,
+                        braking_intensity=2.5), STRAIGHT_FAST],
+        [DrivingProfile(speed=2.0, curvature=0.7,
+                        braking_intensity=3.5), STRAIGHT_FAST],
     ]
     field_aggs = [
         FieldAggregationSpec(output_key='time'),
@@ -832,9 +1304,9 @@ Assert:
 ```
 Setup:
     profiles = [
-        [DrivingProfile(speed=12.0)],
-        [DrivingProfile(speed=8.0)],
-        [DrivingProfile(speed=4.0)],
+        [DrivingProfile(speed=3.5)],
+        [DrivingProfile(speed=2.0)],
+        [DrivingProfile(speed=1.0)],
     ]
     # Only boundary fields, no record fields
     field_aggs = [
@@ -857,9 +1329,9 @@ Assert:
 ```
 Setup:
     profiles = [
-        [DrivingProfile(speed=12.0, gyro_z_base=0.9)],  # Fast, jerky
-        [DrivingProfile(speed=6.0, gyro_z_base=0.1)],   # Slow, smooth
-        [DrivingProfile(speed=9.0, gyro_z_base=0.5)],   # Medium
+        [DrivingProfile(speed=3.5, curvature=0.8)],  # Fast, turning
+        [DrivingProfile(speed=1.5, curvature=0.1)],  # Slow, straight
+        [DrivingProfile(speed=2.5, curvature=0.4)],  # Medium
     ]
 
     # Config A: time first, then gyro
@@ -903,7 +1375,7 @@ Assert:
     assert pct_a[0] != pct_b[0]
 ```
 
-### 3.5 Class: `TestDrivingBehaviorDiscrimination`
+### 3.7 Class: `TestDrivingBehaviorDiscrimination`
 
 #### `test_fast_smooth_vs_fast_jerky`
 
@@ -913,11 +1385,9 @@ Setup:
     # Segment 0: same speed, different smoothness.
     # Segment 1: identical (control).
     smooth_seg0 = DrivingProfile(
-        speed=10.0, gyro_z_base=0.8, gyro_z_noise=0.05,
-        accel_y_base=2.0)
+        speed=2.5, curvature=0.5, smoothness=0.95)
     jerky_seg0 = DrivingProfile(
-        speed=10.0, gyro_z_base=0.8, gyro_z_noise=0.4,
-        accel_y_base=3.5)
+        speed=2.5, curvature=0.5, smoothness=0.2)
     neutral = STRAIGHT_FAST
 
     profiles = [
@@ -938,7 +1408,7 @@ Assert:
     # Time rankings should be equal (same speed)
     # Gyro: smooth < jerky (smooth has lower avg abs gyro noise)
     assert perf[s][0]['gyro_z_agg'] < perf[s][1]['gyro_z_agg']
-    # Lateral G: smooth < jerky (lower accel_y_base)
+    # Lateral G: smooth < jerky (lower noise → lower peak accel_y)
     assert perf[s][0]['lat_g_max'] < perf[s][1]['lat_g_max']
 ```
 
@@ -950,9 +1420,9 @@ smooth lap should get 0.5 (better) for both gyro and lateral G.
 ```
 Setup:
     slow_stable = DrivingProfile(
-        speed=6.0, gyro_z_base=0.3, gyro_z_noise=0.02)
+        speed=1.5, curvature=0.3, smoothness=0.95)
     fast_unstable = DrivingProfile(
-        speed=12.0, gyro_z_base=0.3, gyro_z_noise=0.5)
+        speed=3.5, curvature=0.3, smoothness=0.3)
 
     profiles = [
         [slow_stable],
@@ -1002,8 +1472,12 @@ Setup:
     #
     # Tight line: lower speed = less distance = shorter path
     # Wide line: higher speed = more distance = longer path
-    tight = DrivingProfile(speed=8.0, accel_y_base=3.0)
-    wide = DrivingProfile(speed=12.0, accel_y_base=1.0)
+    # Tight line: lower speed, higher curvature → shorter path,
+    #             more lateral G (physics: accel_y = v² * curvature)
+    tight = DrivingProfile(speed=2.0, curvature=0.8)
+    # Wide line: higher speed, lower curvature → longer path,
+    #            less lateral G
+    wide = DrivingProfile(speed=3.5, curvature=0.2)
 
     # Both get same segment time
     lap_segment_times = [[2000], [2000]]
@@ -1033,8 +1507,8 @@ Assert:
 ```
 Setup:
     profiles = [
-        [BRAKING_HARD],    # accel_x_base = -8.0
-        [BRAKING_GENTLE],  # accel_x_base = -2.0
+        [BRAKING_HARD],    # braking_intensity = 5.0
+        [BRAKING_GENTLE],  # braking_intensity = 1.5
     ]
     field_aggs = [
         FieldAggregationSpec(output_key='time'),
@@ -1048,7 +1522,7 @@ Assert:
     assert perf[s][0]['brake_min'] < perf[s][1]['brake_min']
 ```
 
-### 3.6 Class: `TestTransformFunctions`
+### 3.8 Class: `TestTransformFunctions`
 
 #### `test_abs_transform`
 
@@ -1056,19 +1530,21 @@ Assert:
 Setup:
     # Alternating left/right turns: gyro_z alternates sign.
     # Without abs: avg ≈ 0 (symmetric). With abs: avg > 0.
-    left_turn = DrivingProfile(gyro_z_base=1.0, gyro_z_noise=0.01)
-    right_turn = DrivingProfile(gyro_z_base=-1.0, gyro_z_noise=0.01)
+    left_turn = DrivingProfile(speed=2.0, curvature=0.5, smoothness=0.95)
+    right_turn = DrivingProfile(speed=2.0, curvature=-0.5, smoothness=0.95)
 
     # We'll create a profile that produces alternating-sign gyro
-    # Actually, easier: two laps with opposite gyro_z_base.
-    # Lap 0: gyro_z_base = +0.5 → avg(abs) ≈ 0.5
-    # Lap 1: gyro_z_base = -0.5 → avg(abs) ≈ 0.5 (same!)
-    # Lap 2: gyro_z_base = +1.5 → avg(abs) ≈ 1.5
+    # Positive curvature → positive gyro_z after physics derivation
+    # Negative curvature → negative gyro_z
+    # With abs transform: both ±0.5 curvature produce same avg(abs)
+    # Higher curvature → higher avg(abs)
 
+    # Positive curvature → positive gyro_z
+    # Negative curvature → negative gyro_z
     profiles = [
-        [DrivingProfile(gyro_z_base=0.5)],
-        [DrivingProfile(gyro_z_base=-0.5)],
-        [DrivingProfile(gyro_z_base=1.5)],
+        [DrivingProfile(speed=2.0, curvature=0.5)],   # Left turn
+        [DrivingProfile(speed=2.0, curvature=-0.5)],  # Right turn
+        [DrivingProfile(speed=2.0, curvature=1.0)],   # Sharp left
     ]
 
     aggs_with_abs = [
@@ -1097,13 +1573,13 @@ Assert:
 
 ```
 Setup:
-    # Lap 0: consistent moderate gyro (0.5)
-    #   → avg(x^2) = avg(0.25) = 0.25
-    # Lap 1: occasional spikes (high noise)
+    # Lap 0: smooth turning → consistent gyro_z
+    #   → avg(x^2) = avg(base^2) (low variance)
+    # Lap 1: jerky turning → spiky gyro_z
     #   → avg(x^2) amplifies spikes quadratically
     profiles = [
-        [DrivingProfile(gyro_z_base=0.5, gyro_z_noise=0.01)],
-        [DrivingProfile(gyro_z_base=0.5, gyro_z_noise=0.5)],
+        [DrivingProfile(speed=2.0, curvature=0.5, smoothness=0.95)],
+        [DrivingProfile(speed=2.0, curvature=0.5, smoothness=0.2)],
     ]
     field_aggs = [
         FieldAggregationSpec(output_key='time'),
@@ -1122,9 +1598,11 @@ Assert:
 ```
 Setup:
     profiles = [
-        [DrivingProfile(accel_x_base=-8.0)],   # Most negative
-        [DrivingProfile(accel_x_base=-2.0)],   # Moderate
-        [DrivingProfile(accel_x_base=1.0)],    # Positive
+        [DrivingProfile(speed=3.0, braking_profile='brake_then_accel',
+                        braking_intensity=5.0)],   # Hard braking
+        [DrivingProfile(speed=3.0, braking_profile='brake_then_accel',
+                        braking_intensity=1.5)],   # Moderate braking
+        [DrivingProfile(speed=3.0, speed_delta=1.0)],  # Accelerating
     ]
     field_aggs = [
         FieldAggregationSpec(output_key='time'),
@@ -1145,9 +1623,9 @@ Assert:
 ```
 Setup:
     profiles = [
-        [DrivingProfile(speed=5.0)],
-        [DrivingProfile(speed=10.0)],
-        [DrivingProfile(speed=15.0)],
+        [DrivingProfile(speed=1.0)],
+        [DrivingProfile(speed=2.5)],
+        [DrivingProfile(speed=4.0)],
     ]
     field_aggs_asc = [
         FieldAggregationSpec(output_key='time'),
@@ -1171,7 +1649,7 @@ Assert:
     assert perf_desc[s][2]['speed_avg'] < perf_desc[s][0]['speed_avg']
 ```
 
-### 3.7 Class: `TestTubWriterIntegration`
+### 3.9 Class: `TestTubWriterIntegration`
 
 #### `test_tub_writer_produces_valid_rankings`
 
@@ -1273,7 +1751,7 @@ Assert:
     assert perf[s][0]['gyro_z_agg'] < perf[s][1]['gyro_z_agg']
 ```
 
-### 3.8 Class: `TestOnTheFlySegmentComputation`
+### 3.10 Class: `TestOnTheFlySegmentComputation`
 
 These tests verify that segment rankings computed from metadata
 (on-the-fly) match those computed from `car/segment` record field.
@@ -1348,7 +1826,7 @@ Assert:
                 'time', 'distance', 'gyro_z_agg', 'brake_min'}
 ```
 
-### 3.9 Class: `TestRankingEdgeCases`
+### 3.11 Class: `TestRankingEdgeCases`
 
 #### `test_single_lap_ranking`
 
@@ -1511,7 +1989,7 @@ in `contents`. So omitting `car/speed` from some records is valid.
 ```
 Setup:
     # 3 laps, 2 segments, all identical profiles
-    profile = DrivingProfile(speed=10.0, gyro_z_base=0.5)
+    profile = DrivingProfile(speed=2.5, curvature=0.5)
     profiles = [[profile, profile]] * 3
 
     field_aggs = [
@@ -1545,41 +2023,60 @@ key assertion is that no crash or degenerate output occurs.
 ## 4. Implementation Order
 
 1. **`tub_test_data_generator.py`** — implement in this order:
-   a. Constants (`TINY_IMAGE`, `TUB_INPUTS`, etc.)
-   b. `DrivingProfile` dataclass
-   c. Pre-defined profiles
-   d. `generate_sensor_record()`
-   e. `create_multilap_tub()`
-   f. `create_tub_with_varied_segment_times()`
-   g. `create_multilap_tub_via_writer()`
+   a. Constants (`TINY_IMAGE`, `TUB_INPUTS`, `SENSOR_RANGES`, etc.)
+   b. `DrivingProfile` dataclass (trajectory-based)
+   c. Pre-defined profiles with expected sensor comments
+   d. `generate_sensor_record()` with physics derivation
+   e. `validate_generated_tub()` with 6 physics checks
+   f. `create_multilap_tub()` with built-in validation call
+   g. `create_tub_with_varied_segment_times()`
+   h. `create_multilap_tub_via_writer()`
 
 2. **`test_segment_ranking_comprehensive.py`** — implement in this order:
    a. `SegmentRankingTestBase` base class
-   b. `TestFieldAggregationMethods` (8 tests)
-   c. `TestMultiFieldRankingPriority` (5 tests)
-   d. `TestDrivingBehaviorDiscrimination` (4 tests)
-   e. `TestTransformFunctions` (4 tests)
-   f. `TestTubWriterIntegration` (3 tests)
-   g. `TestOnTheFlySegmentComputation` (2 tests)
-   h. `TestRankingEdgeCases` (4 tests)
+   b. **`TestDataAuthenticity` (8 tests) — FIRST**
+      Run these before anything else. If they fail, the generator
+      is broken and all other tests would be meaningless.
+   c. `TestFieldAggregationMethods` (8 tests)
+   d. `TestMultiFieldRankingPriority` (5 tests)
+   e. `TestDrivingBehaviorDiscrimination` (4 tests)
+   f. `TestTransformFunctions` (4 tests)
+   g. `TestTubWriterIntegration` (3 tests)
+   h. `TestOnTheFlySegmentComputation` (2 tests)
+   i. `TestRankingEdgeCases` (4 tests)
 
 3. **Run tests** after each class is implemented. Fix any failures
    before proceeding to next class.
 
-## 5. Risk Register
+## 5. Test Matrix Summary
+
+| Test Class | # Tests | Purpose |
+|-----------|---------|---------|
+| DataAuthenticity | 8 | Generator produces physically plausible data |
+| AggregationMethods | 8 | Each aggregation method works correctly |
+| MultiFieldPriority | 5 | Priority order and tiebreaking |
+| BehaviorDiscrimination | 4 | Distinguishes meaningful driving styles |
+| TransformFunctions | 4 | Transforms applied before aggregation |
+| TubWriterIntegration | 3 | Official recording interface works |
+| OnTheFlyComputation | 2 | Metadata-based segment computation |
+| RankingEdgeCases | 4 | Graceful handling of degenerate inputs |
+| **Total** | **38** | |
+
+## 6. Risk Register
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
 | TubWriter uses `time.time()` so timestamps are non-deterministic | Exact time rankings differ between runs | Compare ranking ORDER, not values |
 | `write_record` skips None values | Can't test "None in record" | Test with omitted fields instead |
-| Deterministic noise `sin(i*7.3)` may produce unexpected patterns | Aggregation values don't match expectations | Verify with a small sample first |
-| `create_tub_with_varied_segment_times` needs per-profile support for each lap/segment | More complex generator API | Accept profiles list-of-lists alongside times |
+| Deterministic noise `sin(i*7.3)` may produce unexpected patterns | Aggregation values don't match expectations | `TestDataAuthenticity` catches this before ranking tests run |
+| Physics derivation may saturate (clamp to ±1.0) for extreme profiles | Aggregated values are less distinct | Keep profiles within realistic RC car parameters |
 | FieldAccumulator.median uses `sorted_vals[len//2]` (upper median for even) | Different from Python `statistics.median` | Document this behavior, test against actual implementation |
+| `create_tub_with_varied_segment_times` needs per-profile support | More complex generator API | Accept profiles list-of-lists alongside times |
 
-## 6. Lines of Code Estimate
+## 7. Lines of Code Estimate
 
 | File | Estimated Lines |
 |------|----------------|
-| `tub_test_data_generator.py` | ~250 |
-| `test_segment_ranking_comprehensive.py` | ~650 |
-| **Total** | ~900 |
+| `tub_test_data_generator.py` | ~350 (was ~250, added validation + physics) |
+| `test_segment_ranking_comprehensive.py` | ~800 (was ~650, added 8 authenticity tests) |
+| **Total** | ~1150 |
