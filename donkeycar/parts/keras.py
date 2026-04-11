@@ -17,25 +17,26 @@ import numpy as np
 from typing import Dict, Tuple, Optional, Union, List, Sequence, Callable, Any
 import logging
 
-from tensorflow.python.data.ops.dataset_ops import DatasetV1, DatasetV2
-
 import donkeycar as dk
 from donkeycar.utils import normalize_image, linear_bin
 from donkeycar.pipeline.types import TubRecord
 from donkeycar.parts.interpreter import Interpreter, KerasInterpreter
 
-logging.getLogger('tensorflow').setLevel(logging.WARNING)
-import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras.layers import (Dense, Input,Convolution2D,
-    MaxPooling2D, Activation, Dropout, Flatten, LSTM, BatchNormalization,
-    Conv3D, MaxPooling3D, Conv2DTranspose)
-
-from tensorflow.keras.layers import TimeDistributed as TD
-from tensorflow.keras.backend import concatenate
-from tensorflow.keras.models import Model
-from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, \
-    TensorBoard
+try:
+    import tensorflow as tf
+    from tensorflow import keras
+    from tensorflow.keras.layers import (Dense, Input, Convolution2D,
+        MaxPooling2D, Activation, Dropout, Flatten, LSTM, BatchNormalization,
+        Conv3D, MaxPooling3D, Conv2DTranspose)
+    from tensorflow.keras.layers import TimeDistributed as TD
+    from tensorflow.keras.backend import concatenate
+    from tensorflow.keras.models import Model
+    from tensorflow.keras.callbacks import (EarlyStopping, ModelCheckpoint,
+        TensorBoard)
+    logging.getLogger('tensorflow').setLevel(logging.WARNING)
+except ImportError:
+    tf = None
+    keras = None
 
 ONE_BYTE_SCALE = 1.0 / 255.0
 
@@ -144,10 +145,10 @@ class KerasPilot(ABC):
 
     def train(self,
               model_path: str,
-              train_data: Union[DatasetV1, DatasetV2],
+              train_data: Any,
               train_steps: int,
               batch_size: int,
-              validation_data: Union[DatasetV1, DatasetV2],
+              validation_data: Any,
               validation_steps: int,
               epochs: int,
               verbose: int = 1,

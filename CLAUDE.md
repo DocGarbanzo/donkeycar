@@ -454,7 +454,7 @@ def run(self, image, steering, throttle):
 
 ## Python Requirements
 
-- **Python 3.11+** but **< 3.12** (strict requirement)
+- **Python 3.13** (strict requirement, single version)
 - Platform-specific dependencies for RPi, Jetson, PC, macOS
 - Development dependencies include pytest, mypy for type checking
 

@@ -13,6 +13,7 @@ jobs:
     strategy:
       matrix:
         os: [macos-latest, ubuntu-latest]
+        python-version: ['3.13']
       fail-fast: false
     defaults:
       run:
@@ -20,10 +21,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-      - name: Create python 3.11 conda env
+      - name: Create python ${{ matrix.python-version }} conda env
         uses: conda-incubator/setup-miniconda@v3
         with:
-          python-version: 3.11
+          python-version: ${{ matrix.python-version }}
           activate-environment: donkey
           auto-activate: false
           channels: defaults, conda-forge, pytorch

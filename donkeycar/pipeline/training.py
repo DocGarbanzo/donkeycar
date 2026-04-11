@@ -4,8 +4,6 @@ from time import time
 from typing import List, Dict, Union, Tuple
 import logging
 
-from tensorflow.python.keras.models import load_model
-
 from donkeycar.config import Config
 from donkeycar.parts.keras import KerasPilot
 from donkeycar.parts.interpreter import keras_model_to_tflite, \
@@ -16,9 +14,13 @@ from donkeycar.pipeline.types import TubDataset, TubRecord, PctMode
 from donkeycar.pipeline.augmentations import ImageAugmentation
 from donkeycar.parts.image_transformations import ImageTransformations
 from donkeycar.utils import get_model_by_type, normalize_image, train_test_split
-logging.getLogger('tensorflow').setLevel(logging.WARNING)
-import tensorflow as tf
 import numpy as np
+try:
+    import tensorflow as tf
+    from tensorflow.keras.models import load_model
+    logging.getLogger('tensorflow').setLevel(logging.WARNING)
+except ImportError:
+    tf = None
 
 logger = logging.getLogger(__name__)
 

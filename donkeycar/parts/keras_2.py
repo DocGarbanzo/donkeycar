@@ -5,16 +5,19 @@ from collections import deque
 
 import numpy as np
 from typing import Dict, Tuple, Union, List, Callable
-logging.getLogger('tensorflow').setLevel(logging.WARNING)
-import tensorflow as tf
-
-from tensorflow import keras
-from tensorflow.keras import regularizers
-from tensorflow.keras import Model, Input
-from tensorflow.keras.layers import Dense, Concatenate, Conv2D, \
-    BatchNormalization, Dropout, Flatten, Reshape, UpSampling2D, \
-    Conv2DTranspose, LSTM, MaxPooling2D, TimeDistributed as TD, LeakyReLU
-from tensorflow.python.keras.layers import Activation
+try:
+    import tensorflow as tf
+    from tensorflow import keras
+    from tensorflow.keras import regularizers
+    from tensorflow.keras import Model, Input
+    from tensorflow.keras.layers import (Dense, Concatenate, Conv2D,
+        BatchNormalization, Dropout, Flatten, Reshape, UpSampling2D,
+        Conv2DTranspose, LSTM, MaxPooling2D, TimeDistributed as TD,
+        LeakyReLU, Activation)
+    logging.getLogger('tensorflow').setLevel(logging.WARNING)
+except ImportError:
+    tf = None
+    keras = None
 
 from donkeycar.parts.interpreter import Interpreter, KerasInterpreter
 from donkeycar.parts.keras import KerasLinear, XY, KerasMemory

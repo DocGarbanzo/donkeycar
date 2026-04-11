@@ -4,16 +4,36 @@ import logging
 import numpy as np
 from typing import Union, Sequence
 
-logging.getLogger('tensorflow').setLevel(logging.WARNING)
-import tensorflow as tf
-from tensorflow import keras
-from tensorflow.python.saved_model import tag_constants, signature_constants
-from tensorflow.python.compiler.tensorrt import trt_convert as trt
+try:
+    import tensorflow as tf
+    from tensorflow import keras
+    logging.getLogger('tensorflow').setLevel(logging.WARNING)
+    try:
+        import tensorflow.compiler.tf2tensorrt.wrap_py_utils as trt
+    except ImportError:
+        trt = None
+except ImportError:
+    tf = None
+    keras = None
+    trt = None
 
 logger = logging.getLogger(__name__)
 
 
+def get_tflite_interpreter():
+    try:
+        from ai_edge_litert.interpreter import Interpreter
+        return Interpreter
+    except ImportError:
+        pass
+    if tf is not None:
+        return tf.lite.Interpreter
+    raise ImportError('No TFLite interpreter found. Install ai-edge-litert.')
+
+
 def has_trt_support():
+    if trt is None:
+        return False
     try:
         converter = trt.TrtGraphConverterV2()
         return True
@@ -92,14 +112,14 @@ class Interpreter(ABC):
         """ Some interpreters will need the model"""
         pass
 
-    def set_optimizer(self, optimizer: tf.keras.optimizers.Optimizer) -> None:
+    def set_optimizer(self, optimizer) -> None:
         pass
 
     def compile(self, **kwargs):
         raise NotImplementedError('Requires implementation')
 
     @abstractmethod
-    def get_input_shape(self, input_name) -> tf.TensorShape:
+    def get_input_shape(self, input_name):
         pass
 
     def predict(self, img_arr: np.ndarray, *other_arr: np.ndarray) \
@@ -150,7 +170,7 @@ class KerasInterpreter(Interpreter):
     def set_optimizer(self, optimizer: tf.keras.optimizers.Optimizer) -> None:
         self.model.optimizer = optimizer
 
-    def get_input_shape(self, input_name) -> tf.TensorShape:
+    def get_input_shape(self, input_name):
         assert self.model, 'Model not set'
         return self.shapes[0][input_name]
 
@@ -265,7 +285,8 @@ class TfLite(Interpreter):
             'TFlitePilot should load only .tflite files'
         logger.info(f'Loading model {model_path}')
         # Load TFLite model and extract input and output keys
-        self.interpreter = tf.lite.Interpreter(model_path=model_path)
+        TfliteInterpreter = get_tflite_interpreter()
+        self.interpreter = TfliteInterpreter(model_path=model_path)
         self.signatures = self.interpreter.get_signature_list()
         self.runner = self.interpreter.get_signature_runner()
         self.input_keys = self.signatures['serving_default']['inputs']
@@ -314,7 +335,7 @@ class TensorRT(Interpreter):
         # state as the trt model hasn't been loaded yet
         self.pilot = pilot
 
-    def get_input_shape(self, input_name) -> tf.TensorShape:
+    def get_input_shape(self, input_name):
         assert self.graph_func, "Requires loadin the tensorrt model first"
         return self.graph_func.structured_input_signature[1][input_name].shape
 
@@ -336,9 +357,9 @@ class TensorRT(Interpreter):
                 self.graph_func = converter.convert()
             else:
                 trt_model_loaded = tf.saved_model.load(
-                    model_path, tags=[tag_constants.SERVING])
+                    model_path, tags=[tf.saved_model.SERVING])
                 self.graph_func = trt_model_loaded.signatures[
-                    signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY]
+                    tf.saved_model.DEFAULT_SERVING_SIGNATURE_DEF_KEY]
                 inputs, outputs = self.pilot.output_shapes()
                 self.input_keys = list(inputs.keys())
                 self.output_keys = list(outputs.keys())
