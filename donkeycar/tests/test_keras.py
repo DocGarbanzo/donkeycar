@@ -4,6 +4,9 @@ from pytest import approx
 import pytest
 import os
 
+tf = pytest.importorskip('tensorflow',
+                         reason='TensorFlow not installed, skipping keras tests')
+
 from donkeycar.parts.interpreter import keras_to_tflite, \
     saved_model_to_tensor_rt, TfLite, TensorRT, has_trt_support
 from donkeycar.parts.keras import *
