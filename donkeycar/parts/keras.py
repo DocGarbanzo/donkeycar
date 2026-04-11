@@ -154,7 +154,7 @@ class KerasPilot(ABC):
               verbose: int = 1,
               min_delta: float = .0005,
               patience: int = 5,
-              show_plot: bool = False) -> tf.keras.callbacks.History:
+              show_plot: bool = False):
         """
         trains the model
         """

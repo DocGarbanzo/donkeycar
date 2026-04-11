@@ -96,7 +96,7 @@ class BatchSequence(object):
                                      w_transform=w_transform)
         return pipeline
 
-    def create_tf_data(self) -> tf.data.Dataset:
+    def create_tf_data(self):
         """ Assembles the tf data pipeline """
         dataset = tf.data.Dataset.from_generator(
             generator=lambda: self.pipeline,
@@ -116,7 +116,7 @@ def get_model_train_details(database: PilotDatabase, model: str = None) \
 
 def train(cfg: Config, tub_paths: str, model: str = None,
           model_type: str = None, transfer: str = None, comment: str = None) \
-        -> tf.keras.callbacks.History:
+        :
     """
     Train the model
     """
