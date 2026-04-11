@@ -148,7 +148,7 @@ class KerasInterpreter(Interpreter):
 
     def __init__(self):
         super().__init__()
-        self.model: tf.keras.Model = None
+        self.model = None
 
     def set_model(self, pilot: 'KerasPilot') -> None:
         self.model = pilot.create_model()
@@ -167,7 +167,7 @@ class KerasInterpreter(Interpreter):
         self.shapes = (dict(zip(self.input_keys, input_shape)),
                        dict(zip(self.output_keys, output_shape)))
 
-    def set_optimizer(self, optimizer: tf.keras.optimizers.Optimizer) -> None:
+    def set_optimizer(self, optimizer) -> None:
         self.model.optimizer = optimizer
 
     def get_input_shape(self, input_name):

@@ -91,7 +91,7 @@ class KerasPilot(ABC):
             raise Exception(f"Unknown optimizer type: {optimizer_type}")
         self.interpreter.set_optimizer(optimizer)
 
-    def get_input_shape(self, input_name) -> tf.TensorShape:
+    def get_input_shape(self, input_name):
         return self.interpreter.get_input_shape(input_name)
 
     def seq_size(self) -> int:
@@ -270,7 +270,7 @@ class KerasPilot(ABC):
         types = tuple({k: tf.float64 for k in d} for d in shapes)
         return types
 
-    def output_shapes(self) -> Dict[str, tf.TensorShape]:
+    def output_shapes(self) -> dict:
         return {}
 
     def __str__(self) -> str:
