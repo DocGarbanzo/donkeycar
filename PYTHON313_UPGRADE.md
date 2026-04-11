@@ -44,9 +44,9 @@ These internal paths were removed in TF 2.16+.
 
 ## Step 5: Testing
 - [x] Run full test suite on Ubuntu with existing Python 3.11 (regression check)
-- [ ] SSH to Pi, create venv with Python 3.13, install `.[pi]`
-- [ ] Verify TFLite via `ai-edge-litert` on Pi
-- [ ] Verify camera and GPIO imports on Pi
+- [x] SSH to Pi, create venv with Python 3.13 (--system-site-packages for libcamera), install `.[pi]`
+- [x] Verify TFLite via `ai-edge-litert` on Pi
+- [x] Verify camera and GPIO imports on Pi
 
 ---
 
