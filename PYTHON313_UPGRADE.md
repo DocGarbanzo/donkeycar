@@ -43,7 +43,8 @@ These internal paths were removed in TF 2.16+.
 - [x] Update Python version requirement from `3.11+ but < 3.12` to `3.11–3.13`
 
 ## Step 5: Testing
-- [x] Run full test suite on Ubuntu with existing Python 3.11 (regression check)
+- [x] Run full test suite on Ubuntu with existing Python 3.11 (regression check — 436 passed)
+- [x] Run full test suite on Pi Python 3.13 (381 passed, 24 skipped TF-only, 0 failed)
 - [x] SSH to Pi, create venv with Python 3.13 (--system-site-packages for libcamera), install `.[pi]`
 - [x] Verify TFLite via `ai-edge-litert` on Pi
 - [x] Verify camera and GPIO imports on Pi
