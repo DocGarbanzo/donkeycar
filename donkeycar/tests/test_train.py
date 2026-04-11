@@ -1,6 +1,8 @@
 from copy import copy
 
 import pytest
+pytest.importorskip('tensorflow',
+                    reason='TensorFlow not installed, skipping training tests')
 import tarfile
 import os
 import numpy as np

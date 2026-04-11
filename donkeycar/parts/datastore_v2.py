@@ -512,6 +512,9 @@ class ManifestIterator(object):
         self.current_catalog_index = 0
         self.current_catalog = None
 
+    def __iter__(self):
+        return self
+
     def __next__(self):
         while True:
             if not self.has_catalogs:
