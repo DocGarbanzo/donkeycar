@@ -8,6 +8,11 @@ import tarfile
 from donkeycar import utils
 import pytest
 
+tf_available = pytest.mark.skipif(
+    not __import__('importlib').util.find_spec('tensorflow'),
+    reason='TensorFlow not installed'
+)
+
 
 # Check if donkey CLI is available in PATH
 DONKEY_CLI_AVAILABLE = shutil.which('donkey') is not None
@@ -44,6 +49,7 @@ def test_createcar(cardir):
     not DONKEY_CLI_AVAILABLE,
     reason="donkey CLI not installed in PATH"
 )
+@tf_available
 def test_drivesim(cardir):
     cmd = ['donkey', 'createcar', '--path', cardir ,'--template', 'square']
     out, err, proc_id = utils.run_shell_command(cmd, timeout=10)
