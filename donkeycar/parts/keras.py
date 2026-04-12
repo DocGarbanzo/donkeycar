@@ -40,6 +40,11 @@ except ImportError:
 
 ONE_BYTE_SCALE = 1.0 / 255.0
 
+
+def _tshape(shape):
+    """TensorShape when TF available, plain tuple otherwise (e.g. on Pi)."""
+    return tf.TensorShape(shape) if tf is not None else tuple(shape)
+
 # type of x
 XY = Union[float, np.ndarray, Tuple[Union[float, np.ndarray], ...]]
 
@@ -352,9 +357,9 @@ class KerasCategorical(KerasPilot):
     def output_shapes(self):
         # need to cut off None from [None, 120, 160, 3] tensor shape
         img_shape = self.get_input_shape('img_in')[1:]
-        shapes = ({'img_in': tf.TensorShape(img_shape)},
-                  {'angle_out': tf.TensorShape([15]),
-                   'throttle_out': tf.TensorShape([20])})
+        shapes = ({'img_in': _tshape(img_shape)},
+                  {'angle_out': _tshape([15]),
+                   'throttle_out': _tshape([20])})
         return shapes
 
     def __str__(self) -> str:
@@ -396,9 +401,9 @@ class KerasLinear(KerasPilot):
     def output_shapes(self):
         # need to cut off None from [None, 120, 160, 3] tensor shape
         img_shape = self.get_input_shape('img_in')[1:]
-        shapes = ({'img_in': tf.TensorShape(img_shape)},
-                  {'n_outputs0': tf.TensorShape([]),
-                   'n_outputs1': tf.TensorShape([])})
+        shapes = ({'img_in': _tshape(img_shape)},
+                  {'n_outputs0': _tshape([]),
+                   'n_outputs1': _tshape([])})
         return shapes
 
 
@@ -483,10 +488,10 @@ class KerasMemory(KerasLinear):
     def output_shapes(self):
         # need to cut off None from [None, 120, 160, 3] tensor shape
         img_shape = self.get_input_shape('img_in')[1:]
-        shapes = ({'img_in': tf.TensorShape(img_shape),
-                   'mem_in': tf.TensorShape(2 * self.mem_length)},
-                  {'n_outputs0': tf.TensorShape([]),
-                   'n_outputs1': tf.TensorShape([])})
+        shapes = ({'img_in': _tshape(img_shape),
+                   'mem_in': _tshape(2 * self.mem_length)},
+                  {'n_outputs0': _tshape([]),
+                   'n_outputs1': _tshape([])})
         return shapes
 
     def __str__(self) -> str:
@@ -520,7 +525,7 @@ class KerasInferred(KerasPilot):
     def output_shapes(self):
         img_shape = self.get_input_shape('img_in')[1:]
         # Keras 3.x: single-output shape is a TensorShape, not a dict
-        return ({'img_in': tf.TensorShape(img_shape)}, tf.TensorShape([]))
+        return ({'img_in': _tshape(img_shape)}, _tshape([]))
 
     def output_types(self):
         return ({'img_in': tf.float64}, tf.float64)
@@ -578,10 +583,10 @@ class KerasIMU(KerasPilot):
         # need to cut off None from [None, 120, 160, 3] tensor shape
         img_shape = self.get_input_shape('img_in')[1:]
         # the keys need to match the models input/output layers
-        shapes = ({'img_in': tf.TensorShape(img_shape),
-                   'imu_in': tf.TensorShape([self.num_imu_inputs])},
-                  {'out_0': tf.TensorShape([]),
-                   'out_1': tf.TensorShape([])})
+        shapes = ({'img_in': _tshape(img_shape),
+                   'imu_in': _tshape([self.num_imu_inputs])},
+                  {'out_0': _tshape([]),
+                   'out_1': _tshape([])})
         return shapes
 
 
@@ -617,10 +622,10 @@ class KerasBehavioral(KerasCategorical):
         # need to cut off None from [None, 120, 160, 3] tensor shape
         img_shape = self.get_input_shape('img_in')[1:]
         # the keys need to match the models input/output layers
-        shapes = ({'img_in': tf.TensorShape(img_shape),
-                   'xbehavior_in': tf.TensorShape([self.num_behavior_inputs])},
-                  {'angle_out': tf.TensorShape([15]),
-                   'throttle_out': tf.TensorShape([20])})
+        shapes = ({'img_in': _tshape(img_shape),
+                   'xbehavior_in': _tshape([self.num_behavior_inputs])},
+                  {'angle_out': _tshape([15]),
+                   'throttle_out': _tshape([20])})
         return shapes
 
 
@@ -666,10 +671,10 @@ class KerasLocalizer(KerasPilot):
         # need to cut off None from [None, 120, 160, 3] tensor shape
         img_shape = self.get_input_shape('img_in')[1:]
         # the keys need to match the models input/output layers
-        shapes = ({'img_in': tf.TensorShape(img_shape)},
-                  {'angle': tf.TensorShape([]),
-                   'throttle': tf.TensorShape([]),
-                   'zloc': tf.TensorShape([self.num_locations])})
+        shapes = ({'img_in': _tshape(img_shape)},
+                  {'angle': _tshape([]),
+                   'throttle': _tshape([]),
+                   'zloc': _tshape([self.num_locations])})
         return shapes
 
 
@@ -743,8 +748,8 @@ class KerasLSTM(KerasPilot):
     def output_shapes(self):
         img_shape = self.get_input_shape('img_in')[1:]
         # Keras 3.x: single-output shape is a TensorShape, not a dict
-        return ({'img_in': tf.TensorShape(img_shape)},
-                tf.TensorShape([self.num_outputs]))
+        return ({'img_in': _tshape(img_shape)},
+                _tshape([self.num_outputs]))
 
     def output_types(self):
         return ({'img_in': tf.float64}, tf.float64)
@@ -822,8 +827,8 @@ class Keras3D_CNN(KerasPilot):
     def output_shapes(self):
         img_shape = self.get_input_shape('img_in')[1:]
         # Keras 3.x: single-output shape is a TensorShape, not a dict
-        return ({'img_in': tf.TensorShape(img_shape)},
-                tf.TensorShape([self.num_outputs]))
+        return ({'img_in': _tshape(img_shape)},
+                _tshape([self.num_outputs]))
 
     def output_types(self):
         return ({'img_in': tf.float64}, tf.float64)

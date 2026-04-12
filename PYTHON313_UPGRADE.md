@@ -280,12 +280,116 @@ Issue tracker references:
 - [x] Update Python version requirement from `3.11+ but < 3.12` to `3.11–3.13`
 
 ## Step 7: Testing
-- [x] Run full test suite on Ubuntu with existing Python 3.11 (regression check — 436 passed)
-- [x] Run full test suite on Pi Python 3.13 (381 passed, 24 skipped TF-only, 0 failed)
-- [x] SSH to Pi, create venv with Python 3.13 (--system-site-packages for libcamera), install `.[pi]`
-- [x] Verify camera and GPIO imports on Pi
-- [ ] Verify TFLite via `ai-edge-litert` on Pi (Step 4 fix done; needs Pi test)
-- [x] All 9 `test_keras_vs_tflite_and_tensorrt` tests passing on x86
+
+### 7a: x86 / Ubuntu Regression
+
+- [x] Run full test suite on Ubuntu Python 3.11 (regression check — 436 passed)
+- [x] All 9 `test_keras_vs_tflite_and_tensorrt` tests passing on x86 with TF
+  2.21 (8 passed, 1 xfailed for `Keras3D_CNN` — requires Flex delegate)
+
+### 7b: Raspberry Pi — General Test Suite
+
+The Pi has `.[pi]` installed (no TensorFlow). 45 of 47 test files run
+fully; `test_keras.py` and `test_train.py` auto-skip via
+`pytest.importorskip('tensorflow', ...)`.
+
+- [x] SSH to Pi, create venv with Python 3.13 (`--system-site-packages` for
+  libcamera), install `.[pi]`
+- [x] Verify camera and GPIO imports (`from picamera2 import Picamera2`,
+  `from gpiozero import LED`)
+- [x] Run full test suite: 381 passed, 24 skipped (TF-only), 0 failed
+  ```bash
+  pytest donkeycar/tests/ -v
+  ```
+- [x] Re-run full test suite after pulling Step 4 changes: 379 passed, 28
+  skipped (TF-only + Pi-specific), 0 failed — clean pull confirmed
+
+### 7c: Raspberry Pi — TFLite Inference via `ai-edge-litert`
+
+TF is not installed on Pi so conversion cannot run there. The plan:
+
+**Step 1 — Generate `.tflite` files on x86** (already verified working):
+```bash
+# on x86, in the donkey313 conda env
+python - <<'EOF'
+import tempfile, os
+from donkeycar.parts.keras import KerasLinear, KerasIMU, KerasLSTM
+from donkeycar.parts.interpreter import KerasInterpreter, keras_to_tflite
+outdir = os.path.expanduser('~/tflite_pi_test')
+os.makedirs(outdir, exist_ok=True)
+for cls in (KerasLinear, KerasIMU, KerasLSTM):
+    interp = KerasInterpreter()
+    cls(interpreter=interp)
+    path = os.path.join(outdir, f'{cls.__name__}.tflite')
+    keras_to_tflite(interp.model, path)
+    print(f'Written {path}')
+EOF
+```
+Choose `KerasLinear` (single input, two outputs — verifies output ordering),
+`KerasIMU` (two inputs — verifies multi-input tensor map), and `KerasLSTM`
+(two outputs as array — verifies array output).
+
+**Step 2 — Copy to Pi:**
+```bash
+scp ~/tflite_pi_test/*.tflite hyper.local:~/tflite_pi_test/
+```
+
+**Step 3 — Run inference smoke test on Pi:**
+```bash
+ssh hyper.local
+cd ~/projects/donkeycar && git pull
+python - <<'EOF'
+import numpy as np
+from donkeycar.parts.interpreter import get_tflite_interpreter, TfLite
+from donkeycar.parts.keras import KerasLinear, KerasIMU, KerasLSTM
+import os
+
+TFLITE_DIR = os.path.expanduser('~/tflite_pi_test')
+
+# 1. Confirm ai-edge-litert is the resolver
+Interp = get_tflite_interpreter()
+assert 'ai_edge_litert' in Interp.__module__, \
+    f"Expected ai_edge_litert, got {Interp.__module__}"
+print(f"OK  interpreter: {Interp.__module__}")
+
+tests = [
+    ('KerasLinear',  'KerasLinear.tflite',  (120, 160, 3),    None),
+    ('KerasIMU',     'KerasIMU.tflite',     (120, 160, 3),    (6,)),
+    # KerasLSTM seq_length=3: input must be (seq, H, W, C)
+    ('KerasLSTM',    'KerasLSTM.tflite',    (3, 120, 160, 3), None),
+]
+for name, fname, img_shape, aux_shape in tests:
+    tfl = TfLite()
+    tfl.load(os.path.join(TFLITE_DIR, fname))
+    # confirm tensor-API fallback activated
+    assert tfl.runner is None, f"{name}: expected tensor-API fallback"
+    img = np.random.rand(*img_shape).astype(np.float32)
+    if aux_shape:
+        aux = np.random.rand(*aux_shape).astype(np.float32)
+        out = tfl.predict(img, aux)
+    else:
+        out = tfl.predict(img)
+    print(f"OK  {name}: output={out}")
+
+print("All Pi TFLite checks passed.")
+EOF
+```
+
+**What to verify:**
+- `get_tflite_interpreter()` resolves to `ai_edge_litert.interpreter.Interpreter`
+- `tfl.runner is None` — tensor-API fallback activated (no signatures)
+- `KerasLinear` returns `[angle, throttle]` as two floats (output ordering)
+- `KerasIMU` loads with two input tensors mapped by name
+- `KerasLSTM` returns an array output
+
+- [x] Step 1: generate `.tflite` files on x86 (KerasLinear, KerasIMU, KerasLSTM)
+- [x] Step 2: copy to Pi (`~/tflite_pi_test/`)
+- [x] Step 3: smoke test passes on Pi — `ai_edge_litert.interpreter` resolves,
+  tensor-API fallback activates for all 3 models, inference succeeds:
+  - KerasLinear: `[angle, throttle]` two floats — output ordering confirmed
+  - KerasIMU: two inputs mapped by name — multi-input tensor map confirmed
+  - KerasLSTM: array `[angle, throttle]` — 5D sequence input `(3,120,160,3)`
+    required (seq_length=3); flat `(120,160,3)` would fail with dim mismatch
 
 ---
 
