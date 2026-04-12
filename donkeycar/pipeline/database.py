@@ -44,7 +44,7 @@ class PilotDatabase:
             this_num = 0
         date = time.strftime('%y-%m-%d')
         ext = 'h5' if getattr(self.cfg, 'SAVE_MODEL_AS_H5', False) \
-            else 'savedmodel'
+            else 'keras'
         name = f'pilot_{date}_{this_num}.{ext}'
 
         return os.path.join(self.cfg.MODELS_PATH, name), this_num
@@ -127,7 +127,8 @@ class PilotDatabase:
             return datetime.fromtimestamp(t).strftime(fmt)
 
         def transfer_fmt(model_name):
-            return model_name.replace('.h5', '').replace('.savedmodel', '')
+            return (model_name.replace('.h5', '').replace('.savedmodel', '')
+                .replace('.keras', ''))
 
         return {'Time': time_fmt, 'Transfer': transfer_fmt}
 
@@ -157,7 +158,7 @@ def update_config_from_database(cfg, model_path, model_type):
                  'ROI_CROP_LEFT', 'ROI_CROP_RIGHT', 'ROI_CROP_TOP',
                  'SEQUENCE_LENGTH']
     model_prefix_map = {'.tflite': 'tflite_', '.trt': 'tensorrt_',
-                        '.savedmodel': '', 'h5': ''}
+                        '.savedmodel': '', '.keras': '', '.h5': ''}
     db = PilotDatabase(cfg)
     model_basename, model_ext \
         = os.path.splitext(os.path.basename(model_path))

@@ -221,12 +221,11 @@ def train(cfg: Config, tub_paths: str, model: str = None,
         keras_model_to_tflite(model_path, tf_lite_model_path)
 
     if getattr(cfg, 'CREATE_TENSOR_RT', False):
-        # convert .h5 model to .savedmodel, only if we are using h5 format
-        if ext == '.h5':
-            logger.info(f"Converting from .h5 to .savedmodel first")
+        # export to savedmodel format for TRT if not already in that format
+        if ext != '.savedmodel':
+            logger.info(f"Exporting to .savedmodel for TRT conversion")
             model_tmp = load_model(model_path, compile=False)
-            # save in tensorflow savedmodel format (i.e. directory)
-            model_tmp.save(f'{base_path}.savedmodel')
+            model_tmp.export(f'{base_path}.savedmodel')
         # pass savedmodel to the rt converter
         saved_model_to_tensor_rt(f'{base_path}.savedmodel', f'{base_path}.trt')
 

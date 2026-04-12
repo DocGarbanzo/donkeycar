@@ -29,7 +29,7 @@ try:
         MaxPooling2D, Activation, Dropout, Flatten, LSTM, BatchNormalization,
         Conv3D, MaxPooling3D, Conv2DTranspose)
     from tensorflow.keras.layers import TimeDistributed as TD
-    from tensorflow.keras.backend import concatenate
+    from tensorflow.keras.layers import concatenate
     from tensorflow.keras.models import Model
     from tensorflow.keras.callbacks import (EarlyStopping, ModelCheckpoint,
         TensorBoard)
@@ -194,9 +194,7 @@ class KerasPilot(ABC):
             validation_data=validation_data,
             validation_steps=validation_steps,
             epochs=epochs,
-            verbose=verbose,
-            workers=1,
-            use_multiprocessing=False)
+            verbose=verbose)
         toc = datetime.now()
         logger.info(f'////////// Finished training in: {toc - tic} //////////')
 
@@ -326,9 +324,10 @@ class KerasCategorical(KerasPilot):
         return default_categorical(self.input_shape)
 
     def compile(self):
+        # Keras 3.x requires one metric per output for multi-output models
         self.interpreter.compile(
             optimizer=self.optimizer,
-            metrics=['accuracy'],
+            metrics=['accuracy', 'accuracy'],
             loss={'angle_out': 'categorical_crossentropy',
                   'throttle_out': 'categorical_crossentropy'},
             loss_weights={'angle_out': 0.5, 'throttle_out': 0.5})
@@ -513,17 +512,18 @@ class KerasInferred(KerasPilot):
         return steering, dk.utils.throttle(steering)
 
     def y_transform(self, record: Union[TubRecord, List[TubRecord]]) \
-            -> Dict[str, Union[float, List[float]]]:
+            -> Union[float, Dict[str, Union[float, List[float]]]]:
         assert isinstance(record, TubRecord), "TubRecord expected"
-        angle: float = record.underlying['user/angle']
-        return {'n_outputs0': angle}
+        # Keras 3.x: single-output models require raw value, not dict
+        return record.underlying['user/angle']
 
     def output_shapes(self):
-        # need to cut off None from [None, 120, 160, 3] tensor shape
         img_shape = self.get_input_shape('img_in')[1:]
-        shapes = ({'img_in': tf.TensorShape(img_shape)},
-                  {'n_outputs0': tf.TensorShape([])})
-        return shapes
+        # Keras 3.x: single-output shape is a TensorShape, not a dict
+        return ({'img_in': tf.TensorShape(img_shape)}, tf.TensorShape([]))
+
+    def output_types(self):
+        return ({'img_in': tf.float64}, tf.float64)
 
 
 class KerasIMU(KerasPilot):
@@ -641,7 +641,9 @@ class KerasLocalizer(KerasPilot):
                            input_shape=self.input_shape)
 
     def compile(self):
-        self.interpreter.compile(optimizer=self.optimizer, metrics=['acc'],
+        # Keras 3.x requires metrics per output for multi-output models
+        self.interpreter.compile(optimizer=self.optimizer,
+                                 metrics={'zloc': 'accuracy'},
                                  loss='mse')
 
     def interpreter_to_output(self, interpreter_out) \
@@ -709,12 +711,13 @@ class KerasLSTM(KerasPilot):
         return {'img_in': np.array(img_arrays)}
 
     def y_transform(self, records: Union[TubRecord, List[TubRecord]]) \
-            -> Dict[str, Union[float, List[float]]]:
+            -> Union[np.ndarray, Dict[str, Union[float, List[float]]]]:
         """ Only return the last entry of angle/throttle"""
         assert isinstance(records, list), 'List[TubRecord] expected'
         angle = records[-1].underlying['user/angle']
         throttle = records[-1].underlying['user/throttle']
-        return {'model_outputs': [angle, throttle]}
+        # Keras 3.x: single-output models require raw array, not dict
+        return np.array([angle, throttle])
 
     def run(self, img_arr, *other_arr):
         if img_arr.shape[2] == 3 and self.input_shape[2] == 1:
@@ -738,12 +741,13 @@ class KerasLSTM(KerasPilot):
         return steering, throttle
 
     def output_shapes(self):
-        # need to cut off None from [None, 120, 160, 3] tensor shape
         img_shape = self.get_input_shape('img_in')[1:]
-        # the keys need to match the models input/output layers
-        shapes = ({'img_in': tf.TensorShape(img_shape)},
-                  {'model_outputs': tf.TensorShape([self.num_outputs])})
-        return shapes
+        # Keras 3.x: single-output shape is a TensorShape, not a dict
+        return ({'img_in': tf.TensorShape(img_shape)},
+                tf.TensorShape([self.num_outputs]))
+
+    def output_types(self):
+        return ({'img_in': tf.float64}, tf.float64)
 
     def __str__(self) -> str:
         """ For printing model initialisation """
@@ -786,12 +790,13 @@ class Keras3D_CNN(KerasPilot):
         return {'img_in': np.array(img_seq)}
 
     def y_transform(self, records: Union[TubRecord, List[TubRecord]]) \
-            -> Dict[str, Union[float, List[float]]]:
+            -> Union[np.ndarray, Dict[str, Union[float, List[float]]]]:
         """ Only return the last entry of angle/throttle"""
         assert isinstance(records, list), 'List[TubRecord] expected'
         angle = records[-1].underlying['user/angle']
         throttle = records[-1].underlying['user/throttle']
-        return {'outputs': [angle, throttle]}
+        # Keras 3.x: single-output models require raw array, not dict
+        return np.array([angle, throttle])
 
     def run(self, img_arr, *other_arr):
         if img_arr.shape[2] == 3 and self.input_shape[2] == 1:
@@ -815,12 +820,13 @@ class Keras3D_CNN(KerasPilot):
         return steering, throttle
 
     def output_shapes(self):
-        # need to cut off None from [None, 120, 160, 3] tensor shape
         img_shape = self.get_input_shape('img_in')[1:]
-        # the keys need to match the models input/output layers
-        shapes = ({'img_in': tf.TensorShape(img_shape)},
-                  {'outputs': tf.TensorShape([self.num_outputs])})
-        return shapes
+        # Keras 3.x: single-output shape is a TensorShape, not a dict
+        return ({'img_in': tf.TensorShape(img_shape)},
+                tf.TensorShape([self.num_outputs]))
+
+    def output_types(self):
+        return ({'img_in': tf.float64}, tf.float64)
 
 
 class KerasLatent(KerasPilot):

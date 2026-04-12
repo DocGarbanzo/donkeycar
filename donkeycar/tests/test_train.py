@@ -146,7 +146,7 @@ def test_train(config: Config, data: Data) -> None:
     :return:                None
     """
     def pilot_path(name):
-        pilot_name = f'pilot_{name}.savedmodel'
+        pilot_name = f'pilot_{name}.keras'
         return os.path.join(config.MODELS_PATH, pilot_name)
 
     cfg = copy(config)
@@ -222,6 +222,10 @@ def test_training_pipeline(config: Config, model_type: str,
             # from here all checks are symmetrical between x and y
             for batch, o_type, records \
                     in zip(xy_batch, kl.output_types(), (records_x, records_y)):
+                if not isinstance(batch, dict):
+                    # single-output models return raw arrays (Keras 3.x)
+                    assert np.isclose(batch, np.array(records)).all()
+                    continue
                 # check batch dictionary have expected keys
                 assert batch.keys() == o_type.keys(), \
                     'batch keys need to match models output types'

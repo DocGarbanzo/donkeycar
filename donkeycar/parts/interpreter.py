@@ -50,7 +50,19 @@ def keras_model_to_tflite(in_filename, out_filename, data_gen=None):
 
 
 def keras_to_tflite(model, out_filename, data_gen=None):
-    converter = tf.lite.TFLiteConverter.from_keras_model(model)
+    # from_keras_model is broken with Keras 3.x; use tf.function +
+    # from_concrete_functions which bypasses the problematic Keras export path
+    input_sig = [tf.TensorSpec(shape=(1,) + tuple(inp.shape[1:]),
+                               dtype=tf.float32, name=inp.name)
+                 for inp in model.inputs]
+    if len(input_sig) == 1:
+        tf_func = tf.function(model, input_signature=input_sig)
+    else:
+        tf_func = tf.function(lambda *args: model(list(args)),
+                              input_signature=input_sig)
+    concrete = tf_func.get_concrete_function()
+    converter = tf.lite.TFLiteConverter.from_concrete_functions(
+        [concrete], tf_func)
     converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS,
                                            tf.lite.OpsSet.SELECT_TF_OPS]
     converter.allow_custom_ops = True
@@ -162,7 +174,7 @@ class KerasInterpreter(Interpreter):
         if type(output_shape) is not list:
             output_shape = [output_shape]
 
-        self.input_keys = self.model.input_names
+        self.input_keys = [inp.name for inp in self.model.inputs]
         self.output_keys = self.model.output_names
         self.shapes = (dict(zip(self.input_keys, input_shape)),
                        dict(zip(self.output_keys, output_shape)))
@@ -280,17 +292,39 @@ class TfLite(Interpreter):
         self.runner = None
         self.signatures = None
     
+    @staticmethod
+    def _normalise_tensor_name(raw):
+        return raw.removeprefix('serving_default_').removesuffix(':0')
+
     def load(self, model_path):
         assert os.path.splitext(model_path)[1] == '.tflite', \
             'TFlitePilot should load only .tflite files'
         logger.info(f'Loading model {model_path}')
-        # Load TFLite model and extract input and output keys
         TfliteInterpreter = get_tflite_interpreter()
         self.interpreter = TfliteInterpreter(model_path=model_path)
         self.signatures = self.interpreter.get_signature_list()
+        if not self.signatures:
+            return self._load_via_tensor_api()
         self.runner = self.interpreter.get_signature_runner()
-        self.input_keys = self.signatures['serving_default']['inputs']
-        self.output_keys = self.signatures['serving_default']['outputs']
+        self.input_keys = list(
+            self.signatures['serving_default']['inputs'])
+        self.output_keys = list(
+            self.signatures['serving_default']['outputs'])
+
+    def _load_via_tensor_api(self):
+        logger.info(
+            'No TFLite signatures found; using tensor API fallback')
+        self.runner = None
+        self.interpreter.allocate_tensors()
+        in_details = self.interpreter.get_input_details()
+        out_details = sorted(self.interpreter.get_output_details(),
+                             key=lambda d: d['index'])
+        self.input_keys = [
+            self._normalise_tensor_name(d['name']) for d in in_details]
+        self._input_index_map = {
+            k: d['index'] for k, d in zip(self.input_keys, in_details)}
+        self._output_indices = [d['index'] for d in out_details]
+        self.output_keys = [str(i) for i in range(len(out_details))]
 
     def compile(self, **kwargs):
         pass
@@ -298,17 +332,35 @@ class TfLite(Interpreter):
     def predict_from_dict(self, input_dict):
         for k, v in input_dict.items():
             input_dict[k] = self.expand_and_convert(v)
+        if self.runner is not None:
+            return self._predict_via_runner(input_dict)
+        return self._predict_via_tensor_api(input_dict)
+
+    def _predict_via_runner(self, input_dict):
         outputs = self.runner(**input_dict)
         ret = list(outputs[k][0] for k in self.output_keys)
         return ret if len(ret) > 1 else ret[0]
 
+    def _predict_via_tensor_api(self, input_dict):
+        for k, v in input_dict.items():
+            self.interpreter.set_tensor(self._input_index_map[k], v)
+        self.interpreter.invoke()
+        ret = [self.interpreter.get_tensor(i)[0]
+               for i in self._output_indices]
+        return ret if len(ret) > 1 else ret[0]
+
     def get_input_shape(self, input_name):
-        assert self.interpreter is not None, "Need to load tflite model first"
+        assert self.interpreter is not None, \
+            "Need to load tflite model first"
         details = self.interpreter.get_input_details()
-        for detail in details:
-            if detail['name'] == f"serving_default_{input_name}:0":
-                return detail['shape']
-        raise RuntimeError(f'{input_name} not found in TFlite model')
+        match = next(
+            (d for d in details
+             if self._normalise_tensor_name(d['name']) == input_name),
+            None)
+        if match is None:
+            raise RuntimeError(
+                f'{input_name} not found in TFlite model')
+        return match['shape']
 
     @staticmethod
     def expand_and_convert(arr):
