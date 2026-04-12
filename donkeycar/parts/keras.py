@@ -42,8 +42,12 @@ ONE_BYTE_SCALE = 1.0 / 255.0
 
 
 def _tshape(shape):
-    """TensorShape when TF available, plain tuple otherwise (e.g. on Pi)."""
-    return tf.TensorShape(shape) if tf is not None else tuple(shape)
+    """Shape helper for LiteRT-only Pi inference when TensorFlow is absent."""
+    if isinstance(shape, int):
+        shape = (shape,)
+    else:
+        shape = tuple(shape)
+    return tf.TensorShape(shape) if tf is not None else shape
 
 # type of x
 XY = Union[float, np.ndarray, Tuple[Union[float, np.ndarray], ...]]
