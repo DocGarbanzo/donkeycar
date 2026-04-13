@@ -43,8 +43,8 @@ ONE_BYTE_SCALE = 1.0 / 255.0
 
 def _tshape(shape):
     """Shape helper for LiteRT-only Pi inference when TensorFlow is absent."""
-    if isinstance(shape, int):
-        shape = (shape,)
+    if isinstance(shape, (int, np.integer)):
+        shape = (int(shape),)
     else:
         shape = tuple(shape)
     return tf.TensorShape(shape) if tf is not None else shape
