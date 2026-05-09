@@ -74,6 +74,7 @@ nano = [
 pc = [
     "tensorflow==2.19.*",
     "tf-keras==2.19.*",
+    "ai-edge-litert>=2.1.4",
     "matplotlib",
     "kivy",
     "kivy-garden.matplotlib",
@@ -85,6 +86,7 @@ macos = [
     "tensorflow==2.19.*",
     "tf-keras==2.19.*",
     "tensorflow-metal==1.2.0",
+    "ai-edge-litert>=2.1.4",
     "matplotlib",
     "kivy",
     "kivy-garden.matplotlib",

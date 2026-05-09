@@ -850,7 +850,7 @@ def linear_square_plus_cnn(img_in, size='R', l2=0.01, is_seq=False):
                   kernel_regularizer=regularizers.l2(l2),
                   name='dense_latent')(x)
     output = x
-    return Model(inputs=[img_in], outputs=[output], name='CNN')
+    return Model(inputs=[img_in], outputs=output, name='CNN')
 
 
 def square_plus_dense(size='R'):
@@ -968,7 +968,7 @@ def memory_model(in_tensor, mem_length, mem_depth, drop):
     for i in range(0, mem_length - 1):  # memlength # memlength-1
         y = Dense(2 * (mem_length - i), activation='relu', name=f'mem_c_{i}')(y)
         y = Dropout(drop)(y)
-    model = Model(inputs=[in_tensor], outputs=[y], name='Memory')
+    model = Model(inputs=[in_tensor], outputs=y, name='Memory')
     return model
 
 
