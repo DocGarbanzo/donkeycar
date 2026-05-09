@@ -5,6 +5,17 @@ import platform
 from collections import namedtuple
 from donkeycar.config import Config
 
+try:
+    import torch as _torch
+except ImportError:
+    pytest.skip(
+        'PyTorch not installed. Install with: uv pip install '
+        '--python ~/.venvs/donkeycar/bin/python '
+        '"torch==2.6.*" "torchvision==0.21.*" "torchaudio==2.6.*" '
+        'pytorch-lightning fastai',
+        allow_module_level=True,
+    )
+
 Data = namedtuple('Data', ['type', 'name', 'convergence', 'pretrained'])
 
 

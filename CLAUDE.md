@@ -8,27 +8,26 @@ Donkey Car is a minimalist and modular self-driving car library for Python, desi
 
 ## Environment Setup
 
-**CRITICAL**: Always ensure the 'donkey' conda environment is activated before
-running any Python code, tests, or installations. If the environment is not
-active, ask the user before proceeding.
+The project uses a global virtual environment at `~/.venvs/donkeycar`.
+Activate it before running any Python code or tests:
 
-Check current environment with: `conda info --envs | grep \*`
-
-**From terminal:** `conda activate donkey`
-
-**From Claude Code:** The `conda activate` command doesn't work in Claude Code's
-bash sessions because they lack conda shell initialization. Use this instead:
 ```zsh
-source /opt/miniconda3/etc/profile.d/conda.sh && conda activate donkey
+source ~/.venvs/donkeycar/bin/activate
 ```
-Note: The conda path may vary by system. Find it with:
-`find /opt /usr/local ~/ -name "conda.sh" 2>/dev/null | grep profile.d`
+
+Do **not** use conda or create a local `.venv` in the project directory.
+
+**Installing packages**: Always use `uv pip` targeting the global venv:
+```zsh
+uv pip install --python ~/.venvs/donkeycar/bin/python <package>
+```
+Never use bare `pip` or `pip3` — they may resolve to the system Python.
 
 ## Key Commands
 
 ### Testing and Development
-- `make tests` or `pytest` - Run the full test suite
-- `pytest tests/test_specific.py` - Run a single test file
+- `source ~/.venvs/donkeycar/bin/activate && pytest` - Run the full test suite
+- `pytest donkeycar/tests/test_specific.py` - Run a single test file
 - `pytest -k "test_name"` - Run specific test by name
 
 ## Testing Guidelines
