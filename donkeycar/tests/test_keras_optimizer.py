@@ -19,24 +19,22 @@ class DummyPilot(dk_keras.KerasPilot):
         return interpreter_out
 
 
+def _make_optimizer_class():
+    class FakeOptimizer:
+        called = False
+
+        def __init__(self, lr, decay):
+            # Keep legacy-style args to mirror donkeycar optimizer calls.
+            self.lr = lr
+            self.decay = decay
+            FakeOptimizer.called = True
+
+    return FakeOptimizer
+
+
 def test_set_optimizer_uses_legacy_adam_when_metal_installed(monkeypatch):
-    class FakeAdam:
-        called = False
-
-        def __init__(self, lr, decay):
-            # Keep legacy-style args to mirror donkeycar optimizer calls.
-            self.lr = lr
-            self.decay = decay
-            FakeAdam.called = True
-
-    class FakeLegacyAdam:
-        called = False
-
-        def __init__(self, lr, decay):
-            # Keep legacy-style args to mirror donkeycar optimizer calls.
-            self.lr = lr
-            self.decay = decay
-            FakeLegacyAdam.called = True
+    FakeAdam = _make_optimizer_class()
+    FakeLegacyAdam = _make_optimizer_class()
 
     fake_keras = SimpleNamespace(
         optimizers=SimpleNamespace(
@@ -58,13 +56,7 @@ def test_set_optimizer_uses_legacy_adam_when_metal_installed(monkeypatch):
 
 def test_set_optimizer_falls_back_when_legacy_adam_unavailable(
         monkeypatch, caplog):
-    class FakeAdam:
-        called = False
-
-        def __init__(self, lr, decay):
-            self.lr = lr
-            self.decay = decay
-            FakeAdam.called = True
+    FakeAdam = _make_optimizer_class()
 
     fake_keras = SimpleNamespace(
         optimizers=SimpleNamespace(
@@ -85,21 +77,8 @@ def test_set_optimizer_falls_back_when_legacy_adam_unavailable(
 
 
 def test_set_optimizer_uses_standard_adam_without_metal(monkeypatch):
-    class FakeAdam:
-        called = False
-
-        def __init__(self, lr, decay):
-            self.lr = lr
-            self.decay = decay
-            FakeAdam.called = True
-
-    class FakeLegacyAdam:
-        called = False
-
-        def __init__(self, lr, decay):
-            self.lr = lr
-            self.decay = decay
-            FakeLegacyAdam.called = True
+    FakeAdam = _make_optimizer_class()
+    FakeLegacyAdam = _make_optimizer_class()
 
     fake_keras = SimpleNamespace(
         optimizers=SimpleNamespace(

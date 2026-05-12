@@ -73,6 +73,9 @@ def _adam_optimizer(rate: float, decay: float):
     """
     Prefer legacy Adam on macOS with tensorflow-metal, else use Adam.
 
+    TensorFlow Metal can misbehave with the standard Adam optimizer in newer
+    TensorFlow/Keras combinations, so we prefer legacy Adam when available.
+
     Args:
         rate: Optimizer learning rate.
         decay: Optimizer decay.
