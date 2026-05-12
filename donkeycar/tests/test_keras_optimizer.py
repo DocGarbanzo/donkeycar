@@ -8,6 +8,8 @@ tf = pytest.importorskip(
 
 import donkeycar.parts.keras as dk_keras
 
+CONVERGENCE_THRESHOLD = 0.2
+
 
 def _linear_data():
     x = np.linspace(-1.0, 1.0, 128, dtype=np.float32).reshape(-1, 1)
@@ -32,8 +34,12 @@ def _train_loss_history(optimizer):
 def test_adam_optimizer_converges_without_metal(monkeypatch):
     monkeypatch.setattr(dk_keras, "_is_metal_installed", lambda: False)
     optimizer = dk_keras._adam_optimizer(rate=0.01, decay=0.0)
+    legacy = getattr(dk_keras.keras.optimizers, "legacy", None)
+    assert optimizer.__class__.__name__ == "Adam"
+    if legacy is not None and hasattr(legacy, "Adam"):
+        assert not isinstance(optimizer, legacy.Adam)
     loss = _train_loss_history(optimizer)
-    assert loss[-1] < loss[0] * 0.2
+    assert loss[-1] < loss[0] * CONVERGENCE_THRESHOLD
 
 
 def test_legacy_adam_converges_with_metal(monkeypatch):
@@ -46,4 +52,4 @@ def test_legacy_adam_converges_with_metal(monkeypatch):
 
     assert isinstance(optimizer, legacy.Adam)
     loss = _train_loss_history(optimizer)
-    assert loss[-1] < loss[0] * 0.2
+    assert loss[-1] < loss[0] * CONVERGENCE_THRESHOLD
