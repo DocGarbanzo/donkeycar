@@ -83,10 +83,16 @@ def _adam_optimizer(rate: float, decay: float):
     Returns:
         Configured Adam or legacy Adam optimizer instance.
     """
+    def _create_optimizer(optimizer_class):
+        try:
+            return optimizer_class(learning_rate=rate, decay=decay)
+        except TypeError:
+            return optimizer_class(lr=rate, decay=decay)
+
     if _is_metal_installed():
         legacy = getattr(keras.optimizers, "legacy", None)
         if legacy is not None and hasattr(legacy, "Adam"):
-            return legacy.Adam(lr=rate, decay=decay)
+            return _create_optimizer(legacy.Adam)
         tf_version = getattr(tf, "__version__", "unknown")
         keras_version = getattr(keras, "__version__", "unknown")
         logger.warning(
@@ -95,7 +101,7 @@ def _adam_optimizer(rate: float, decay: float):
             tf_version,
             keras_version,
         )
-    return keras.optimizers.Adam(lr=rate, decay=decay)
+    return _create_optimizer(keras.optimizers.Adam)
 
 
 class KerasPilot(ABC):
