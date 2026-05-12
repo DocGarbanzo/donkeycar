@@ -76,6 +76,9 @@ def _adam_optimizer(rate: float, decay: float):
     Args:
         rate: Optimizer learning rate.
         decay: Optimizer decay.
+
+    Returns:
+        Configured Adam or legacy Adam optimizer instance.
     """
     if _is_metal_installed():
         legacy = getattr(keras.optimizers, "legacy", None)
