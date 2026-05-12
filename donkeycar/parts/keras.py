@@ -73,9 +73,13 @@ def _adam_optimizer(rate: float, decay: float):
         legacy = getattr(keras.optimizers, "legacy", None)
         if legacy is not None and hasattr(legacy, "Adam"):
             return legacy.Adam(lr=rate, decay=decay)
+        tf_version = getattr(tf, "__version__", "unknown")
+        keras_version = getattr(keras, "__version__", "unknown")
         logger.warning(
-            "tensorflow-metal is installed but legacy Adam is unavailable; "
-            "falling back to standard Adam."
+            "tensorflow-metal is installed but legacy Adam is unavailable "
+            "(tensorflow=%s, keras=%s); falling back to standard Adam.",
+            tf_version,
+            keras_version,
         )
     return keras.optimizers.Adam(lr=rate, decay=decay)
 
