@@ -59,6 +59,7 @@ logger = logging.getLogger(__name__)
 
 
 def _is_metal_installed() -> bool:
+    """Return True when tensorflow-metal is installed on macOS."""
     if sys.platform != "darwin":
         return False
     try:
@@ -69,6 +70,13 @@ def _is_metal_installed() -> bool:
 
 
 def _adam_optimizer(rate: float, decay: float):
+    """
+    Prefer legacy Adam on macOS with tensorflow-metal, else use Adam.
+
+    Args:
+        rate: Optimizer learning rate.
+        decay: Optimizer decay.
+    """
     if _is_metal_installed():
         legacy = getattr(keras.optimizers, "legacy", None)
         if legacy is not None and hasattr(legacy, "Adam"):

@@ -33,6 +33,7 @@ def test_set_optimizer_uses_legacy_adam_when_metal_installed(monkeypatch):
         called = False
 
         def __init__(self, lr, decay):
+            # Keep legacy-style args to mirror donkeycar optimizer calls.
             self.lr = lr
             self.decay = decay
             FakeLegacyAdam.called = True
