@@ -12,6 +12,8 @@ from datetime import datetime
 from os import path
 from abc import ABC, abstractmethod
 from collections import deque
+import importlib.metadata
+import sys
 
 import numpy as np
 from typing import Dict, Tuple, Optional, Union, List, Sequence, Callable, Any
@@ -56,6 +58,28 @@ XY = Union[float, np.ndarray, Tuple[Union[float, np.ndarray], ...]]
 logger = logging.getLogger(__name__)
 
 
+def _is_metal_installed() -> bool:
+    if sys.platform != "darwin":
+        return False
+    try:
+        importlib.metadata.version("tensorflow-metal")
+        return True
+    except importlib.metadata.PackageNotFoundError:
+        return False
+
+
+def _adam_optimizer(rate: float, decay: float):
+    if _is_metal_installed():
+        legacy = getattr(keras.optimizers, "legacy", None)
+        if legacy is not None and hasattr(legacy, "Adam"):
+            return legacy.Adam(lr=rate, decay=decay)
+        logger.warning(
+            "tensorflow-metal is installed but legacy Adam is unavailable; "
+            "falling back to standard Adam."
+        )
+    return keras.optimizers.Adam(lr=rate, decay=decay)
+
+
 class KerasPilot(ABC):
     """
     Base class for Keras models that will provide steering and throttle to
@@ -91,7 +115,7 @@ class KerasPilot(ABC):
     def set_optimizer(self, optimizer_type: str,
                       rate: float, decay: float) -> None:
         if optimizer_type == "adam":
-            optimizer = keras.optimizers.Adam(lr=rate, decay=decay)
+            optimizer = _adam_optimizer(rate, decay)
         elif optimizer_type == "sgd":
             optimizer = keras.optimizers.SGD(lr=rate, decay=decay)
         elif optimizer_type == "rmsprop":
