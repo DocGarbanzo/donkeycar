@@ -89,10 +89,19 @@ def _adam_optimizer(rate: float, decay: float):
         except TypeError:
             return optimizer_class(lr=rate, decay=decay)
 
-    if _is_metal_installed():
+    def _legacy_adam_class():
         legacy = getattr(keras.optimizers, "legacy", None)
-        if legacy is not None and hasattr(legacy, "Adam"):
-            return _create_optimizer(legacy.Adam)
+        if legacy is None:
+            return None
+        try:
+            return legacy.Adam
+        except (AttributeError, ImportError):
+            return None
+
+    if _is_metal_installed():
+        legacy_adam = _legacy_adam_class()
+        if legacy_adam is not None:
+            return _create_optimizer(legacy_adam)
         tf_version = getattr(tf, "__version__", "unknown")
         keras_version = getattr(keras, "__version__", "unknown")
         logger.warning(

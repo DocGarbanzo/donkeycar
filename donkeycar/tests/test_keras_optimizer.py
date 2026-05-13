@@ -11,6 +11,16 @@ import donkeycar.parts.keras as dk_keras
 CONVERGENCE_THRESHOLD = 0.2
 
 
+def _legacy_adam_class():
+    legacy = getattr(dk_keras.keras.optimizers, "legacy", None)
+    if legacy is None:
+        return None
+    try:
+        return legacy.Adam
+    except (AttributeError, ImportError):
+        return None
+
+
 def _linear_data():
     x = np.linspace(-1.0, 1.0, 128, dtype=np.float32).reshape(-1, 1)
     y = (2.5 * x - 0.3).astype(np.float32)
@@ -34,22 +44,22 @@ def _train_loss_history(optimizer):
 def test_adam_optimizer_converges_without_metal(monkeypatch):
     monkeypatch.setattr(dk_keras, "_is_metal_installed", lambda: False)
     optimizer = dk_keras._adam_optimizer(rate=0.01, decay=0.0)
-    legacy = getattr(dk_keras.keras.optimizers, "legacy", None)
+    legacy_adam = _legacy_adam_class()
     assert optimizer.__class__.__name__ == "Adam"
-    if legacy is not None and hasattr(legacy, "Adam"):
-        assert not isinstance(optimizer, legacy.Adam)
+    if legacy_adam is not None:
+        assert not isinstance(optimizer, legacy_adam)
     loss = _train_loss_history(optimizer)
     assert loss[-1] < loss[0] * CONVERGENCE_THRESHOLD
 
 
 def test_legacy_adam_converges_with_metal(monkeypatch):
-    legacy = getattr(dk_keras.keras.optimizers, "legacy", None)
-    if legacy is None or not hasattr(legacy, "Adam"):
+    legacy_adam = _legacy_adam_class()
+    if legacy_adam is None:
         pytest.skip("legacy Adam is unavailable in this TensorFlow build")
 
     monkeypatch.setattr(dk_keras, "_is_metal_installed", lambda: True)
     optimizer = dk_keras._adam_optimizer(rate=0.01, decay=0.0)
 
-    assert isinstance(optimizer, legacy.Adam)
+    assert isinstance(optimizer, legacy_adam)
     loss = _train_loss_history(optimizer)
     assert loss[-1] < loss[0] * CONVERGENCE_THRESHOLD
