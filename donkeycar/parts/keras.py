@@ -69,6 +69,16 @@ def _is_metal_installed() -> bool:
         return False
 
 
+def _legacy_adam_class():
+    legacy = getattr(keras.optimizers, "legacy", None)
+    if legacy is None:
+        return None
+    try:
+        return legacy.Adam
+    except (AttributeError, ImportError):
+        return None
+
+
 def _adam_optimizer(rate: float, decay: float):
     """
     Prefer legacy Adam on macOS with tensorflow-metal, else use Adam.
@@ -88,15 +98,6 @@ def _adam_optimizer(rate: float, decay: float):
             return optimizer_class(learning_rate=rate, decay=decay)
         except TypeError:
             return optimizer_class(lr=rate, decay=decay)
-
-    def _legacy_adam_class():
-        legacy = getattr(keras.optimizers, "legacy", None)
-        if legacy is None:
-            return None
-        try:
-            return legacy.Adam
-        except (AttributeError, ImportError):
-            return None
 
     if _is_metal_installed():
         legacy_adam = _legacy_adam_class()
