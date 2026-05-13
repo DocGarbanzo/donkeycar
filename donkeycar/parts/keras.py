@@ -74,7 +74,13 @@ def _legacy_adam_class():
     if legacy is None:
         return None
     try:
-        return legacy.Adam
+        cls = legacy.Adam
+        # Keras 3 exposes `keras.optimizers.legacy.Adam` as an attribute but
+        # raises ImportError when it is instantiated.  Probe a throwaway
+        # instance so we can distinguish "accessible stub" from "actually
+        # usable" and return None for the former.
+        cls(learning_rate=0.001)
+        return cls
     except (AttributeError, ImportError):
         return None
 
