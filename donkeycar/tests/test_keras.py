@@ -90,5 +90,3 @@ def test_keras_vs_tflite_and_tensorrt(keras_pilot, tmp_dir):
     print("\n", out1, out2, out3)
 
 
-
-

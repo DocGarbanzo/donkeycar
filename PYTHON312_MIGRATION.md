@@ -108,7 +108,7 @@ Replaced `python-package-conda.yml`. New workflow:
 - uses: astral-sh/setup-uv@v5
   with:
     python-version: '3.12'
-- run: uv pip install -e ".[pc,dev]"
+- run: uv pip install -e ".[${{ matrix.extra }},dev]"
 - run: uv run pytest
 ```
 

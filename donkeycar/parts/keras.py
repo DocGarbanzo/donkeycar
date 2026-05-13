@@ -12,6 +12,8 @@ from datetime import datetime
 from os import path
 from abc import ABC, abstractmethod
 from collections import deque
+import importlib.metadata
+import sys
 
 import numpy as np
 from typing import Dict, Tuple, Optional, Union, List, Sequence, Callable, Any
@@ -56,6 +58,68 @@ XY = Union[float, np.ndarray, Tuple[Union[float, np.ndarray], ...]]
 logger = logging.getLogger(__name__)
 
 
+def _is_metal_installed() -> bool:
+    """Return True when tensorflow-metal is installed on macOS."""
+    if sys.platform != "darwin":
+        return False
+    try:
+        importlib.metadata.version("tensorflow-metal")
+        return True
+    except importlib.metadata.PackageNotFoundError:
+        return False
+
+
+def _legacy_adam_class():
+    legacy = getattr(keras.optimizers, "legacy", None)
+    if legacy is None:
+        return None
+    try:
+        cls = legacy.Adam
+        # Keras 3 exposes `keras.optimizers.legacy.Adam` as an attribute but
+        # raises ImportError when it is instantiated.  Probe a throwaway
+        # instance so we can distinguish "accessible stub" from "actually
+        # usable" and return None for the former.
+        cls(learning_rate=0.001)
+        return cls
+    except (AttributeError, ImportError):
+        return None
+
+
+def _adam_optimizer(rate: float, decay: float):
+    """
+    Prefer legacy Adam on macOS with tensorflow-metal, else use Adam.
+
+    TensorFlow Metal can misbehave with the standard Adam optimizer in newer
+    TensorFlow/Keras combinations, so we prefer legacy Adam when available.
+
+    Args:
+        rate: Optimizer learning rate.
+        decay: Optimizer decay.
+
+    Returns:
+        Configured Adam or legacy Adam optimizer instance.
+    """
+    def _create_optimizer(optimizer_class):
+        try:
+            return optimizer_class(learning_rate=rate, decay=decay)
+        except TypeError:
+            return optimizer_class(lr=rate, decay=decay)
+
+    if _is_metal_installed():
+        legacy_adam = _legacy_adam_class()
+        if legacy_adam is not None:
+            return _create_optimizer(legacy_adam)
+        tf_version = getattr(tf, "__version__", "unknown")
+        keras_version = getattr(keras, "__version__", "unknown")
+        logger.warning(
+            "tensorflow-metal is installed but legacy Adam is unavailable "
+            "(tensorflow=%s, keras=%s); falling back to standard Adam.",
+            tf_version,
+            keras_version,
+        )
+    return _create_optimizer(keras.optimizers.Adam)
+
+
 class KerasPilot(ABC):
     """
     Base class for Keras models that will provide steering and throttle to
@@ -91,7 +155,7 @@ class KerasPilot(ABC):
     def set_optimizer(self, optimizer_type: str,
                       rate: float, decay: float) -> None:
         if optimizer_type == "adam":
-            optimizer = keras.optimizers.Adam(lr=rate, decay=decay)
+            optimizer = _adam_optimizer(rate, decay)
         elif optimizer_type == "sgd":
             optimizer = keras.optimizers.SGD(lr=rate, decay=decay)
         elif optimizer_type == "rmsprop":

@@ -12,8 +12,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-latest, ubuntu-latest]
-        python-version: ['3.12']
+        include:
+          - os: macos-latest
+            python-version: '3.12'
+            extra: macos
+          - os: ubuntu-latest
+            python-version: '3.12'
+            extra: pc
       fail-fast: false
     steps:
       - uses: actions/checkout@v4
@@ -21,6 +26,6 @@ jobs:
       - name: Create virtual environment
         run: uv venv --python ${{ matrix.python-version }}
       - name: Install donkey
-        run: uv pip install -e ".[pc,dev]"
+        run: uv pip install -e ".[${{ matrix.extra }},dev]"
       - name: Run tests
         run: uv run --no-sync pytest
