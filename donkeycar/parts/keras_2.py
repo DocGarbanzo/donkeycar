@@ -538,7 +538,9 @@ class WorldMemory:
         opt = tf.keras.optimizers.Adam(learning_rate=0.01,
                                        beta_1=0.9,
                                        beta_2=0.999)
-        self.model.compile(optimizer=opt, loss=['mse', None])
+        # jit_compile=False: tf-metal's PluggableDevice does not support XLA.
+        self.model.compile(optimizer=opt, loss=['mse', None],
+                           jit_compile=False)
 
 
 class WorldPilot(KerasWorldImu):

@@ -42,11 +42,11 @@ class Joystick(object):
         except ModuleNotFoundError:
             self.num_axes = 0
             self.num_buttons = 0
-            logger.warn("no support for fnctl module. joystick not enabled.")
+            logger.warning("no support for fnctl module. joystick not enabled.")
             return False
 
         if not os.path.exists(self.dev_fn):
-            logger.warn(f"{self.dev_fn} is missing")
+            logger.warning(f"{self.dev_fn} is missing")
             return False
 
         '''
