@@ -286,6 +286,27 @@ Supports multiple ML frameworks:
 - **PyTorch** (`parts/pytorch/`) - Alternative framework
 - **FastAI** (`parts/fastai.py`) - High-level framework
 
+### Apple Silicon / Metal GPU Training
+
+On macOS with `tensorflow-metal==1.2.0`, Adam weight updates inside a compiled
+`tf.function` produce incorrect results (Metal PluggableDevice compiler bug).
+The fix (Phase B) is split across `KerasInterpreter.compile()` and `.fit()`:
+
+- The Metal GPU is **not hidden** — it is used for every forward and backward op.
+- `KerasInterpreter.compile()` sets `_use_metal_train_step=True` on Metal
+  (instead of `run_eagerly=True`). The model is compiled normally (not eagerly),
+  so the forward/backward pass is compiled inside `tf.function` for speed.
+- `KerasInterpreter.fit()` calls `_install_metal_train_step(model)` which
+  monkey-patches `model.train_step` to use `tf.py_function` around
+  `optimizer.apply_gradients`. `tf.py_function` executes the apply step eagerly
+  even inside a compiled `tf.function`, so Adam ops on Metal are correct.
+- LiteRT/TFLite inference is completely unaffected.
+
+If a future `tensorflow-metal` release fixes the compiled Adam bug, remove the
+`_install_metal_train_step` call from `KerasInterpreter.fit()` and the
+`_use_metal_train_step` flag from `KerasInterpreter.compile()`, then re-run
+`donkeycar/tests/test_metal_gradients.py` to confirm correctness.
+
 ### Data Management
 - **Tub V2** (`parts/tub_v2.py`) - Data storage format for training data
 - **Datastore** (`parts/datastore*.py`) - Data management abstractions
