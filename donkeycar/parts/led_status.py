@@ -252,13 +252,22 @@ class LEDStatusPi:
     def _update_continuous(self, mode=0):
         if mode == self.mode:
             return
+        self.mode = mode
+        if mode in (-1, None):
+            logger.info("Mode changed to off")
+            self.blink_continuous()
+            return
         if mode == 0:
             self.pulse_color = ColorRGB.GREEN
         elif mode == 1:
             self.pulse_color = ColorRGB.YELLOW
-        logger.info((f"Mode changed to {mode}"))
+        else:
+            logger.info(f"Unsupported mode {mode}; turning LED off")
+            self.mode = -1
+            self.blink_continuous()
+            return
+        logger.info(f"Mode changed to {mode}")
         self.blink_continuous()
-        self.mode = mode
 
     def run_threaded(self, mode=0, lap=False, wipe=False):
         self._update_continuous(mode)
@@ -279,6 +288,9 @@ class LEDStatusPi:
                        off_time=0.2, background=False, n=2)
 
     def blink_continuous(self):
+        if self.mode in (-1, None):
+            self.led.off()
+            return
         self.led.blink(on_color=self.pulse_color, on_time=0.3,
                        off_time=0.3, background=True)
 

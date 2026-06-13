@@ -1,4 +1,6 @@
 import atexit
+import glob
+import os
 import time
 from typing import Union
 
@@ -10,6 +12,23 @@ from threading import Lock, Thread
 from serial.serialutil import SerialTimeoutException
 
 logger = logging.getLogger(__name__)
+
+READY_TIMEOUT_S = 2.0
+instance = None
+
+
+def detect_pico_port() -> str:
+    env_port = os.getenv("DONKEY_PICO_PORT")
+    if env_port:
+        return env_port
+    preferred = ["/dev/ttyACM1", "/dev/ttyACM0"]
+    for port in preferred:
+        if os.path.exists(port):
+            return port
+    matches = sorted(glob.glob("/dev/ttyACM*"))
+    if matches:
+        return matches[0]
+    return "/dev/ttyACM1"
 
 
 class Pico:
@@ -53,11 +72,12 @@ class Pico:
     See above examples for the required keys for each mode.
     """
 
-    def __init__(self, port: str = "/dev/ttyACM1"):
+    def __init__(self, port: str | None = None):
         """
         Initialize the Pico communicator.
         :param port: port for data connection
         """
+        port = port or detect_pico_port()
         self.serial = serial.Serial(port, 115200)  # , write_timeout=10.0)
         self.counter = 0
         self.running = True
@@ -121,15 +141,21 @@ class Pico:
             self.counter += 1
         logger.info("Pico loop stopped.")
 
+    def _wait_until_ready(self, timeout_s: float = READY_TIMEOUT_S):
+        deadline = time.time() + timeout_s
+        while self.counter == 0 and self.running:
+            if time.time() >= deadline:
+                raise RuntimeError("Pico did not become ready in time")
+            time.sleep(0.1)
+        if self.counter == 0:
+            raise RuntimeError("Pico is not running")
+
     def write(self, gpio: str, value: Union[float, int]) -> None:
         """
         :param gpio:    the gpio pin to write to
         :param value:   the value to write
         """
-        # Wait until threaded loop has at least run once, so we don't have to)
-        # process None values. This blocks until the first data is received.
-        while self.counter == 0:
-            time.sleep(0.1)
+        self._wait_until_ready()
         with self.lock:
             assert gpio in self.send_dict, f"Pin {gpio} not in send_dict."
             self.send_dict[gpio] = value
@@ -139,10 +165,7 @@ class Pico:
         :param gpio:    the gpio pin to read from
         :return:        the value of the pin
         """
-        # Wait until threaded loop has at least run once, so we don't have to
-        # process None values. This blocks until the first data is received.
-        while self.counter == 0:
-            time.sleep(0.1)
+        self._wait_until_ready()
         with self.lock:
             if gpio not in self.receive_dict:
                 msg = (
@@ -154,16 +177,21 @@ class Pico:
             return self._read_pin_data(gpio)
 
     def stop(self):
+        if not self.running:
+            return
         self.running = False
         time.sleep(0.1)
-        self.serial.reset_input_buffer()
-        self.serial.reset_output_buffer()
-        self.serial.close()
-        total_time = time.time() - self.start
+        try:
+            self.serial.reset_input_buffer()
+            self.serial.reset_output_buffer()
+            self.serial.close()
+        except Exception as e:
+            logger.warning(f"Error while stopping Pico serial: {e}")
+        total_time = 0.0 if self.start is None else time.time() - self.start
+        avg_ms = 0.0 if self.counter == 0 else total_time * 1000 / self.counter
         logger.info(
             f"Pico communication disconnected, ran {self.counter} "
-            f"loops, each loop taking "
-            f"{total_time * 1000 / self.counter:5.1f} ms."
+            f"loops, each loop taking {avg_ms:5.1f} ms."
         )
 
     def setup_input_pin(self, gpio: str, mode: str, **kwargs) -> None:
@@ -297,12 +325,36 @@ class Pico:
         return self.receive_dict[gpio]
 
 
-try:
-    instance = Pico()
-except (serial.serialutil.SerialException, FileNotFoundError, OSError) as e:
-    logger.warning(f"Failed to create Pico instance: {e}. "
-                   f"Pico hardware not available.")
+def create_pico(port: str | None = None):
+    try:
+        return Pico(port=port)
+    except (serial.serialutil.SerialException, FileNotFoundError, OSError) as e:
+        logger.warning(f"Failed to create Pico instance: {e}. "
+                       f"Pico hardware not available.")
+        return None
+
+
+def get_pico():
+    global instance
+    if instance is None:
+        instance = create_pico()
+    return instance
+
+
+def reset_pico(port: str | None = None):
+    global instance
+    old = instance
     instance = None
+    if old is not None:
+        try:
+            old.stop()
+        except Exception as e:
+            logger.warning(f"Failed to stop old Pico instance: {e}")
+    instance = create_pico(port=port)
+    return instance
+
+
+instance = create_pico()
 
 
 class OdometerPico:
