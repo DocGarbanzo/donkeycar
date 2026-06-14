@@ -116,18 +116,15 @@ class Pico:
         self.start = time.time()
         # start loop of continuous communication
         while self.running:
+            send_response = True
             try:
                 bytes_in = self.serial.read_until()
                 str_in = bytes_in.decode()[:-1]
                 received_dict = json.loads(str_in)
                 with self.lock:
                     self._update_receive_dict(received_dict)
-                    pack = json.dumps(self.send_dict) + "\n"
-                    self.serial.write(pack.encode())
                 if self.counter % 10 == 0:
                     logger.debug(f"Last received: {received_dict}")
-                    logger.debug(f"Last sent: {self.send_dict}")
-                time.sleep(0.0)
             except ValueError as e:
                 logger.error(
                     f"Failed to load json in loop {self.counter} "
@@ -138,6 +135,16 @@ class Pico:
                 logger.error(
                     f"Problem with serial comms {e} " f"in loop {self.counter}"
                 )
+                send_response = False
+            if send_response:
+                try:
+                    with self.lock:
+                        pack = json.dumps(self.send_dict) + "\n"
+                    self.serial.write(pack.encode())
+                    if self.counter % 10 == 0:
+                        logger.debug(f"Last sent: {self.send_dict}")
+                except Exception as e:
+                    logger.error(f"Failed to send in loop {self.counter}: {e}")
             self.counter += 1
         logger.info("Pico loop stopped.")
 
