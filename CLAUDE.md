@@ -8,25 +8,25 @@ Donkey Car is a minimalist and modular self-driving car library for Python, desi
 
 ## Environment Setup
 
-The project uses a global virtual environment at `~/.venvs/donkeycar`.
+The project uses a global virtual environment at `~/env`.
 Activate it before running any Python code or tests:
 
 ```zsh
-source ~/.venvs/donkeycar/bin/activate
+source ~/env/bin/activate
 ```
 
 Do **not** use conda or create a local `.venv` in the project directory.
 
 **Installing packages**: Always use `uv pip` targeting the global venv:
 ```zsh
-uv pip install --python ~/.venvs/donkeycar/bin/python <package>
+uv pip install --python ~/env/bin/python <package>
 ```
 Never use bare `pip` or `pip3` — they may resolve to the system Python.
 
 ## Key Commands
 
 ### Testing and Development
-- `source ~/.venvs/donkeycar/bin/activate && pytest` - Run the full test suite
+- `source ~/env/bin/activate && pytest` - Run the full test suite
 - `pytest donkeycar/tests/test_specific.py` - Run a single test file
 - `pytest -k "test_name"` - Run specific test by name
 

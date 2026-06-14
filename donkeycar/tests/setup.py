@@ -67,7 +67,7 @@ def d2_path(temp_path):
 
 def default_template(car_dir):
     c = CreateCar()
-    c.create_car(car_dir, template='complete', overwrite=True)
+    c.create_car(car_dir, template='donkey5', overwrite=True)
     return car_dir
 
 
