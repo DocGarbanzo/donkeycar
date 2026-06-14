@@ -114,15 +114,16 @@ class Pico:
         self.serial.reset_input_buffer()
         self.serial.reset_output_buffer()
         self.start = time.time()
-        # start loop of continuous communication
         while self.running:
             send_response = True
+            pack = None
             try:
                 bytes_in = self.serial.read_until()
                 str_in = bytes_in.decode()[:-1]
                 received_dict = json.loads(str_in)
                 with self.lock:
                     self._update_receive_dict(received_dict)
+                    pack = json.dumps(self.send_dict) + "\n"
                 if self.counter % 10 == 0:
                     logger.debug(f"Last received: {received_dict}")
             except ValueError as e:
@@ -136,10 +137,8 @@ class Pico:
                     f"Problem with serial comms {e} " f"in loop {self.counter}"
                 )
                 send_response = False
-            if send_response:
+            if send_response and pack is not None:
                 try:
-                    with self.lock:
-                        pack = json.dumps(self.send_dict) + "\n"
                     self.serial.write(pack.encode())
                     if self.counter % 10 == 0:
                         logger.debug(f"Last sent: {self.send_dict}")
