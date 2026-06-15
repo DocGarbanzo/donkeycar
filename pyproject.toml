@@ -116,6 +116,9 @@ donkey = "donkeycar.management.base:execute_from_command_line"
 [project.urls]
 Homepage = "https://github.com/autorope/donkeycar"
 
+[tool.pytest.ini_options]
+norecursedirs = ["scripts"]
+
 [tool.setuptools.dynamic]
 version = {attr = "donkeycar.__version__"}
 

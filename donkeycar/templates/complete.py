@@ -64,10 +64,13 @@ def drive(cfg, model_path=None, use_joystick=False, model_type=None,
         #if we also try to use cuda. so disable for donkey_gym.
         os.environ["CUDA_VISIBLE_DEVICES"]="-1"
 
+    train_localizer = getattr(cfg, 'TRAIN_LOCALIZER', False)
+    train_behaviors = getattr(cfg, 'TRAIN_BEHAVIORS', False)
+
     if model_type is None:
-        if cfg.TRAIN_LOCALIZER:
+        if train_localizer:
             model_type = "localizer"
-        elif cfg.TRAIN_BEHAVIORS:
+        elif train_behaviors:
             model_type = "behavior"
         else:
             model_type = cfg.DEFAULT_MODEL_TYPE
@@ -394,7 +397,7 @@ def drive(cfg, model_path=None, use_joystick=False, model_type=None,
         #
         outputs = ['pilot/angle', 'pilot/throttle']
 
-        if cfg.TRAIN_LOCALIZER:
+        if train_localizer:
             outputs.append("pilot/loc")
 
         #
