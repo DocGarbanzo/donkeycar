@@ -165,6 +165,8 @@ class Pico:
         with self.lock:
             assert gpio in self.send_dict, f"Pin {gpio} not in send_dict."
             self.send_dict[gpio] = value
+        # Yield to loop(); tight callers starve it from acquiring the lock
+        time.sleep(0.0001)
 
     def read(self, gpio):
         """
