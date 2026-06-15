@@ -18,7 +18,7 @@ def test_config():
 
 
 def test_drive():
-    path = default_template(d2_path(gettempdir()))
+    path = custom_template(d2_path(gettempdir()), template="complete")
     myconfig = open(os.path.join(path, 'myconfig.py'), "wt")
     myconfig.write("CAMERA_TYPE = 'MOCK'\n")
     myconfig.write("USE_SSD1306_128_32 = False \n")
