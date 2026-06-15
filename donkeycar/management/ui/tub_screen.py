@@ -30,7 +30,7 @@ plt.style.use('dark_background')
 fig, ax = plt.subplots()
 plt.tight_layout(pad=1.5)
 plt.subplots_adjust(bottom=0.16)
-cmap = mpl.cm.get_cmap("plasma")
+cmap = mpl.colormaps["plasma"]
 
 
 class ConfigManager(BackgroundBoxLayout, FileChooserBase):
