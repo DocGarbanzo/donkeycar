@@ -233,6 +233,10 @@ class FullImage(Image):
         """ This method is called every time a record gets updated. """
         try:
             img_arr = self.get_image(record)
+            if img_arr is None:
+                idx = record.underlying['_index']
+                logger.error(f'Record {idx}: image could not be loaded')
+                return
             pil_image = PilImage.fromarray(img_arr)
             bytes_io = io.BytesIO()
             pil_image.save(bytes_io, format='png')
@@ -243,7 +247,7 @@ class FullImage(Image):
             logger.error(f'Record {record.underlying["_index"]}: '
                          f'Missing key: {e}')
         except Exception as e:
-            logger.error(f'Record : {record.underlying["_index"]}'
+            logger.error(f'Record {record.underlying["_index"]}: '
                          f'Bad record: {e}')
 
     def get_image(self, record):
