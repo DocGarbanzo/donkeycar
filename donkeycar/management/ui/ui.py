@@ -2,6 +2,7 @@ import os
 import logging
 
 #from kivy.logger import Logger, LOG_LEVELS
+from kivy.logger import KivyFormatter, is_color_terminal
 from kivy.clock import Clock
 from kivy.app import App
 from kivy.properties import StringProperty
@@ -60,7 +61,28 @@ class DonkeyApp(App):
         logger.info("App: Good bye Donkey")
 
 
+class _KivyLogFilter(logging.Filter):
+    """Prepend logger name to message so KivyFormatter can parse it."""
+    def filter(self, record):
+        source = record.name.rsplit('.', 1)[-1] or 'root'
+        record.msg = f'{source}: {record.getMessage()}'
+        record.args = None
+        return True
+
+
+def _install_kivy_formatter():
+    use_color = is_color_terminal()
+    fmt = ("[%(levelname)-18s] %(message)s" if use_color
+           else "[%(levelname)-7s] %(message)s")
+    formatter = KivyFormatter(fmt, use_color=use_color)
+    filt = _KivyLogFilter()
+    for h in logging.root.handlers:
+        h.setFormatter(formatter)
+        h.addFilter(filt)
+
+
 def main():
+    _install_kivy_formatter()
     DonkeyApp().run()
 
 

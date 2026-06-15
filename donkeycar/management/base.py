@@ -611,6 +611,9 @@ class ModelDatabase(BaseCommand):
 
 class Gui(BaseCommand):
     def run(self, args):
+        os.environ.setdefault('KIVY_LOG_MODE', 'MIXED')
+        os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '3')
+        os.environ.setdefault('TF_LITE_LOG_VERBOSITY', '-1')
         from donkeycar.management.ui.ui import main
         main()
 
