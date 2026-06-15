@@ -97,7 +97,7 @@ class CarScreen(AppScreen):
     def show_progress(self, proc, repeats, is_pull, e):
         # find 'to-check=33/4551)' in OSX or 'to-chk=33/4551)' in
         # Linux which is end of line
-        pattern = 'to-(check|chk)=(.*)\)'
+        pattern = r'to-(check|chk)=(.*)\)'
 
         def end():
             # call ended this stops the schedule
