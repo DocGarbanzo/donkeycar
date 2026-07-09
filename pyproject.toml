@@ -81,6 +81,7 @@ pc = [
     "pandas",
     "plotly",
     "albumentations",
+    "opencv-python-headless==4.12.0.88",
 ]
 macos = [
     "tensorflow==2.19.*",
@@ -92,6 +93,7 @@ macos = [
     "kivy-garden.matplotlib",
     "pandas",
     "plotly",
+    "opencv-python-headless==4.12.0.88",
     "albumentations",
 ]
 dev = [

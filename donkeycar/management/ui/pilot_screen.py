@@ -15,14 +15,21 @@ from donkeycar.management.ui.common import FileChooserBase, \
     status, BackgroundBoxLayout, RoundedButton, MyLabel
 from donkeycar.management.ui.rc_file_handler import rc_handler
 from donkeycar.parts.image_transformations import ImageTransformations
-from donkeycar.pipeline.augmentations import ImageAugmentation
 from donkeycar.utils import get_model_by_type
-from donkeycar.parts.keras_2 import KerasSquarePlusImu, KerasSquarePlusMemoryLap
 
 logger = logging.getLogger(__name__)
 
 
 ALL_FILTERS = ['*.h5', '*.keras', '*.tflite', '*.trt']
+
+IMU_PILOT = 'KerasSquarePlusImu'
+MEMORY_LAP_PILOT = 'KerasSquarePlusMemoryLap'
+
+
+def create_image_augmentation(cfg, key, always_apply=False):
+    from donkeycar.pipeline.augmentations import ImageAugmentation
+
+    return ImageAugmentation(cfg, key, always_apply=always_apply)
 
 
 class PilotLoader(BoxLayout, FileChooserBase):
@@ -30,7 +37,11 @@ class PilotLoader(BoxLayout, FileChooserBase):
     model_type = StringProperty()
     pilot = ObjectProperty(None)
     is_loaded = BooleanProperty(False)
+    display_path = StringProperty('No file chosen')
     filters = copy(ALL_FILTERS)
+
+    def on_file_path(self, _obj, file_path):
+        self.display_path = os.path.basename(file_path)
 
     def load_action(self):
         def remove_pilot_from_db(entry):
@@ -119,10 +130,11 @@ class OverlayImage(FullImage):
         if not self.pilot_loader.is_loaded:
             return img_arr
 
-        if isinstance(self.pilot_loader.pilot, KerasSquarePlusImu):
+        pilot_name = self.pilot_loader.pilot.__class__.__name__
+        if pilot_name == IMU_PILOT:
             imu = record.underlying['car/accel'] + record.underlying['car/gyro']
             args = (aug_img_arr, imu)
-        elif isinstance(self.pilot_loader.pilot, KerasSquarePlusMemoryLap):
+        elif pilot_name == MEMORY_LAP_PILOT:
             lap_pct = getattr(config, 'LAP_PCT_L', config.LAP_PCT) if \
                 self.is_left else getattr(config, 'LAP_PCT_R', config.LAP_PCT)
             # lap_pct needs to be passed as array, as this is the run interface
@@ -342,7 +354,7 @@ class PilotScreen(AppScreen):
             return
         # cast to python list, otherwise we have an ObservableList in the config
         self.config.AUGMENTATIONS = list(self.aug_list)
-        self.augmentation = ImageAugmentation(
+        self.augmentation = create_image_augmentation(
             self.config, 'AUGMENTATIONS', always_apply=True)
         self.on_current_record(None, self.current_record)
 

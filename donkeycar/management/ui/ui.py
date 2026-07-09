@@ -1,6 +1,11 @@
 import os
 import logging
 
+from donkeycar.management.ui.kivy_logging import configure_kivy_logging
+
+
+configure_kivy_logging()
+
 #from kivy.logger import Logger, LOG_LEVELS
 from kivy.logger import KivyFormatter, is_color_terminal
 from kivy.clock import Clock

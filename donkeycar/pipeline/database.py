@@ -38,7 +38,7 @@ class PilotDatabase:
         if self.entries:
             df = self.to_df()
             # otherwise this will be a numpy int
-            last_num = int(df.index.max())
+            last_num = int(df['Number'].max())
             this_num = last_num + 1
         else:
             this_num = 0
@@ -51,11 +51,8 @@ class PilotDatabase:
 
     def to_df(self) -> pd.DataFrame:
         if self.entries:
-            df = pd.DataFrame.from_records(self.entries)
-            df.set_index('Number', inplace=True)
-            return df
-        else:
-            return pd.DataFrame()
+            return pd.DataFrame.from_records(self.entries)
+        return pd.DataFrame()
 
     def write(self):
         try:

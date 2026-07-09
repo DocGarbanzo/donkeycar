@@ -1,10 +1,14 @@
 import logging
+from importlib import import_module
 from typing import List
 from donkeycar.config import Config
-from donkeycar.parts import cv as cv_parts
 from donkeycar.utils import EqMemorizedString
 
 logger = logging.getLogger(__name__)
+
+
+def cv_parts():
+    return import_module('donkeycar.parts.cv')
 
 
 class ImageTransformations:
@@ -42,65 +46,89 @@ def image_transformer(name: str, config):
     # masking transformations
     #
     name = EqMemorizedString(name)
+    cv_module = cv_parts()
     if "TRAPEZE" == name:
-        return cv_parts.ImgTrapezoidalMask(config.ROI_TRAPEZE_UL,
-            config.ROI_TRAPEZE_UR, config.ROI_TRAPEZE_LL, config.ROI_TRAPEZE_LR,
-            config.ROI_TRAPEZE_MIN_Y, config.ROI_TRAPEZE_MAX_Y)
+        return cv_module.ImgTrapezoidalMask(
+            config.ROI_TRAPEZE_UL,
+            config.ROI_TRAPEZE_UR,
+            config.ROI_TRAPEZE_LL,
+            config.ROI_TRAPEZE_LR,
+            config.ROI_TRAPEZE_MIN_Y,
+            config.ROI_TRAPEZE_MAX_Y,
+        )
 
     elif "CROP" == name:
-        return cv_parts.ImgCropMask(config.ROI_CROP_LEFT, config.ROI_CROP_TOP,
-            config.ROI_CROP_RIGHT, config.ROI_CROP_BOTTOM)
+        return cv_module.ImgCropMask(
+            config.ROI_CROP_LEFT,
+            config.ROI_CROP_TOP,
+            config.ROI_CROP_RIGHT,
+            config.ROI_CROP_BOTTOM,
+        )
     #
     # color space transformations
     #
     elif "RGB2BGR" == name:
-        return cv_parts.ImgRGB2BGR()
+        return cv_module.ImgRGB2BGR()
     elif "BGR2RGB" == name:
-        return cv_parts.ImgBGR2RGB()
+        return cv_module.ImgBGR2RGB()
     elif "RGB2HSV" == name:
-        return cv_parts.ImgRGB2HSV()
+        return cv_module.ImgRGB2HSV()
     elif "HSV2RGB" == name:
-        return cv_parts.ImgHSV2RGB()
+        return cv_module.ImgHSV2RGB()
     elif "BGR2HSV" == name:
-        return cv_parts.ImgBGR2HSV()
+        return cv_module.ImgBGR2HSV()
     elif "HSV2BGR" == name:
-        return cv_parts.ImgHSV2BGR()
+        return cv_module.ImgHSV2BGR()
     elif "RGB2GRAY" == name:
-        return cv_parts.ImgRGB2GRAY()
+        return cv_module.ImgRGB2GRAY()
     elif "RBGR2GRAY" == name:
-        return cv_parts.ImgBGR2GRAY()
+        return cv_module.ImgBGR2GRAY()
     elif "HSV2GRAY" == name:
-        return cv_parts.ImgHSV2GRAY()
+        return cv_module.ImgHSV2GRAY()
     elif "GRAY2RGB" == name:
-        return cv_parts.ImgGRAY2RGB()
+        return cv_module.ImgGRAY2RGB()
     elif "GRAY2BGR" == name:
-        return cv_parts.ImgGRAY2BGR()
+        return cv_module.ImgGRAY2BGR()
     elif "CANNY" == name:
         # canny edge detection
-        return cv_parts.ImgCanny(config.CANNY_LOW_THRESHOLD,
-                                 config.CANNY_HIGH_THRESHOLD,
-                                 config.CANNY_APERTURE)
+        return cv_module.ImgCanny(
+            config.CANNY_LOW_THRESHOLD,
+            config.CANNY_HIGH_THRESHOLD,
+            config.CANNY_APERTURE,
+        )
     # 
     # blur transformations
     #
     elif "BLUR" == name:
         if config.BLUR_GAUSSIAN:
-            return cv_parts.ImgGaussianBlur(config.BLUR_KERNEL,
-                                            config.BLUR_KERNEL_Y)
+            return cv_module.ImgGaussianBlur(
+                config.BLUR_KERNEL,
+                config.BLUR_KERNEL_Y,
+            )
         else:
-            return cv_parts.ImgSimpleBlur(config.BLUR_KERNEL,
-                                          config.BLUR_KERNEL_Y)
+            return cv_module.ImgSimpleBlur(
+                config.BLUR_KERNEL,
+                config.BLUR_KERNEL_Y,
+            )
     # 
     # resize transformations
     #
     elif "RESIZE" == name:
-        return cv_parts.ImageResize(config.RESIZE_WIDTH, config.RESIZE_HEIGHT)
+        return cv_module.ImageResize(
+            config.RESIZE_WIDTH,
+            config.RESIZE_HEIGHT,
+        )
     elif "SCALE" == name:
-        return cv_parts.ImageScale(config.SCALE_WIDTH, config.SCALE_HEIGHT)
+        return cv_module.ImageScale(
+            config.SCALE_WIDTH,
+            config.SCALE_HEIGHT,
+        )
     elif name.startswith("CUSTOM"):
         return custom_transformer(name, config)
     elif name == "GAMMANORM":
-        return cv_parts.ImgGammaNormaliser(config.GAMMA_NORM_VALUE)
+        return cv_module.ImgGammaNormaliser(
+            config.GAMMA_NORM_VALUE,
+        )
     else:
         msg = f"{name} is not a valid transformation. Use one of:" \
               f" {name.mem_as_str()}"

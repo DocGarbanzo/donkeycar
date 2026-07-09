@@ -3,7 +3,7 @@ import sys
 from pyfiglet import Figlet
 import logging
 
-__version__ = '5.4.dev1+DocGarbanzo'
+__version__ = '5.4.dev2+DocGarbanzo'
 
 log_level = os.environ.get('DONKEY_LOG_LEVEL', 'INFO')
 logging.basicConfig(level=log_level)

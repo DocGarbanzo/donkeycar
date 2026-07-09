@@ -24,11 +24,28 @@ from donkeycar.config import Config
 from donkeycar.management.ui.common import FileChooserBase, get_app_screen, \
     AppScreen, status
 from donkeycar.management.ui.rc_file_handler import rc_handler
-from donkeycar.pipeline.database import PilotDatabase
-from donkeycar.pipeline.training import train
 
 
 logger = logging.getLogger(__name__)
+
+
+def create_pilot_database(cfg):
+    from donkeycar.pipeline.database import PilotDatabase
+
+    return PilotDatabase(cfg)
+
+
+def run_training(cfg, tub_path, model_type, transfer_model, comment):
+    from donkeycar.pipeline.training import train
+
+    return train(
+        cfg,
+        tub_paths=tub_path,
+        model_type=model_type,
+        transfer=transfer_model,
+        comment=comment,
+    )
+
 
 mpl.rcParams.update({'font.size': 8})
 plt.style.use('dark_background')
@@ -226,10 +243,13 @@ class TrainScreen(AppScreen):
             status(f'Could find neither {keras} nor {h5} - training without '
                    f'transfer')
         try:
-            _ = train(self.config, tub_paths=tub_path,
-                            model_type=model_type,
-                            transfer=transfer_model,
-                            comment=self.ids.comment.text)
+            _ = run_training(
+                self.config,
+                tub_path,
+                model_type,
+                transfer_model,
+                self.ids.comment.text,
+            )
         except Exception as e:
             logger.error(f'Training error: {e}\n{traceback.format_exc()}')
             status(f'Training failed see console')
@@ -264,7 +284,7 @@ class TrainScreen(AppScreen):
 
     def reload_database(self):
         if self.config:
-            self.database = PilotDatabase(self.config)
+            self.database = create_pilot_database(self.config)
 
     def on_database(self, _obj=None, _database=None):
         df = self.database.to_df()
